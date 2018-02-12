@@ -25648,9 +25648,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function TOCpagebreak($tocfont = '', $tocfontsize = '', $tocindent = '', $TOCusePaging = true, $TOCuseLinking = '', $toc_orientation = '', $toc_mgl = '', $toc_mgr = '', $toc_mgt = '', $toc_mgb = '', $toc_mgh = '', $toc_mgf = '', $toc_ohname = '', $toc_ehname = '', $toc_ofname = '', $toc_efname = '', $toc_ohvalue = 0, $toc_ehvalue = 0, $toc_ofvalue = 0, $toc_efvalue = 0, $toc_preHTML = '', $toc_postHTML = '', $toc_bookmarkText = '', $resetpagenum = '', $pagenumstyle = '', $suppress = '', $orientation = '', $mgl = '', $mgr = '', $mgt = '', $mgb = '', $mgh = '', $mgf = '', $ohname = '', $ehname = '', $ofname = '', $efname = '', $ohvalue = 0, $ehvalue = 0, $ofvalue = 0, $efvalue = 0, $toc_id = 0, $pagesel = '', $toc_pagesel = '', $sheetsize = '', $toc_sheetsize = '', $tocoutdent = '')
 	{
-		if (!$resetpagenum) {
-			$resetpagenum = 1;
-		} // mPDF 6
 		// Start a new page
 		if ($this->state == 0) {
 			$this->AddPage();
@@ -25907,6 +25904,30 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 		}
 
+		// Update TOC pages
+		if(count($this->tableOfContents->_toc)) {
+			foreach($this->tableOfContents->_toc as $key => $t) {
+				if ($t['p'] >= $start_page && $t['p'] <= $end_page) {
+					$this->tableOfContents->_toc[$key]['p'] += ($target_page - $start_page);
+				}
+				if ($t['p'] >= $target_page && $t['p'] < $start_page) {
+					$this->tableOfContents->_toc[$key]['p'] += $n_toc;
+				}
+			}
+		}
+
+		// Update Page Number Substitutions
+		if(count($this->PageNumSubstitutions)) {
+			foreach($this->PageNumSubstitutions as $key => $page) {
+				if ($page['from'] >= $start_page && $page['from'] <= $end_page) {
+					$this->PageNumSubstitutions[$key]['from'] += ($target_page - $start_page);
+				}
+				if ($page['from'] >= $target_page && $page['from'] < $start_page) {
+					$this->PageNumSubstitutions[$key]['from'] += $n_toc;
+				}
+			}
+		}
+
 		/* -- ANNOTATIONS -- */
 		// Update Annotations
 		if (count($this->PageAnnots)) {
@@ -25975,24 +25996,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// move pages
 		for ($i = 0; $i < $n_atend; $i++) {
-			$this->pages[$start_page + $i] = $this->pages[$end_page + 1 + $i];
+			if (isset($this->pages[$end_page + 1 + $i])) {
+				$this->pages[$start_page + $i] = $this->pages[$end_page + 1 + $i];
+			}
 		}
 		// delete pages
 		for ($i = 0; $i < $n_tod; $i++) {
 			unset($this->pages[$last_page - $i]);
 		}
-
-
-		/* -- BOOKMARKS -- */
-		// Update Bookmarks
-		foreach ($this->BMoutlines as $i => $o) {
-			if ($o['p'] >= $end_page) {
-				$this->BMoutlines[$i]['p'] -= $n_tod;
-			} elseif ($p < $start_page) {
-				unset($this->BMoutlines[$i]);
-			}
-		}
-		/* -- END BOOKMARKS -- */
 
 		// Update Page Links
 		if (count($this->PageLinks)) {
@@ -26010,19 +26021,30 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				}
 				if ($i > $end_page) {
 					$newarr[($i - $n_tod)] = $this->PageLinks[$i];
-				} elseif ($p < $start_page) {
+				} elseif ($i < $start_page) {
 					$newarr[$i] = $this->PageLinks[$i];
 				}
 			}
 			$this->PageLinks = $newarr;
 		}
 
+		/* -- BOOKMARKS -- */
+		// Update Bookmarks
+		foreach ($this->BMoutlines as $i => $o) {
+			if ($o['p'] >= $end_page) {
+				$this->BMoutlines[$i]['p'] -= $n_tod;
+			} elseif ($o['p'] < $start_page) {
+				unset($this->BMoutlines[$i]);
+			}
+		}
+		/* -- END BOOKMARKS -- */
+
 		// OrientationChanges
 		if (count($this->OrientationChanges)) {
 			$newarr = [];
 			foreach ($this->OrientationChanges as $p => $v) {
 				if ($p > $end_page) {
-					$newarr[($p - $t_tod)] = $this->OrientationChanges[$p];
+					$newarr[($p - $n_tod)] = $this->OrientationChanges[$p];
 				} elseif ($p < $start_page) {
 					$newarr[$p] = $this->OrientationChanges[$p];
 				}

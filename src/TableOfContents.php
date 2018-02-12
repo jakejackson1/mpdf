@@ -2,6 +2,8 @@
 
 namespace Mpdf;
 
+use Mpdf\Utils\Arrays;
+
 class TableOfContents
 {
 
@@ -66,6 +68,21 @@ class TableOfContents
 	var $TOCsheetsize;
 
 	var $m_TOC;
+
+	/**
+	 * @var array TOC details added to this array after the page numbers have been calculated
+	 */
+	public $tocPageNumbers = [];
+
+	/**
+	 * @var bool Set to true when a repaint has begun
+	 */
+	public $tocRepaintBegun = false;
+
+	/**
+	 * @var array Used to backup the page links during a repaint
+	 */
+	private $tocRepaintLinks = [];
 
 	public function __construct(Mpdf $mpdf, SizeConverter $sizeConverter)
 	{
@@ -486,27 +503,19 @@ class TableOfContents
 			if ($toci == 0 && $this->TOCmark) {
 				$toc_id = 0;
 				$toc_page = $this->TOCmark + $added_toc_pages;
-				$toc_orientation = $this->TOCorientation;
-				$TOCuseLinking = $this->TOCuseLinking;
-				$TOCusePaging = $this->TOCusePaging;
 				$toc_bookmarkText = $this->TOCbookmarkText; // *BOOKMARKS*
 
 				$tocstart = $TOC_start;
 				$tocend = $n = $TOC_end;
 				$n_toc = $TOC_npages;
 			} else {
-				$arr = current($this->m_TOC);
-
 				$toc_id = key($this->m_TOC);
-				$toc_page = $this->m_TOC[$toc_id]['TOCmark'] + $added_toc_pages;
-				$toc_orientation = $this->m_TOC[$toc_id]['TOCorientation'];
-				$TOCuseLinking = $this->m_TOC[$toc_id]['TOCuseLinking'];
-				$TOCusePaging = $this->m_TOC[$toc_id]['TOCusePaging'];
-				$toc_bookmarkText = $this->m_TOC[$toc_id]['TOCbookmarkText']; // *BOOKMARKS*
+				$toc_page = Arrays::get($this->m_TOC[$toc_id], 'TOCmark', 0) + $added_toc_pages;
+				$toc_bookmarkText = Arrays::get($this->m_TOC[$toc_id], 'TOCbookmarkText', $this->TOCbookmarkText); // *BOOKMARKS*
 
-				$tocstart = $this->m_TOC[$toc_id]['start'];
-				$tocend = $n = $this->m_TOC[$toc_id]['end'];
-				$n_toc = $this->m_TOC[$toc_id]['npages'];
+				$tocstart = Arrays::get($this->m_TOC[$toc_id], 'start', 0);
+				$tocend = $n = Arrays::get($this->m_TOC[$toc_id], 'end', 0);
+				$n_toc = Arrays::get($this->m_TOC[$toc_id], 'npages', 0);
 
 				next($this->m_TOC);
 			}
@@ -517,30 +526,41 @@ class TableOfContents
 			$this->mpdf->MovePages($toc_page, $tocstart, $tocend);
 			$this->mpdf->pgsIns[$toc_page] = $tocend - $tocstart + 1;
 
-			/* -- BOOKMARKS -- */
-			// Insert new Bookmark for Bookmark
-			if ($toc_bookmarkText) {
-				$insert = -1;
-				foreach ($this->mpdf->BMoutlines as $i => $o) {
-					if ($o['p'] < $toc_page) { // i.e. before point of insertion
-						$insert = $i;
-					}
-				}
-				$txt = $this->mpdf->purify_utf8_text($toc_bookmarkText);
-				if ($this->mpdf->text_input_as_HTML) {
-					$txt = $this->mpdf->all_entities_to_utf8($txt);
-				}
-				$newBookmark[0] = ['t' => $txt, 'l' => 0, 'y' => 0, 'p' => $toc_page];
-				array_splice($this->mpdf->BMoutlines, ($insert + 1), 0, $newBookmark);
+			/* When not repainting, store the current TOC ID and page number  */
+			if (!$this->tocRepaintBegun) {
+				$this->tocPageNumbers[$toc_id] = $toc_page;
 			}
-			/* -- END BOOKMARKS -- */
+
+			if($this->tocRepaintBegun) {
+				/* -- BOOKMARKS -- */
+				// Insert new Bookmark for Bookmark
+				if ($toc_bookmarkText) {
+					$insert = -1;
+					foreach ($this->mpdf->BMoutlines as $i => $o) {
+						if ($o['p'] < $toc_page) { // i.e. before point of insertion
+							$insert = $i;
+						}
+					}
+					$txt = $this->mpdf->purify_utf8_text($toc_bookmarkText);
+					if ($this->mpdf->text_input_as_HTML) {
+						$txt = $this->mpdf->all_entities_to_utf8($txt);
+					}
+					$newBookmark[0] = ['t' => $txt, 'l' => 0, 'y' => 0, 'p' => $toc_page];
+					array_splice($this->mpdf->BMoutlines, ($insert + 1), 0, $newBookmark);
+				}
+				/* -- END BOOKMARKS -- */
+			}
 		}
+
+		$this->maybeRepaintTocPages();
 
 		// Delete empty page that was inserted earlier
 		if ($extrapage) {
 			unset($this->mpdf->pages[count($this->mpdf->pages)]);
 			$this->mpdf->page--; // Reset page pointer
 		}
+
+		$this->resetRepaintProperties();
 	}
 
 	public function openTagTOC($attr)
@@ -843,14 +863,85 @@ class TableOfContents
 				if (!$suppress) {
 					$suppress = 'off';
 				}
-				if (!$resetpagenum) {
-					$resetpagenum = 1;
-				}
 				$this->mpdf->PageNumSubstitutions[] = ['from' => 1, 'reset' => $resetpagenum, 'type' => $pagenumstyle, 'suppress' => $suppress];
 			}
 			return [true, $toc_id];
 		}
 		// No break - continues as PAGEBREAK...
 		return [false, $toc_id];
+	}
+
+	/**
+	 * If not done, remove all dummy TOC pages and re-insert with correct page numbers
+	 */
+	public function maybeRepaintTocPages()
+	{
+		if (!$this->tocRepaintBegun) {
+			$this->tocRepaintBegun = true;
+			$this->tocBackupPageLinks();
+			$this->removeDummyTocPages();
+			$this->insertTOC();
+			$this->restorePageLinks();
+		}
+	}
+
+	/**
+	 * Get the dummy TOC pages and remove
+	 */
+	public function removeDummyTocPages()
+	{
+		$tocPages = $this->tocPageNumbers;
+		krsort($tocPages);
+		foreach ($tocPages as $toc_id => $toc_page) {
+			$this->removeTocPages($toc_page, ($toc_page + $this->mpdf->pgsIns[$toc_page] - 1));
+		}
+	}
+
+	/**
+	 * Remove existing Table of Content
+	 *
+	 * @param int $tocStartPage The page number representing the start of the TOC
+	 * @param int $tocEndPage The page number representing the end of the TOC
+	 */
+	public function removeTocPages($tocStartPage, $tocEndPage)
+	{
+		$this->mpdf->DeletePages($tocStartPage, $tocEndPage);
+	}
+
+	/**
+	 * Reset the repaint properties
+	 */
+	public function resetRepaintProperties()
+	{
+		if ($this->tocRepaintBegun) {
+			$this->tocRepaintBegun = false;
+			$this->tocPageNumbers = [];
+			$this->tocRepaintLinks = [];
+		}
+	}
+
+	/**
+	 * Save the current page links
+	 */
+	public function tocBackupPageLinks()
+	{
+		$this->tocRepaintLinks = [
+			'links' => $this->mpdf->links,
+			'internallink' => $this->mpdf->internallink,
+			'PageLinks' => $this->mpdf->PageLinks,
+			'tbrot_Links' => $this->mpdf->tbrot_Links,
+			'kwt_Links' => $this->mpdf->kwt_Links,
+			'HTMLheaderPageLinks' => $this->mpdf->HTMLheaderPageLinks,
+			'columnLinks' => $this->mpdf->columnLinks,
+		];
+	}
+
+	/**
+	 * Restore the page links
+	 */
+	public function restorePageLinks() {
+		foreach ($this->tocRepaintLinks as $name => $links) {
+			$this->mpdf->$name = $links;
+		}
 	}
 }
