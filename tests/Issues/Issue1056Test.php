@@ -15,7 +15,8 @@ class Issue1056Test extends \Mpdf\BaseMpdfTest
 
 		$this->mpdf->WriteHtml($html, 2);
 
-		$out = $this->mpdf->Output('', 'S');
+		$output = $this->mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 	public function testInvalidCollationGroupRequire()
@@ -26,7 +27,8 @@ class Issue1056Test extends \Mpdf\BaseMpdfTest
 
 		$this->mpdf->WriteHtml($html, 2);
 
-		$out = $this->mpdf->Output('', 'S');
+		$output = $this->mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 }

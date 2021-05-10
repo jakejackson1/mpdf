@@ -68,7 +68,7 @@ class SvgTest extends \PHPUnit_Framework_TestCase
 		$this->sizeConverter->shouldReceive('convert')->twice()->andReturn(0);
 		$this->colorConverter->shouldReceive('convert')->times(140)->andReturn(0);
 
-		$this->svg->ImageSVG($data);
+		$this->assertCount(5, $this->svg->ImageSVG($data));
 	}
 
 	public function testLogoManageroneSvgImage()
@@ -78,7 +78,7 @@ class SvgTest extends \PHPUnit_Framework_TestCase
 		$this->sizeConverter->shouldReceive('convert')->times(2)->andReturn(0);
 		$this->colorConverter->shouldReceive('convert')->times(1)->andReturn(0);
 
-		$this->svg->ImageSVG($data);
+		$this->assertCount(5, $this->svg->ImageSVG($data));
 	}
 
 	public function testLogoLivingparisianSvgImage()
@@ -87,7 +87,7 @@ class SvgTest extends \PHPUnit_Framework_TestCase
 
 		$this->colorConverter->shouldReceive('convert')->times(28)->andReturn(0);
 
-		$this->svg->ImageSVG($data);
+		$this->assertCount(5, $this->svg->ImageSVG($data));
 	}
 
 }

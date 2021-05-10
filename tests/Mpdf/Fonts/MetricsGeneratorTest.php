@@ -32,6 +32,9 @@ class MetricsGeneratorTest extends \PHPUnit_Framework_TestCase
 		Mockery::close();
 	}
 
+	/**
+	 * @doesNotPerformAssertions
+	 */
 	public function testGenerateMetrics()
 	{
 		$this->fontCache->shouldReceive('jsonWrite')->with('angerthas.mtx.json', Mockery::any())->once();

@@ -28,6 +28,9 @@ class Issue400Test extends \Mpdf\BaseMpdfTest
 		<div class="myfixed2">2 Praesent pharetra nulla in turpis. Sed ipsum nulla, sodales nec, vulputate in, scelerisque vitae, magna. Sed egestas justo nec ipsum. Nulla facilisi. Praesent sit amet pede quis metus aliquet vulputate. Donec luctus. Cras euismod tellus vel leo.</div>';
 
 		$this->mpdf->WriteHtml($html);
+
+		$output = $this->mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 }

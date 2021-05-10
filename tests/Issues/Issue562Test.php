@@ -34,7 +34,8 @@ class Issue562Test extends \Mpdf\BaseMpdfTest
 		$this->mpdf->setCompression(false);
 		$this->mpdf->WriteHTML($html);
 
-		$out = $this->mpdf->output('', 'S');
+		$output = $this->mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 }

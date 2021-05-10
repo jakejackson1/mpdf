@@ -10,5 +10,8 @@ class Issue1197Test extends \PHPUnit_Framework_TestCase
 		$mpdf = new \Mpdf\Mpdf();
 
 		$mpdf->setCSS(['FONT-SIZE' => ''], 'INLINE');
+
+		$output = $mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 }

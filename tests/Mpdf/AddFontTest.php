@@ -20,6 +20,7 @@ class AddFontTest extends \PHPUnit_Framework_TestCase
 	public function testAddFont()
 	{
 		$this->mpdf->AddFont('sun-exta');
+		$this->assertArrayHasKey('sun-exta', $this->mpdf->FontFiles);
 	}
 
 	/**

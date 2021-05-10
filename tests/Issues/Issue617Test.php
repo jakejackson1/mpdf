@@ -64,7 +64,9 @@ class Issue617Test extends \Mpdf\BaseMpdfTest
 
 		$mpdf1 = new \Mpdf\Mpdf();
 		$mpdf1->WriteHTML($html);
-		$mpdf1->Output('', 'S');
+
+		$output = $mpdf1->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 }

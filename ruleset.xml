@@ -40,4 +40,7 @@
             <property name="tabIndent" value="true" />
         </properties>
     </rule>
+
+    <exclude-pattern>/tests/includes/phpunit6/compatibility.php</exclude-pattern>
+    <exclude-pattern>/tests/includes/phpunit7/MockObject/*</exclude-pattern>
 </ruleset>

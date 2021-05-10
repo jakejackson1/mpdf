@@ -18,6 +18,9 @@ class Issue1204Test extends \PHPUnit_Framework_TestCase
 
 		$mpdf->WriteHTML('<a href="chrome-extension://fooobarextension"></a>');
 		$mpdf->WriteHTML('<img src="chrome-extension://fooobarextension">');
+
+		$output = $mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 
 }

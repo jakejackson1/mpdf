@@ -16,6 +16,7 @@ class Issue993Test extends \Mpdf\BaseMpdfTest
 		$this->mpdf->showImageErrors = true;
 		$this->mpdf->WriteHtml($html);
 
-		$out = $this->mpdf->Output('', 'S');
+		$output = $this->mpdf->output('', 'S');
+		$this->assertStringStartsWith('%PDF-', $output);
 	}
 }
