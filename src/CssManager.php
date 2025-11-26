@@ -16,27 +16,27 @@ class CssManager
 	/**
 	 * @var \Mpdf\Mpdf
 	 */
-	private $mpdf;
+	protected $mpdf;
 
 	/**
 	 * @var \Mpdf\Cache
 	 */
-	private $cache;
+	protected $cache;
 
 	/**
 	 * @var \Mpdf\SizeConverter
 	 */
-	private $sizeConverter;
+	protected $sizeConverter;
 
 	/**
 	 * @var \Mpdf\Color\ColorConverter
 	 */
-	private $colorConverter;
+	protected $colorConverter;
 
 	/**
 	 * @var \Mpdf\AssetFetcher
 	 */
-	private $assetFetcher;
+	protected $assetFetcher;
 
 	var $tablecascadeCSS;
 
@@ -2292,7 +2292,7 @@ class CssManager
 		return $select;
 	}
 
-	private function normalizePath($path)
+	protected function normalizePath($path)
 	{
 		if ($this->mpdf->basepathIsLocal) {
 
