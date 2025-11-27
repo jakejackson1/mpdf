@@ -83,7 +83,8 @@ class ServiceFactory
 
 		$assetFetcher = new AssetFetcher($mpdf, $localContentLoader, $httpClient, $logger);
 
-		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher);
+		$specificityCalculator = new \Mpdf\Css\SpecificityCalculator();
+		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher, $specificityCalculator);
 
 		$otl = new Otl($mpdf, $fontCache);
 

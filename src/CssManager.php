@@ -9,6 +9,7 @@ use Mpdf\Http\ClientInterface;
 use Mpdf\PsrHttpMessageShim\Request;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\UtfString;
+use Mpdf\Css\SpecificityCalculator;
 
 class CssManager
 {
@@ -54,7 +55,17 @@ class CssManager
 
 	var $cell_border_dominance_T;
 
-	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
+	/**
+	 * @var \Mpdf\Css\SpecificityCalculator
+	 */
+	protected $specificityCalculator;
+
+	protected $cssRules = [];
+	protected $tagIndex = [];
+	protected $classIndex = [];
+	protected $idIndex = [];
+
+	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, $specificityCalculator = null)
 	{
 		$this->mpdf = $mpdf;
 		$this->cache = $cache;
@@ -66,6 +77,7 @@ class CssManager
 		$this->cascadeCSS = [];
 		$this->tbCSSlvl = 0;
 		$this->colorConverter = $colorConverter;
+		$this->specificityCalculator = $specificityCalculator ?: new SpecificityCalculator();
 	}
 
 	public function ReadCSS($html)
@@ -323,6 +335,8 @@ class CssManager
 					if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $tg, $m)) {
 						$tg = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $tg);
 					}
+
+					$this->indexRule($tg, $classproperties);
 
 					$tags = preg_split('/\s+/', trim($tg));
 					$level = count($tags);
@@ -1533,9 +1547,7 @@ class CssManager
 
 		$classes = [];
 		if (isset($attr['CLASS'])) {
-			$classes = array_map(function ($combination) {
-				return join('.', $combination);
-			}, Arrays::allUniqueSortedCombinations(preg_split('/\s+/', $attr['CLASS'])));
+			$classes = preg_split('/\s+/', $attr['CLASS']);
 		}
 		if (!isset($attr['ID'])) {
 			$attr['ID'] = '';
@@ -1551,73 +1563,8 @@ class CssManager
 			}
 		}
 
-		/* -- TABLES -- */
-
-		// Set Inherited properties
-		if ($inherit === 'TOPTABLE') { // $tag = TABLE
-
-			// Save Cascading CSS e.g. "div.topic p" at this block level
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'])) {
-				$this->tablecascadeCSS[0] = $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'];
-			} else {
-				$this->tablecascadeCSS[0] = $this->cascadeCSS;
-			}
-		}
-
-		// Set Inherited properties
-		if ($inherit === 'TOPTABLE' || $inherit === 'TABLE') {
-
-			// Cascade everything from last level that is not an actual property, or defined by current tag/attributes
-			if (isset($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && is_array($this->tablecascadeCSS[$this->tbCSSlvl - 1])) {
-				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $v) {
-					$this->tablecascadeCSS[$this->tbCSSlvl][$k] = $v;
-				}
-			}
-
-			$this->_mergeFullCSS(
-				$this->cascadeCSS,
-				$this->tablecascadeCSS[$this->tbCSSlvl],
-				$tag,
-				$classes,
-				$attr['ID'],
-				$attr['LANG']
-			);
-
-			// Cascading forward CSS e.g. "table.topic td" for this table in $this->tablecascadeCSS
-			// STYLESHEET TAG e.g. table
-			if (isset($this->tablecascadeCSS[$this->tbCSSlvl - 1])) {
-				$this->_mergeFullCSS(
-					$this->tablecascadeCSS[$this->tbCSSlvl - 1],
-					$this->tablecascadeCSS[$this->tbCSSlvl],
-					$tag,
-					$classes,
-					$attr['ID'],
-					$attr['LANG']
-				);
-			}
-		}
-
-		/* -- END TABLES -- */
-
-		//===============================================
 		// Set Inherited properties
 		if ($inherit === 'BLOCK') {
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']) && is_array($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
-				foreach ($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'] as $k => $v) {
-					$this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$k] = $v;
-				}
-			}
-
-			//===============================================
-			// Save Cascading CSS e.g. "div.topic p" at this block level
-			$this->_mergeFullCSS($this->cascadeCSS, $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'], $tag, $classes, $attr['ID'], $attr['LANG']);
-			//===============================================
-			// Cascading forward CSS
-			//===============================================
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1])) {
-				$this->_mergeFullCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'], $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'], $tag, $classes, $attr['ID'], $attr['LANG']);
-			}
-			//===============================================
 			// Block properties which are inherited
 			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['margin_collapse']) && $this->mpdf->blk[$this->mpdf->blklvl - 1]['margin_collapse']) {
 				$p['MARGIN-COLLAPSE'] = 'COLLAPSE';
@@ -1766,222 +1713,18 @@ class CssManager
 			$p['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
 		}
 		/* -- END TABLES -- */
-		//===============================================
-		// STYLESHEET TAG e.g. h1  p  div  table
-		if (isset($this->CSS[$tag]) && $this->CSS[$tag]) {
-			$zp = $this->CSS[$tag];
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
-		//===============================================
-		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->CSS['CLASS>>' . $class]) && $this->CSS['CLASS>>' . $class]) {
-				$zp = $this->CSS['CLASS>>' . $class];
-			}
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
-		//===============================================
-		/* -- TABLES -- */
-		// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
-		if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-			foreach ($this->CSS as $k => $val) {
-				if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-					$select = false;
-					if ($tag === 'TR') {
-						$row = $this->mpdf->row;
-						$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-						$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
-						if ($this->mpdf->tabletfoot) {
-							$row -= $thnr;
-						} elseif (!$this->mpdf->tablethead) {
-							$row -= ($thnr + $tfnr);
-						}
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-							$select = $this->_nthchild($a, $row);
-						}
-					} elseif ($tag === 'TD' || $tag === 'TH') {
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-							$select = $this->_nthchild($a, $this->mpdf->col);
-						}
-					}
-					if ($select) {
-						$zp = $this->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
-						if ($tag === 'TD' || $tag === 'TH') {
-							$this->setBorderDominance($zp, 9);
-						}
-						if (is_array($zp)) {
-							$p = array_merge($p, $zp);
-							$this->_mergeBorders($p, $zp);
-						}
-					}
-				}
-			}
-		}
-		/* -- END TABLES -- */
-		//===============================================
-		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
-		if (isset($attr['LANG'])) {
-			if (isset($this->CSS['LANG>>' . $attr['LANG']]) && $this->CSS['LANG>>' . $attr['LANG']]) {
-				$zp = $this->CSS['LANG>>' . $attr['LANG']];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			} elseif (isset($this->CSS['LANG>>' . $shortlang]) && $this->CSS['LANG>>' . $shortlang]) {
-				$zp = $this->CSS['LANG>>' . $shortlang];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			}
-		}
-		//===============================================
-		// STYLESHEET ID e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID']) && isset($this->CSS['ID>>' . $attr['ID']]) && $this->CSS['ID>>' . $attr['ID']]) {
-			$zp = $this->CSS['ID>>' . $attr['ID']];
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
 
-		//===============================================
-		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->CSS[$tag . '>>CLASS>>' . $class]) && $this->CSS[$tag . '>>CLASS>>' . $class]) {
-				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
-			}
+		// Get matched rules using specificity calculator
+		$matchedRules = $this->getMatchedRules($tag, $attr);
+		foreach ($matchedRules as $rule) {
+			$zp = $rule['properties'];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
-			} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
+			}
 			if (is_array($zp)) {
 				$p = array_merge($p, $zp);
 				$this->_mergeBorders($p, $zp);
 			}
-		}
-		//===============================================
-		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
-		if (isset($attr['LANG'])) {
-			if (isset($this->CSS[$tag . '>>LANG>>' . $attr['LANG']]) && $this->CSS[$tag . '>>LANG>>' . $attr['LANG']]) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			} elseif (isset($this->CSS[$tag . '>>LANG>>' . $shortlang]) && $this->CSS[$tag . '>>LANG>>' . $shortlang]) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $shortlang];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			}
-		}
-		//===============================================
-		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && isset($this->CSS[$tag . '>>ID>>' . $attr['ID']]) && $this->CSS[$tag . '>>ID>>' . $attr['ID']]) {
-			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
-		//===============================================
-		// Cascaded e.g. div.class p only works for block level
-		if ($inherit === 'BLOCK') {
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1])) { // mPDF 6
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag], $p);
-				foreach ($classes as $class) {
-					$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class], $p);
-				}
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']], $p);
-				foreach ($classes as $class) {
-					$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
-				}
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
-			}
-		} elseif ($inherit === 'INLINE') {
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class], $p);
-			}
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
-			}
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
-		} elseif ($inherit === 'TOPTABLE' || $inherit === 'TABLE') { // NB looks at $this->tablecascadeCSS-1 for cascading CSS
-			if (isset($this->tablecascadeCSS[$this->tbCSSlvl - 1])) { // mPDF 6
-				// false, 9 = don't check for 'depth' and do set border dominance
-				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], $p, false, 9);
-				foreach ($classes as $class) {
-					$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], $p, false, 9);
-				}
-				// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
-				if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-					foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
-						if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-							$select = false;
-							if ($tag === 'TR') {
-								$row = $this->mpdf->row;
-								$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-								$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
-								if ($this->mpdf->tabletfoot) {
-									$row -= $thnr;
-								} elseif (!$this->mpdf->tablethead) {
-									$row -= ($thnr + $tfnr);
-								}
-								if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-									$select = $this->_nthchild($a, $row);
-								}
-							} elseif ($tag === 'TD' || $tag === 'TH') {
-								if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-									$select = $this->_nthchild($a, $this->mpdf->col);
-								}
-							}
-							if ($select) {
-								$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
-							}
-						}
-					}
-				}
-			}
-			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], $p, false, 9);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], $p, false, 9);
-			}
-			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], $p, false, 9);
 		}
 
 		// INLINE STYLE e.g. style="CSS:property"
@@ -2148,14 +1891,11 @@ class CssManager
 		// Looks ahead from current block level to a new level
 		$p = [];
 
-		$oldcascadeCSS = $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'];
 		$classes = [];
 		if (isset($attr['CLASS'])) {
-			$classes = array_map(function ($combination) {
-				return join('.', $combination);
-			}, Arrays::allUniqueSortedCombinations(preg_split('/\s+/', $attr['CLASS'])));
+			$classes = preg_split('/\s+/', $attr['CLASS']);
 		}
-		//===============================================
+
 		// DEFAULT for this TAG set in DefaultCSS
 		if (isset($this->mpdf->defaultCSS[$tag])) {
 			$zp = $this->fixCSS($this->mpdf->defaultCSS[$tag]);
@@ -2163,77 +1903,93 @@ class CssManager
 				$p = array_merge($zp, $p);
 			} // Inherited overwrites default
 		}
-		// STYLESHEET TAG e.g. h1  p  div  table
-		if (isset($this->CSS[$tag])) {
-			$zp = $this->CSS[$tag];
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-			}
-		}
-		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->CSS['CLASS>>' . $class])) {
-				$zp = $this->CSS['CLASS>>' . $class];
-			}
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-			}
-		}
-		// STYLESHEET ID e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID']) && isset($this->CSS['ID>>' . $attr['ID']])) {
-			$zp = $this->CSS['ID>>' . $attr['ID']];
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-			}
-		}
-		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->CSS[$tag . '>>CLASS>>' . $class])) {
-				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
-			}
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-			}
-		}
-		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && isset($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
-			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-			}
-		}
-		//===============================================
-		// STYLESHEET TAG e.g. div h1    div p
 
-		$this->_set_mergedCSS($oldcascadeCSS[$tag], $p);
-		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
-		foreach ($classes as $class) {
-			$this->_set_mergedCSS($oldcascadeCSS['CLASS>>' . $class], $p);
+		// CASCADED styles from parent block
+		if (isset($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']) &&
+			is_array($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'])) {
+			foreach ($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'] as $cascadeSelector => $cascadeProps) {
+				// Check if this cascaded selector matches the element
+				// Cascaded selectors use the old format (e.g., 'P', 'CLASS>>note', 'ID>>content')
+				if ($this->cascadedSelectorMatches($cascadeSelector, $tag, $attr)) {
+					// Remove 'depth' key if present as it's not a CSS property
+					$props = $cascadeProps;
+					unset($props['depth']);
+					if (is_array($props)) {
+						$p = array_merge($p, $props);
+					}
+				}
+			}
 		}
-		// STYLESHEET CLASS e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID'])) {
-			$this->_set_mergedCSS($oldcascadeCSS['ID>>' . $attr['ID']], $p);
+
+		// Get matched rules from CSS
+		$matchedRules = $this->getMatchedRules($tag, $attr);
+		foreach ($matchedRules as $rule) {
+			$zp = $rule['properties'];
+			if (is_array($zp)) {
+				$p = array_merge($p, $zp);
+			}
 		}
-		// STYLESHEET CLASS e.g. div.smallone{}  p.redletter{}
-		foreach ($classes as $class) {
-			$this->_set_mergedCSS($oldcascadeCSS[$tag . '>>CLASS>>' . $class], $p);
-		}
-		// STYLESHEET CLASS e.g. div#smallone{}  p#redletter{}
-		if (isset($attr['ID'])) {
-			$this->_set_mergedCSS($oldcascadeCSS[$tag . '>>ID>>' . $attr['ID']], $p);
-		}
-		//===============================================
-		// INLINE STYLE e.g. style="CSS:property"
+
+		// INLINE STYLE (highest priority)
 		if (isset($attr['STYLE'])) {
 			$zp = $this->readInlineCSS($attr['STYLE']);
 			if (is_array($zp)) {
 				$p = array_merge($p, $zp);
 			}
 		}
-		//===============================================
+
 		return $p;
+	}
+
+	/**
+	 * Check if a cascaded selector matches the element
+	 * Cascaded selectors use the old format (e.g., 'P', 'CLASS>>note')
+	 */
+	protected function cascadedSelectorMatches($selector, $tag, $attr)
+	{
+		$parts = explode('>>', $selector);
+		
+		// Simple tag match
+		if (count($parts) === 1) {
+			return ($selector === $tag || $selector === strtoupper($tag));
+		}
+
+		// Check each part
+		$firstPart = $parts[0];
+		$hasSpecificTag = ($firstPart !== 'CLASS' && $firstPart !== 'ID' && $firstPart !== 'LANG');
+		
+		// If selector has specific tag, it must match
+		if ($hasSpecificTag && $firstPart !== $tag && $firstPart !== strtoupper($tag)) {
+			return false;
+		}
+
+		// Check CLASS if present
+		if (in_array('CLASS', $parts)) {
+			$classIndex = array_search('CLASS', $parts);
+			if (isset($parts[$classIndex + 1])) {
+				$requiredClass = strtoupper($parts[$classIndex + 1]);
+				if (!isset($attr['CLASS'])) {
+					return false;
+				}
+				$classes = preg_split('/\s+/', strtoupper($attr['CLASS']));
+				if (!in_array($requiredClass, $classes)) {
+					return false;
+				}
+			}
+		}
+
+		// Check ID if present
+		if (in_array('ID', $parts)) {
+			$idIndex = array_search('ID', $parts);
+			if (isset($parts[$idIndex + 1])) {
+				$requiredId = strtoupper($parts[$idIndex + 1]);
+				if (!isset($attr['ID']) || strtoupper($attr['ID']) !== $requiredId) {
+					return false;
+				}
+			}
+		}
+
+		return true;
 	}
 
 	// mPDF 5.7.4   nth-child
@@ -2317,5 +2073,347 @@ class CssManager
 
 		return $path;
 	}
+
+	protected function indexRule($selector, $properties)
+	{
+		$specificity = $this->specificityCalculator->calculate($selector);
+		$ruleIndex = count($this->cssRules);
+		$this->cssRules[$ruleIndex] = [
+			'selector' => $selector,
+			'properties' => $properties,
+			'specificity' => $specificity,
+		];
+
+		// Parse the last part of the selector to find where to index it
+		$tokens = preg_split('/([\s>+~]+)/', trim($selector), -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+		$target = end($tokens);
+		while ($target && preg_match('/^[\s>+~]+$/', $target)) {
+			array_pop($tokens);
+			$target = end($tokens);
+		}
+
+		if (!$target) {
+			return;
+		}
+
+		// Extract Tag
+		if (preg_match('/^([a-zA-Z0-9\-]+)/', $target, $m)) {
+			$tag = strtoupper($m[1]);
+			$this->tagIndex[$tag][] = $ruleIndex;
+		}
+
+		// Extract ID
+		if (preg_match('/#([a-zA-Z0-9_\-]+)/', $target, $m)) {
+			$id = $m[1];
+			$this->idIndex[$id][] = $ruleIndex;
+		}
+
+		// Extract Classes
+		if (preg_match_all('/\.([a-zA-Z0-9_\-]+)/', $target, $m)) {
+			foreach ($m[1] as $class) {
+				$this->classIndex[$class][] = $ruleIndex;
+			}
+		}
+	}
+
+	protected function getMatchedRules($tag, $attr)
+	{
+		$candidates = [];
+
+		// Tag matches
+		if (isset($this->tagIndex[$tag])) {
+			foreach ($this->tagIndex[$tag] as $ruleIndex) {
+				$candidates[$ruleIndex] = $this->cssRules[$ruleIndex];
+			}
+		}
+
+		// ID matches
+		if (isset($attr['ID'])) {
+			$id = strtoupper($attr['ID']);
+			if (isset($this->idIndex[$id])) {
+				foreach ($this->idIndex[$id] as $ruleIndex) {
+					$candidates[$ruleIndex] = $this->cssRules[$ruleIndex];
+				}
+			}
+		}
+
+		// Class matches
+		if (isset($attr['CLASS'])) {
+			$classes = preg_split('/\s+/', $attr['CLASS']);
+			foreach ($classes as $class) {
+				$class = strtoupper($class);
+				if (isset($this->classIndex[$class])) {
+					foreach ($this->classIndex[$class] as $ruleIndex) {
+						$candidates[$ruleIndex] = $this->cssRules[$ruleIndex];
+					}
+				}
+			}
+		}
+
+		// Backward compatibility: Always check old CSS array format if it exists
+		if (!empty($this->CSS)) {
+			$this->addLegacyCSSRules($candidates, $tag, $attr);
+		}
+
+		$matched = [];
+		foreach ($candidates as $rule) {
+			if ($this->selectorMatches($rule['selector'], $tag, $attr)) {
+				$matched[] = $rule;
+			}
+		}
+
+		usort($matched, function ($a, $b) {
+			return $this->specificityCalculator->compare($a['specificity'], $b['specificity']);
+		});
+
+		return $matched;
+	}
+
+	/**
+	 * Backward compatibility: Convert old CSS array format to indexed rules
+	 *
+	 * @param array &$candidates Rules array to populate
+	 * @param string $tag Element tag name
+	 * @param array $attr Element attributes
+	 */
+	protected function addLegacyCSSRules(&$candidates, $tag, $attr)
+	{
+		foreach ($this->CSS as $selector => $properties) {
+			// Convert old format selector to standard CSS selector
+			$cssSelector = $this->convertLegacySelector($selector);
+			
+			// Check if this selector potentially matches
+			if ($this->legacySelectorCouldMatch($selector, $tag, $attr)) {
+				$specificity = $this->specificityCalculator->calculate($cssSelector);
+				$ruleIndex = 'legacy_' . $selector;
+				$candidates[$ruleIndex] = [
+					'selector' => $cssSelector,
+					'properties' => $properties,
+					'specificity' => $specificity,
+				];
+			}
+		}
+	}
+
+	/**
+	 * Convert legacy selector format (e.g., 'CLASS>>highlight') to CSS selector (e.g., '.highlight')
+	 *
+	 * @param string $legacySelector Legacy format selector
+	 * @return string Standard CSS selector
+	 */
+	protected function convertLegacySelector($legacySelector)
+	{
+		// Simple tag selector
+		if (!strpos($legacySelector, '>>')) {
+			return $legacySelector;
+		}
+
+		$parts = explode('>>', $legacySelector);
+		$cssSelector = '';
+
+		for ($i = 0; $i < count($parts); $i++) {
+			$part = $parts[$i];
+			
+			if ($part === 'CLASS' && isset($parts[$i + 1])) {
+				$cssSelector .= '.' . $parts[$i + 1];
+				$i++; // Skip next part as we've consumed it
+			} elseif ($part === 'ID' && isset($parts[$i + 1])) {
+				$cssSelector .= '#' . $parts[$i + 1];
+				$i++; // Skip next part as we've consumed it
+			} elseif ($part !== 'CLASS' && $part !== 'ID' && $part !== 'LANG') {
+				$cssSelector .= $part;
+			} elseif ($part === 'LANG' && isset($parts[$i + 1])) {
+				// LANG pseudo-class selector
+				$cssSelector .= ':lang(' . $parts[$i + 1] . ')';
+				$i++; // Skip next part
+			}
+		}
+
+		return $cssSelector ?: $legacySelector;
+	}
+
+	/**
+	 * Quick check if legacy selector could match element
+	 *
+	 * @param string $legacySelector Legacy format selector
+	 * @param string $tag Element tag
+	 * @param array $attr Element attributes
+	 * @return bool True if selector could potentially match
+	 */
+	protected function legacySelectorCouldMatch($legacySelector, $tag, $attr)
+	{
+		$parts = explode('>>', $legacySelector);
+		
+		// Check tag match (if selector starts with a specific tag)
+		$firstPart = $parts[0];
+		$hasSpecificTag = ($firstPart !== 'CLASS' && $firstPart !== 'ID' && $firstPart !== 'LANG');
+		
+		if ($hasSpecificTag && $firstPart !== $tag && $firstPart !== strtoupper($tag)) {
+			return false;
+		}
+
+		// Check ID match if present
+		if (in_array('ID', $parts)) {
+			$idIndex = array_search('ID', $parts);
+			if (isset($parts[$idIndex + 1])) {
+				$requiredId = strtoupper($parts[$idIndex + 1]);
+				if (!isset($attr['ID']) || strtoupper($attr['ID']) !== $requiredId) {
+					return false;
+				}
+			}
+		}
+
+		// Check CLASS match if present
+		if (in_array('CLASS', $parts)) {
+			$classIndex = array_search('CLASS', $parts);
+			if (isset($parts[$classIndex + 1])) {
+				$requiredClass = strtoupper($parts[$classIndex + 1]);
+				if (!isset($attr['CLASS'])) {
+					return false;
+				}
+				$classes = preg_split('/\s+/', strtoupper($attr['CLASS']));
+				if (!in_array($requiredClass, $classes)) {
+					return false;
+				}
+			}
+		}
+
+		// Check LANG match if present
+		if (in_array('LANG', $parts)) {
+			$langIndex = array_search('LANG', $parts);
+			if (isset($parts[$langIndex + 1])) {
+				$requiredLang = $parts[$langIndex + 1];
+				if (!isset($attr['LANG'])) {
+					return false;
+				}
+				// Match full lang or shortlang
+				$attrLang = strtolower($attr['LANG']);
+				$shortLang = substr($attrLang, 0, 2);
+				if (strtolower($requiredLang) !== $attrLang && strtolower($requiredLang) !== $shortLang) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	protected function selectorMatches($selector, $tag, $attr)
+	{
+		$tokens = preg_split('/([\s>+~]+)/', trim($selector), -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+		
+		// Reverse tokens to match from right to left
+		$tokens = array_reverse($tokens);
+		
+		// Match target (first token in reversed list)
+		$targetToken = array_shift($tokens);
+		if (!$this->elementMatches($targetToken, $tag, $attr)) {
+			return false;
+		}
+
+		if (empty($tokens)) {
+			return true;
+		}
+
+		// Match ancestors
+		$currentBlkLvl = $this->mpdf->blklvl - 1; // Start from parent
+		
+		while (!empty($tokens)) {
+			$combinator = array_shift($tokens);
+			if (trim($combinator) === '') {
+				$combinator = ' ';
+			} else {
+				$combinator = trim($combinator);
+			}
+			
+			$ancestorSelector = array_shift($tokens);
+			if (!$ancestorSelector) {
+				break;
+			}
+
+			$found = false;
+			if (trim($combinator) === '>') {
+				// Parent match
+				if ($currentBlkLvl >= 0) {
+					$blk = $this->mpdf->blk[$currentBlkLvl];
+					if ($this->elementMatches($ancestorSelector, $blk['tag'], $blk['attr'])) {
+						$found = true;
+						$currentBlkLvl--;
+					}
+				}
+			} elseif (trim($combinator) === '+') {
+				// Adjacent sibling - not supported by mPDF block history structure easily
+				// We'll skip for now or fail
+				return false;
+			} elseif (trim($combinator) === '~') {
+				// General sibling - not supported
+				return false;
+			} else {
+				// Descendant match (space)
+				while ($currentBlkLvl >= 0) {
+					$blk = $this->mpdf->blk[$currentBlkLvl];
+					$attr = isset($blk['attr']) ? $blk['attr'] : array();
+					if (isset($blk['tag']) && $this->elementMatches($ancestorSelector, $blk['tag'], $attr)) {
+						$found = true;
+						$currentBlkLvl--; // Move up for next check
+						break;
+					}
+					$currentBlkLvl--;
+				}
+			}
+
+			if (!$found) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	protected function elementMatches($selectorPart, $tag, $attr)
+	{
+		// Check Tag
+		if (preg_match('/^([a-zA-Z0-9\-]+)/', $selectorPart, $m)) {
+			if (strtoupper($m[1]) !== $tag) {
+				return false;
+			}
+		}
+
+		// Check ID
+		if (preg_match('/#([a-zA-Z0-9_\-]+)/', $selectorPart, $m)) {
+			if (!isset($attr['ID']) || strtoupper($attr['ID']) !== strtoupper($m[1])) {
+				return false;
+			}
+		}
+
+		// Check Classes
+		if (preg_match_all('/\.([a-zA-Z0-9_\-]+)/', $selectorPart, $m)) {
+			if (!isset($attr['CLASS'])) {
+				return false;
+			}
+			$classes = preg_split('/\s+/', strtoupper($attr['CLASS']));
+			foreach ($m[1] as $reqClass) {
+				if (!in_array(strtoupper($reqClass), $classes)) {
+					return false;
+				}
+			}
+		}
+		
+		// Check attributes (simplified)
+		if (preg_match_all('/\[([a-zA-Z0-9_\-]+)(=[^\]]+)?\]/', $selectorPart, $m)) {
+			// Not fully implemented attribute matching for now, as mPDF didn't seem to have robust attribute matching in the combination logic?
+			// Actually ReadCSS handled [LANG=...] specially.
+			// Let's handle LANG at least.
+			foreach ($m[0] as $i => $full) {
+				$attrName = strtoupper($m[1][$i]);
+				if ($attrName === 'LANG') {
+					// ...
+				}
+			}
+		}
+
+		return true;
+	}
+
 
 }
