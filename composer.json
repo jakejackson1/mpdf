@@ -65,6 +65,7 @@
 			"php -r \"chmod('./tmp', 0777);\""
 		],
 		"cs": "@php vendor/bin/phpcs --report-width=160 --standard=ruleset.xml --severity=1 --warning-severity=0 --extensions=php src utils tests",
+        "cs:fix": "@php vendor/bin/phpcbf --report-width=160 --standard=ruleset.xml --severity=1 --warning-severity=0 --extensions=php src utils tests",
 		"test": "@php vendor/bin/phpunit",
 		"coverage": "@php vendor/bin/phpunit --coverage-text"
 	},
