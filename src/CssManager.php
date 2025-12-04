@@ -12,6 +12,8 @@ use Mpdf\Utils\UtfString;
 
 class CssManager
 {
+	// URL processing
+	const URL_TEMP_MARKER = '%ZZ';
 
 	/**
 	 * @var \Mpdf\Mpdf
@@ -38,22 +40,58 @@ class CssManager
 	 */
 	private $assetFetcher;
 
+	/**
+	 * @var array CSS cascade storage for table elements
+	 */
 	var $tablecascadeCSS;
 
+	/**
+	 * @var array Cascading CSS property storage
+	 */
 	var $cascadeCSS;
 
+	/**
+	 * @var array Main CSS property storage array
+	 */
 	var $CSS;
 
+	/**
+	 * @var int Table CSS cascade level counter
+	 */
 	var $tbCSSlvl;
 
+	/**
+	 * @var int|null Border dominance level for bottom cell borders
+	 */
 	var $cell_border_dominance_B;
 
+	/**
+	 * @var int|null Border dominance level for left cell borders
+	 */
 	var $cell_border_dominance_L;
 
+	/**
+	 * @var int|null Border dominance level for right cell borders
+	 */
 	var $cell_border_dominance_R;
 
+	/**
+	 * @var int|null Border dominance level for top cell borders
+	 */
 	var $cell_border_dominance_T;
 
+	/**
+	 * CssManager constructor.
+	 *
+	 * Initializes the CSS manager with required dependencies and sets up
+	 * internal storage structures for CSS properties and cascading.
+	 *
+	 * @param Mpdf $mpdf Main mPDF instance
+	 * @param Cache $cache Cache instance for temporary file storage
+	 * @param SizeConverter $sizeConverter Size conversion utility
+	 * @param ColorConverter $colorConverter Color conversion utility
+	 * @param AssetFetcher $assetFetcher Asset fetching utility for external resources
+	 */
 	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
 	{
 		$this->mpdf = $mpdf;
@@ -68,6 +106,16 @@ class CssManager
 		$this->colorConverter = $colorConverter;
 	}
 
+	/**
+	 * Read and parse CSS from HTML content.
+	 *
+	 * Extracts CSS from style tags, link tags, and @import statements within HTML.
+	 * Processes external stylesheets, resolves URLs, handles media queries, and
+	 * parses all CSS rules into the internal CSS storage structure.
+	 *
+	 * @param string $html HTML content containing CSS
+	 * @return string HTML with CSS tags removed
+	 */
 	public function ReadCSS($html)
 	{
 		preg_match_all('/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is', $html, $m);
@@ -253,30 +301,10 @@ class CssManager
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 
 		// mPDF 5.7.4 URLs
-		// Characters "(" ")" and ";" in url() e.g. background-image, cause problems parsing the CSS string
+		// Characters "(", ")", and ";" in url() e.g. background-image, cause problems parsing the CSS string
 		// URLencode ( and ), but change ";" to a code which can be converted back after parsing (so as not to confuse ;
 		// with a segment delimiter in the URI)
-		$tempmarker = '%ZZ';
-		if (strpos($CSSstr, 'url(') !== false) {
-			preg_match_all('/url\(\"(.*?)\"\)/', $CSSstr, $m);
-			$count_m = count($m[1]);
-			for ($i = 0; $i < $count_m; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$CSSstr = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $CSSstr);
-			}
-			preg_match_all('/url\(\'(.*?)\'\)/', $CSSstr, $m);
-			$count_m = count($m[1]);
-			for ($i = 0; $i < $count_m; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$CSSstr = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $CSSstr);
-			}
-			preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $CSSstr, $m);
-			$count_m = count($m[1]);
-			for ($i = 0; $i < $count_m; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$CSSstr = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $CSSstr);
-			}
-		}
+		$CSSstr = $this->processUrlsInCss($CSSstr);
 
 		if ($CSSstr) {
 
@@ -299,7 +327,7 @@ class CssManager
 						} else {
 							$value = '';
 						}
-						$value = str_replace($tempmarker, ';', $value); // mPDF 5.7.4 URLs
+						$value = str_replace(self::URL_TEMP_MARKER, ';', $value); // mPDF 5.7.4 URLs
 						$property = trim($property);
 						$value = preg_replace('/\s*!important/i', '', $value);
 						$value = trim($value);
@@ -484,35 +512,114 @@ class CssManager
 		return $html;
 	}
 
+	/**
+	 * Process URLs in CSS strings by encoding special characters.
+	 *
+	 * Characters "(", ")", and ";" in url() can cause problems parsing CSS.
+	 * This method URLencodes ( and ), and temporarily encodes ";" to prevent
+	 * confusion with CSS segment delimiters.
+	 *
+	 * @param string $css CSS string containing url() references
+	 * @return string CSS string with processed URLs
+	 */
+	protected function processUrlsInCss($css)
+	{
+		if (strpos($css, 'url(') === false) {
+			return $css;
+		}
+
+		$tempMarker = self::URL_TEMP_MARKER;
+
+		// Process urls with double quotes
+		preg_match_all('/url\(\"(.*?)\"\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		// Process urls with single quotes
+		preg_match_all('/url\(\'(.*?)\'\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		// Process urls without quotes
+		preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		return $css;
+	}
+
+	/**
+	 * Normalize background position values.
+	 *
+	 * Converts background position keywords (top, bottom, left, right, center)
+	 * to percentage values and validates the format.
+	 *
+	 * @param array $bits Position components (1 or 2 values)
+	 * @return string|false Normalized position string or false if invalid
+	 */
+	protected function normalizeBackgroundPosition($bits)
+	{
+		$position = '';
+
+		$numOfBits = count($bits);
+		if ($numOfBits === 1) {
+			if (false !== strpos($bits[0], 'bottom')) {
+				$position = '50% 100%';
+			} elseif (false !== strpos($bits[0], 'top')) {
+				$position = '50% 0%';
+			} else {
+				$position = $bits[0] . ' 50%';
+			}
+		} elseif ($numOfBits === 2) {
+			// Can be either right center or center right
+			if (preg_match('/(top|bottom)/', $bits[0]) || preg_match('/(left|right)/', $bits[1])) {
+				$position = $bits[1] . ' ' . $bits[0];
+			} else {
+				$position = $bits[0] . ' ' . $bits[1];
+			}
+		}
+
+		if (empty($position)) {
+			return false;
+		}
+
+		$position = preg_replace('/(left|top)/', '0%', $position);
+		$position = preg_replace('/(right|bottom)/', '100%', $position);
+		$position = preg_replace('/(center)/', '50%', $position);
+
+		if (!preg_match('/[\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)* [\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)*/', $position)) {
+			return false;
+		}
+
+		return $position;
+	}
+
+	/**
+	 * Parse inline CSS style attribute.
+	 *
+	 * Parses a CSS string from an HTML style attribute and returns
+	 * an array of CSS properties.
+	 *
+	 * @param string $html CSS string from style attribute
+	 * @return array Parsed CSS properties
+	 */
 	function readInlineCSS($html)
 	{
 		$html = htmlspecialchars_decode($html); // mPDF 5.7.4 URLs
 		// mPDF 5.7.4 URLs
-		// Characters "(" ")" and ";" in url() e.g. background-image, cause problems parsing the CSS string
+		// Characters "(", ")", and ";" in url() e.g. background-image, cause problems parsing the CSS string
 		// URLencode ( and ), but change ";" to a code which can be converted back after parsing (so as not to confuse ;
 		// with a segment delimiter in the URI)
-		$tempmarker = '%ZZ';
-
-		if (strpos($html, 'url(') !== false) {
-			preg_match_all('/url\(\"(.*?)\"\)/', $html, $m);
-			$m_count = count($m[1]);
-			for ($i = 0; $i < $m_count; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$html = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $html);
-			}
-			preg_match_all('/url\(\'(.*?)\'\)/', $html, $m);
-			$m_count = count($m[1]);
-			for ($i = 0; $i < $m_count; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$html = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $html);
-			}
-			preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $html, $m);
-			$m_count = count($m[1]);
-			for ($i = 0; $i < $m_count; $i++) {
-				$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempmarker], $m[1][$i]);
-				$html = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $html);
-			}
-		}
+		$html = $this->processUrlsInCss($html);
 
 		// Fix incomplete CSS code
 		$size = strlen($html) - 1;
@@ -536,13 +643,22 @@ class CssManager
 				continue;
 			}
 
-			$values[$i] = str_replace($tempmarker, ';', $values[$i]); // mPDF 5.7.4 URLs
+			$values[$i] = str_replace(self::URL_TEMP_MARKER, ';', $values[$i]); // mPDF 5.7.4 URLs
 			$classproperties[strtoupper($properties[$i])] = trim($values[$i]);
 		}
 
 		return $this->fixCSS($classproperties);
 	}
 
+	/**
+	 * Parse and normalize border shorthand property.
+	 *
+	 * Converts border shorthand syntax into standardized "width style color" format.
+	 * Handles various input formats and orders.
+	 *
+	 * @param string $bd Border property value
+	 * @return string Normalized border string in format "width style color"
+	 */
 	function _fix_borderStr($bd)
 	{
 		preg_match_all("/\((.*?)\)/", $bd, $m);
@@ -619,6 +735,183 @@ class CssManager
 		return $w . ' ' . $s . ' ' . $c;
 	}
 
+	/**
+	 * Process FONT shorthand property.
+	 *
+	 * Expands the CSS font shorthand into individual components:
+	 * font-family, font-size, line-height, font-style, font-weight, text-transform.
+	 *
+	 * @param string $value Font property value
+	 * @param array $newProperty Properties array to populate (modified by reference)
+	 * @return void
+	 */
+	protected function processFontProperty($value, &$newProperty)
+	{
+		$value = trim($value);
+
+		// Remove quoted font names and simplify
+		preg_match_all('/\"(.*?)\"/', $value, $ff);
+		if (count($ff[1])) {
+			foreach ($ff[1] as $ffp) {
+				$w = preg_split('/\s+/', $ffp);
+				$value = preg_replace('/\"' . $ffp . '\"/', $w[0], $value);
+			}
+		}
+
+		preg_match_all('/\'(.*?)\'/', $value, $ff);
+		if (count($ff[1])) {
+			foreach ($ff[1] as $ffp) {
+				$w = preg_split('/\s+/', $ffp);
+				$value = preg_replace('/\'' . $ffp . '\'/', $w[0], $value);
+			}
+		}
+
+		$value = preg_replace('/\s*,\s*/', ',', $value);
+		$bits = preg_split('/\s+/', $value);
+		$numOfBits = count($bits);
+
+		if ($numOfBits < 2) {
+			return;
+		}
+
+		// Last item is font-family
+		$newProperty['FONT-FAMILY'] = $bits[($numOfBits - 1)];
+
+		// Second to last is font-size (possibly with /line-height)
+		$fs = $bits[($numOfBits - 2)];
+		if (preg_match('/(.*?)\/(.*)/', $fs, $fsp)) {
+			$newProperty['FONT-SIZE'] = $fsp[1];
+			$newProperty['LINE-HEIGHT'] = $fsp[2];
+		} else {
+			$newProperty['FONT-SIZE'] = $fs;
+		}
+
+		// Check for font-style
+		if (preg_match('/(italic|oblique)/i', $value)) {
+			$newProperty['FONT-STYLE'] = 'italic';
+		} else {
+			$newProperty['FONT-STYLE'] = 'normal';
+		}
+
+		// Check for font-weight
+		if (false !== stripos($value, 'bold')) {
+			$newProperty['FONT-WEIGHT'] = 'bold';
+		} else {
+			$newProperty['FONT-WEIGHT'] = 'normal';
+		}
+
+		// Check for small-caps
+		if (false !== stripos($value, 'small-caps')) {
+			$newProperty['TEXT-TRANSFORM'] = 'uppercase';
+		}
+	}
+
+	/**
+	 * Process FONT-FAMILY property.
+	 *
+	 * Validates and normalizes font family names against available fonts.
+	 * Checks font translations, available unifonts, core fonts, and font categories.
+	 *
+	 * @param string $propertyKey Property key
+	 * @param string $value Font family value
+	 * @param array $newProperty Properties array to populate (modified by reference)
+	 * @return void
+	 */
+	protected function processFontFamilyProperty($propertyKey, $value, &$newProperty)
+	{
+		/* Normalize the font list */
+		$fontList = array_map(
+			function ($fontName) {
+				$fontName = trim($fontName);
+				$fontName = preg_replace('/["\']*(.*?)["\']*/', '\\1', $fontName);
+				$fontName = preg_replace('/ /', '', $fontName);
+				$fontName = strtolower(trim($fontName));
+
+				if (!empty($this->mpdf->fonttrans[$fontName])) {
+					$fontName = $this->mpdf->fonttrans[$fontName];
+				}
+
+				return $fontName;
+			},
+			explode(',', $value)
+		);
+
+		/* If font watches unicode, core fonts, or some CJK fonts (should use $this->mpdf->available_CJK_fonts?)*/
+		foreach ($fontList as $fontName) {
+			if ((!$this->mpdf->onlyCoreFonts && in_array($fontName, $this->mpdf->available_unifonts, true)) ||
+				in_array($fontName, ['ccourier', 'ctimes', 'chelvetica'], true) ||
+				($this->mpdf->onlyCoreFonts && in_array($fontName, ['courier', 'times', 'helvetica', 'arial'], true)) ||
+				in_array($fontName, ['sjis', 'uhc', 'big5', 'gb'], true)
+			) {
+				$newProperty[$propertyKey] = $fontName;
+				return;
+			}
+		}
+
+		/* If no matches, check the default registered font families */
+		foreach ($fontList as $fontName) {
+			if (in_array($fontName, $this->mpdf->sans_fonts, true) ||
+				in_array($fontName, $this->mpdf->serif_fonts, true) ||
+				in_array($fontName, $this->mpdf->mono_fonts, true)
+			) {
+				$newProperty[$propertyKey] = $fontName;
+				return;
+			}
+		}
+	}
+
+	/**
+	 * Process BORDER shorthand and individual border properties.
+	 *
+	 * Handles BORDER, BORDER-TOP, BORDER-RIGHT, BORDER-BOTTOM, BORDER-LEFT properties
+	 * by normalizing them to consistent "width style color" format.
+	 *
+	 * @param string $propertyKey Property key (BORDER, BORDER-TOP, etc.)
+	 * @param string $value Property value
+	 * @param array $newProperty Properties array to populate (modified by reference)
+	 * @return void
+	 */
+	protected function processBorderProperty($propertyKey, $value, &$newProperty)
+	{
+		switch ($propertyKey) {
+			case 'BORDER':
+				$value = $value !== '1' ? $this->_fix_borderStr($value) : '1px solid #000000';
+
+				$newProperty['BORDER-TOP'] = $value;
+				$newProperty['BORDER-RIGHT'] = $value;
+				$newProperty['BORDER-BOTTOM'] = $value;
+				$newProperty['BORDER-LEFT'] = $value;
+				break;
+
+			case 'BORDER-TOP':
+				$newProperty['BORDER-TOP'] = $this->_fix_borderStr($value);
+				break;
+
+			case 'BORDER-RIGHT':
+				$newProperty['BORDER-RIGHT'] = $this->_fix_borderStr($value);
+				break;
+
+			case 'BORDER-BOTTOM':
+				$newProperty['BORDER-BOTTOM'] = $this->_fix_borderStr($value);
+				break;
+
+			case 'BORDER-LEFT':
+				$newProperty['BORDER-LEFT'] = $this->_fix_borderStr($value);
+				break;
+		}
+	}
+
+	/**
+	 * Process and expand CSS shorthand properties.
+	 *
+	 * Takes an array of CSS properties and expands shorthand properties
+	 * into their individual components (e.g., margin -> margin-top, margin-right,
+	 * margin-bottom, margin-left). Handles font, background, border, padding,
+	 * margin, and other composite properties.
+	 *
+	 * @param array $prop CSS properties array
+	 * @return array Expanded CSS properties array
+	 */
 	function fixCSS($prop)
 	{
 		if (!is_array($prop) || (count($prop) == 0)) {
@@ -634,101 +927,9 @@ class CssManager
 			}
 
 			if ($k === 'FONT') {
-
-				$s = trim($v);
-
-				preg_match_all('/\"(.*?)\"/', $s, $ff);
-				if (count($ff[1])) {
-					foreach ($ff[1] as $ffp) {
-						$w = preg_split('/\s+/', $ffp);
-						$s = preg_replace('/\"' . $ffp . '\"/', $w[0], $s);
-					}
-				}
-
-				preg_match_all('/\'(.*?)\'/', $s, $ff);
-				if (count($ff[1])) {
-					foreach ($ff[1] as $ffp) {
-						$w = preg_split('/\s+/', $ffp);
-						$s = preg_replace('/\'' . $ffp . '\'/', $w[0], $s);
-					}
-				}
-
-				$s = preg_replace('/\s*,\s*/', ',', $s);
-				$bits = preg_split('/\s+/', $s);
-				if (count($bits) > 1) {
-					$k = 'FONT-FAMILY';
-					$v = $bits[(count($bits) - 1)];
-					$fs = $bits[(count($bits) - 2)];
-
-					if (preg_match('/(.*?)\/(.*)/', $fs, $fsp)) {
-						$newprop['FONT-SIZE'] = $fsp[1];
-						$newprop['LINE-HEIGHT'] = $fsp[2];
-					} else {
-						$newprop['FONT-SIZE'] = $fs;
-					}
-
-					if (preg_match('/(italic|oblique)/i', $s)) {
-						$newprop['FONT-STYLE'] = 'italic';
-					} else {
-						$newprop['FONT-STYLE'] = 'normal';
-					}
-
-					if (false !== stripos($s, 'bold')) {
-						$newprop['FONT-WEIGHT'] = 'bold';
-					} else {
-						$newprop['FONT-WEIGHT'] = 'normal';
-					}
-
-					if (false !== stripos($s, 'small-caps')) {
-						$newprop['TEXT-TRANSFORM'] = 'uppercase';
-					}
-				}
-
+				$this->processFontProperty($v, $newprop);
 			} elseif ($k === 'FONT-FAMILY') {
-
-				$aux_fontlist = explode(',', $v);
-				$found = 0;
-
-				foreach ($aux_fontlist as $f) {
-
-					$fonttype = trim($f);
-					$fonttype = preg_replace('/["\']*(.*?)["\']*/', '\\1', $fonttype);
-					$fonttype = preg_replace('/ /', '', $fonttype);
-					$v = strtolower(trim($fonttype));
-
-					if (isset($this->mpdf->fonttrans[$v]) && $this->mpdf->fonttrans[$v]) {
-						$v = $this->mpdf->fonttrans[$v];
-					}
-
-					if ((!$this->mpdf->onlyCoreFonts && in_array($v, $this->mpdf->available_unifonts)) ||
-						in_array($v, ['ccourier', 'ctimes', 'chelvetica']) ||
-						($this->mpdf->onlyCoreFonts && in_array($v, ['courier', 'times', 'helvetica', 'arial'])) ||
-						in_array($v, ['sjis', 'uhc', 'big5', 'gb'])) {
-						$newprop[$k] = $v;
-						$found = 1;
-						break;
-					}
-				}
-
-				if (!$found) {
-					foreach ($aux_fontlist as $f) {
-
-						$fonttype = trim($f);
-						$fonttype = preg_replace('/["\']*(.*?)["\']*/', '\\1', $fonttype);
-						$fonttype = preg_replace('/ /', '', $fonttype);
-						$v = strtolower(trim($fonttype));
-
-						if (isset($this->mpdf->fonttrans[$v]) && $this->mpdf->fonttrans[$v]) {
-							$v = $this->mpdf->fonttrans[$v];
-						}
-
-						if (in_array($v, $this->mpdf->sans_fonts) || in_array($v, $this->mpdf->serif_fonts) || in_array($v, $this->mpdf->mono_fonts)) {
-							$newprop[$k] = $v;
-							break;
-						}
-					}
-				}
-
+				$this->processFontFamilyProperty($k, $v, $newprop);
 			} elseif ($k === 'FONT-VARIANT') {
 
 				if (preg_match('/(normal|none)/', $v, $m)) {
@@ -798,35 +999,8 @@ class CssManager
 				$newprop['PADDING-BOTTOM'] = $tmp['B'];
 				$newprop['PADDING-LEFT'] = $tmp['L'];
 
-			} elseif ($k === 'BORDER') {
-
-				if ($v == '1') {
-					$v = '1px solid #000000';
-				} else {
-					$v = $this->_fix_borderStr($v);
-				}
-
-				$newprop['BORDER-TOP'] = $v;
-				$newprop['BORDER-RIGHT'] = $v;
-				$newprop['BORDER-BOTTOM'] = $v;
-				$newprop['BORDER-LEFT'] = $v;
-
-			} elseif ($k === 'BORDER-TOP') {
-
-				$newprop['BORDER-TOP'] = $this->_fix_borderStr($v);
-
-			} elseif ($k === 'BORDER-RIGHT') {
-
-				$newprop['BORDER-RIGHT'] = $this->_fix_borderStr($v);
-
-			} elseif ($k === 'BORDER-BOTTOM') {
-
-				$newprop['BORDER-BOTTOM'] = $this->_fix_borderStr($v);
-
-			} elseif ($k === 'BORDER-LEFT') {
-
-				$newprop['BORDER-LEFT'] = $this->_fix_borderStr($v);
-
+			} elseif (in_array($k, ['BORDER', 'BORDER-TOP', 'BORDER-RIGHT', 'BORDER-BOTTOM', 'BORDER-LEFT'], true)) {
+				$this->processBorderProperty($k, $v, $newprop);
 			} elseif ($k === 'BORDER-STYLE') {
 
 				$e = $this->expand24($v);
@@ -965,36 +1139,9 @@ class CssManager
 				$s = $v;
 				$bits = preg_split('/\s+/', trim($s));
 
-				// These should be Position x1 or x2
-				if (count($bits) === 1) {
-					if (false !== strpos($bits[0], 'bottom')) {
-						$bg['p'] = '50% 100%';
-					} elseif (false !== strpos($bits[0], 'top')) {
-						$bg['p'] = '50% 0%';
-					} else {
-						$bg['p'] = $bits[0] . ' 50%';
-					}
-
-				} elseif (count($bits) === 2) {
-					// Can be either right center or center right
-					if (preg_match('/(top|bottom)/', $bits[0]) || preg_match('/(left|right)/', $bits[1])) {
-						$bg['p'] = $bits[1] . ' ' . $bits[0];
-					} else {
-						$bg['p'] = $bits[0] . ' ' . $bits[1];
-					}
-				}
-
-				if (isset($bg['p'])) {
-
-					$bg['p'] = preg_replace('/(left|top)/', '0%', $bg['p']);
-					$bg['p'] = preg_replace('/(right|bottom)/', '100%', $bg['p']);
-					$bg['p'] = preg_replace('/(center)/', '50%', $bg['p']);
-
-					if (!preg_match('/[\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)* [\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)*/', $bg['p'])) {
-						$bg['p'] = false;
-					}
-
-					$newprop['BACKGROUND-POSITION'] = $bg['p'];
+				$normalizedPosition = $this->normalizeBackgroundPosition($bits);
+				if ($normalizedPosition !== false) {
+					$newprop['BACKGROUND-POSITION'] = $normalizedPosition;
 				}
 
 			} elseif ($k === 'IMAGE-ORIENTATION') {
@@ -1083,6 +1230,15 @@ class CssManager
 		return $newprop;
 	}
 
+	/**
+	 * Parse box-shadow CSS property.
+	 *
+	 * Converts box-shadow CSS property string into array format used internally.
+	 * Handles multiple shadows, inset shadows, blur, spread, and colors.
+	 *
+	 * @param string $v Box-shadow property value
+	 * @return array Array of shadow definitions
+	 */
 	function setCSSboxshadow($v)
 	{
 		$sh = [];
@@ -1132,6 +1288,15 @@ class CssManager
 		return $sh;
 	}
 
+	/**
+	 * Parse text-shadow CSS property.
+	 *
+	 * Converts text-shadow CSS property string into array format used internally.
+	 * Handles multiple shadows, blur, and colors.
+	 *
+	 * @param string $v Text-shadow property value
+	 * @return array Array of text shadow definitions
+	 */
 	function setCSStextshadow($v)
 	{
 		$sh = [];
@@ -1190,6 +1355,15 @@ class CssManager
 		return $sh;
 	}
 
+	/**
+	 * Parse CSS background shorthand property.
+	 *
+	 * Extracts background color, image, repeat, and position from the
+	 * background shorthand property. Supports  gradients and url() images.
+	 *
+	 * @param string $s Background property value
+	 * @return array Array with keys 'c' (color), 'i' (image), 'r' (repeat), 'p' (position)
+	 */
 	function parseCSSbackground($s)
 	{
 		$bg = ['c' => false, 'i' => false, 'r' => false, 'p' => false,];
@@ -1214,30 +1388,10 @@ class CssManager
 					// Remove repeat, attachment (discarded) and also any inherit
 					$s = preg_replace('/(repeat-x|repeat-y|no-repeat|repeat|scroll|fixed|inherit)/', '', $s);
 					$bits = preg_split('/\s+/', trim($s));
-					// These should be Position x1 or x2
-					if (count($bits) == 1) {
-						if (false !== strpos($bits[0], 'bottom')) {
-							$bg['p'] = '50% 100%';
-						} elseif (false !== strpos($bits[0], 'top')) {
-							$bg['p'] = '50% 0%';
-						} else {
-							$bg['p'] = $bits[0] . ' 50%';
-						}
-					} elseif (count($bits) == 2) {
-						// Can be either right center or center right
-						if (preg_match('/(top|bottom)/', $bits[0]) || preg_match('/(left|right)/', $bits[1])) {
-							$bg['p'] = $bits[1] . ' ' . $bits[0];
-						} else {
-							$bg['p'] = $bits[0] . ' ' . $bits[1];
-						}
-					}
-					if ($bg['p']) {
-						$bg['p'] = preg_replace('/(left|top)/', '0%', $bg['p']);
-						$bg['p'] = preg_replace('/(right|bottom)/', '100%', $bg['p']);
-						$bg['p'] = preg_replace('/(center)/', '50%', $bg['p']);
-						if (!preg_match('/[\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)* [\-]{0,1}\d+(in|cm|mm|pt|pc|em|ex|px|%)*/', $bg['p'])) {
-							$bg['p'] = false;
-						}
+				
+					$normalizedPosition = $this->normalizeBackgroundPosition($bits);
+					if ($normalizedPosition !== false) {
+						$bg['p'] = $normalizedPosition;
 					}
 				}
 				/* -- END BACKGROUNDS -- */
@@ -1248,6 +1402,16 @@ class CssManager
 		return ($bg);
 	}
 
+	/**
+	 * Expand 1-4 value CSS property into top/right/bottom/left components.
+	 *
+	 * Handles CSS properties that can be specified with 1-4 values following
+	 * the standard CSS clockwise pattern (top, right, bottom, left).
+	 * Used for margin, padding, border-width, border-style, and border-color.
+	 *
+	 * @param string $mp Property value(s) separated by spaces
+	 * @return array Associative array with keys 'T', 'R', 'B', 'L'
+	 */
 	function expand24($mp)
 	{
 		$prop = preg_split('/\s+/', trim($mp));
@@ -1275,6 +1439,16 @@ class CssManager
 
 	/* -- BORDER-RADIUS -- */
 
+	/**
+	 * Expand border-radius properties.
+	 *
+	 * Processes border-radius CSS properties and expands them into horizontal
+	 * and vertical components for each corner (TL, TR, BL, BR).
+	 *
+	 * @param string $val Border radius value(s)
+	 * @param string $k Property name (BORDER-RADIUS or specific corner)
+	 * @return array Array with keys like 'TL-H', 'TL-V', etc.
+	 */
 	function border_radius_expand($val, $k)
 	{
 		$b = [];
@@ -1359,6 +1533,16 @@ class CssManager
 	}
 	/* -- END BORDER-RADIUS -- */
 
+	/**
+	 * Merge CSS properties into target array.
+	 *
+	 * Internal method to merge CSS properties from source into target.
+	 * Used for CSS cascading.
+	 *
+	 * @param array $p Source CSS properties
+	 * @param array $t Target CSS properties (modified by reference)
+	 * @return void
+	 */
 	function _mergeCSS($p, &$t)
 	{
 		// Save Cascading CSS e.g. "div.topic p" at this block level
@@ -1372,6 +1556,16 @@ class CssManager
 	}
 
 	// for CSS handling
+	/**
+	 * Recursively merge arrays with unique handling.
+	 *
+	 * Custom array merge function for CSS property handling. Differs from
+	 * standard array_merge_recursive in how it handles integer vs string keys.
+	 *
+	 * @param array $array1 First array
+	 * @param array $array2 Second array
+	 * @return array Merged array
+	 */
 	function array_merge_recursive_unique($array1, $array2)
 	{
 		$arrays = func_get_args();
@@ -1393,6 +1587,20 @@ class CssManager
 		return $ret;
 	}
 
+	/**
+	 * Merge full CSS rules including tag, class, ID, and lang selectors.
+	 *
+	 * Applies CSS rules from various selector types (tag, class, ID, language)
+	 * to the target CSS properties array. Handles CSS cascading and specificity.
+	 *
+	 * @param array $p Source CSS selector array
+	 * @param array $t Target CSS properties (modified by reference)
+	 * @param string $tag HTML tag name
+	 * @param array $classes Array of class names
+	 * @param string $id Element ID
+	 * @param string $lang Language code
+	 * @return void
+	 */
 	function _mergeFullCSS($p, &$t, $tag, $classes, $id, $lang)
 	{
 	// mPDF 6
@@ -1458,6 +1666,16 @@ class CssManager
 		}
 	}
 
+	/**
+	 * Set border dominance level for table cells.
+	 *
+	 * Used in table rendering to determine which cell borders take
+	 * precedence when cells share borders.
+	 *
+	 * @param array $prop CSS properties containing border definitions
+	 * @param int $val Dominance level value
+	 * @return void
+	 */
 	function setBorderDominance($prop, $val)
 	{
 		if (!empty($prop['BORDER-LEFT'])) {
@@ -1474,6 +1692,18 @@ class CssManager
 		}
 	}
 
+	/**
+	 * Set merged CSS properties with depth and border dominance checks.
+	 *
+	 * Internal method for applying cascaded CSS with optional depth checking
+	 * and border dominance handling for table cells.
+	 *
+	 * @param array $m Source CSS properties
+	 * @param array $p Target CSS properties (modified by reference)
+	 * @param bool $d Check depth before merging
+	 * @param int|bool $bd Border dominance level or false
+	 * @return void
+	 */
 	function _set_mergedCSS(&$m, &$p, $d = true, $bd = false)
 	{
 		if (isset($m)) {
@@ -1489,42 +1719,76 @@ class CssManager
 		}
 	}
 
+	/**
+	 * Merge individual border properties into shorthand border properties.
+	 *
+	 * Converts individual border properties like BORDER-TOP-STYLE, BORDER-TOP-WIDTH,
+	 * BORDER-TOP-COLOR into the shorthand BORDER-TOP property. This ensures consistency
+	 * when CSS cascading rules apply individual border components.
+	 *
+	 * @param array $b Target border array (modified by reference)
+	 * @param array $a Source border properties to merge
+	 * @return void
+	 */
 	function _mergeBorders(&$b, &$a)
 	{
-	// Merges $a['BORDER-TOP-STYLE'] to $b['BORDER-TOP'] etc.
+		// Merges $a['BORDER-TOP-STYLE'] to $b['BORDER-TOP'] etc.
+		$defaults = [
+			'WIDTH' => '0px',
+			'STYLE' => 'none',
+			'COLOR' => '#000000'
+		];
+		
 		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
+			$borderKey = 'BORDER-' . $side;
+			$currentBorder = isset($b[$borderKey]) ? trim($b[$borderKey]) : '';
+			$modified = false;
+			
 			foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
-				if (isset($a['BORDER-' . $side . '-' . $el])) { // e.g. $b['BORDER-TOP-STYLE']
-					$s = trim($a['BORDER-' . $side . '-' . $el]);
-					if (isset($b['BORDER-' . $side])) { // e.g. $b['BORDER-TOP']
-						$p = trim($b['BORDER-' . $side]);
+				$propertyKey = $borderKey . '-' . $el;
+				
+				if (isset($a[$propertyKey])) {
+					$value = trim($a[$propertyKey]);
+					
+					if ($currentBorder) {
+						// Update existing border value
+						if ($el === 'STYLE') {
+							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
+						} elseif ($el === 'WIDTH') {
+							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
+						} else { // COLOR
+							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
+						}
 					} else {
-						$p = '';
+						// Build new border from scratch with defaults
+						if (!isset($borderParts)) {
+							$borderParts = $defaults;
+						}
+						$borderParts[$el] = $value;
+						$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
 					}
-					if ($el === 'STYLE') {
-						if ($p) {
-							$b['BORDER-' . $side] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $s . ' \\3', $p);
-						} else {
-							$b['BORDER-' . $side] = '0px ' . $s . ' #000000';
-						}
-					} elseif ($el === 'WIDTH') {
-						if ($p) {
-							$b['BORDER-' . $side] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $s . ' \\2 \\3', $p);
-						} else {
-							$b['BORDER-' . $side] = $s . ' none #000000';
-						}
-					} elseif ($el === 'COLOR') {
-						if ($p) {
-							$b['BORDER-' . $side] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $s, $p);
-						} else {
-							$b['BORDER-' . $side] = '0px none ' . $s;
-						}
-					}
+					$modified = true;
 				}
 			}
+			
+			// Reset border parts for next side
+			unset($borderParts);
 		}
 	}
 
+	/**
+	 * Merge CSS properties for an HTML element.
+	 *
+	 * Main method for applying CSS to an element. Combines CSS from multiple sources
+	 * including default styles, stylesheets, inline styles, and inherited properties.
+	 * Handles inheritance type (BLOCK, INLINE, TABLE, TOPTABLE) and applies
+	 * appropriate cascading rules.
+	 *
+	 * @param string $inherit Inheritance context (BLOCK, INLINE, TABLE, TOPTABLE)
+	 * @param string $tag HTML tag name
+	 * @param array $attr HTML attributes including CLASS, ID, STYLE
+	 * @return array Merged CSS properties array
+	 */
 	function MergeCSS($inherit, $tag, $attr)
 	{
 		$p = [];
@@ -2000,6 +2264,16 @@ class CssManager
 	}
 
 	// Convert inline Properties back to CSS
+	/**
+	 * Convert inline properties back to CSS.
+	 *
+	 * Transforms internal inline property format (used in TextVars) back into
+	 * CSS property array. Used for property inheritance and cascading.
+	 *
+	 * @param array $bilp Inline properties array
+	 * @param array $p CSS properties array (modified by reference)
+	 * @return void
+	 */
 	function inlinePropsToCSS($bilp, &$p)
 	{
 		if (isset($bilp['family']) && $bilp['family']) {
@@ -2143,6 +2417,16 @@ class CssManager
 		}
 	}
 
+	/**
+	 * Preview block-level CSS without creating the block.
+	 *
+	 * Looks ahead to determine what CSS would be applied to a block element
+	 * without actually creating it. Used for planning layout and spacing.
+	 *
+	 * @param string $tag HTML tag name
+	 * @param array $attr HTML attributes array
+	 * @return array CSS properties that would be applied
+	 */
 	function PreviewBlockCSS($tag, $attr)
 	{
 		// Looks ahead from current block level to a new level
@@ -2237,6 +2521,16 @@ class CssManager
 	}
 
 	// mPDF 5.7.4   nth-child
+	/**
+	 * Evaluate nth-child CSS selector.
+	 *
+	 * Determines if a given element index matches an nth-child selector formula.
+	 * Supports formulas like "2n+1", "odd", "even", or specific numbers.
+	 *
+	 * @param array $f Formula components from preg_match
+	 * @param int $c Current element index (0-based)
+	 * @return bool True if element matches the nth-child selector
+	 */
 	function _nthchild($f, $c)
 	{
 		// $f is formula e.g. 2N+1 split into a preg_match array
@@ -2292,6 +2586,15 @@ class CssManager
 		return $select;
 	}
 
+	/**
+	 * Normalize file path for local file system access.
+	 *
+	 * Converts URLs to local file paths when the base path is local.
+	 * Handles DOCUMENT_ROOT and relative paths.
+	 *
+	 * @param string $path File path or URL
+	 * @return string Normalized path
+	 */
 	private function normalizePath($path)
 	{
 		if ($this->mpdf->basepathIsLocal) {
