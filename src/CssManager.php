@@ -220,7 +220,7 @@ class CssManager
 	 * @param string $cssStr
 	 * @return void
 	 */
-	private function processCssString($cssStr)
+	protected function processCssString($cssStr)
 	{
 		preg_match_all('/(.*?)\{(.*?)\}/', $cssStr, $styles);
 		$styles_count = count($styles[1]);
