@@ -25,6 +25,7 @@ use Mpdf\Writer\MetadataWriter;
 use Mpdf\Writer\OptionalContentWriter;
 use Mpdf\Writer\PageWriter;
 use Mpdf\Writer\ResourceWriter;
+use Mpdf\Css\NormalizeProperties;
 use Psr\Log\LoggerInterface;
 
 class ServiceFactory
@@ -82,8 +83,10 @@ class ServiceFactory
 			: new LocalContentLoader();
 
 		$assetFetcher = new AssetFetcher($mpdf, $localContentLoader, $httpClient, $logger);
+		
+		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
 
-		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher);
+		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher, $normalizeProperties);
 
 		$otl = new Otl($mpdf, $fontCache);
 
