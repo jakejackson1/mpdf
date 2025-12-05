@@ -1995,76 +1995,7 @@ class CssManager
 
 		$this->mergeStylesheetSelectors($tag, $attr, $classes, $p, $shortlang);
 		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $p, $shortlang);
-
-		// Cascaded e.g. div.class p only works for block level
-		if ($inherit === 'BLOCK' && !empty($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class], $p);
-			}
-
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
-			}
-
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
-		} elseif ($inherit === 'INLINE') {
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class], $p);
-			}
-
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']], $p);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
-			}
-
-			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
-		} elseif (!empty($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && ($inherit === 'TOPTABLE' || $inherit === 'TABLE')) { // NB looks at $this->tablecascadeCSS-1 for cascading CSS
-
-			// false, 9 = don't check for 'depth' and do set border dominance
-			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], $p, false, 9);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], $p, false, 9);
-			}
-
-				// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
-			if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
-					if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-						$select = false;
-						if ($tag === 'TR') {
-							$row = $this->mpdf->row;
-							$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-							$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
-							if ($this->mpdf->tabletfoot) {
-								$row -= $thnr;
-							} elseif (!$this->mpdf->tablethead) {
-								$row -= ($thnr + $tfnr);
-							}
-							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-								$select = $this->_nthchild($a, $row);
-							}
-						} elseif ($tag === 'TD' || $tag === 'TH') {
-							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-								$select = $this->_nthchild($a, $this->mpdf->col);
-							}
-						}
-						if ($select) {
-							$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
-						}
-					}
-				}
-			}
-
-			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], $p, false, 9);
-			foreach ($classes as $class) {
-				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], $p, false, 9);
-			}
-
-			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], $p, false, 9);
-		}
+		$this->mergeCascadedCSS($inherit, $tag, $attr, $classes, $p);
 
 		// INLINE STYLE e.g. style="CSS:property"
 		if (isset($attr['STYLE'])) {
@@ -2146,6 +2077,89 @@ class CssManager
 				$p = array_merge($p, $zp);
 				$this->_mergeBorders($p, $zp);
 			}
+		}
+	}
+
+	/**
+	 * Merge cascaded CSS properties (BLOCK, INLINE, TABLE).
+	 *
+	 * @param string $inherit Inheritance context
+	 * @param string $tag HTML tag
+	 * @param array $attr HTML attributes
+	 * @param array $classes Array of class names
+	 * @param array $p CSS properties (modified by reference)
+	 * @return void
+	 */
+	protected function mergeCascadedCSS($inherit, $tag, $attr, $classes, &$p)
+	{
+		// Cascaded e.g. div.class p only works for block level
+		if ($inherit === 'BLOCK' && !empty($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag], $p);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class], $p);
+			}
+
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']], $p);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
+			}
+
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
+		} elseif ($inherit === 'INLINE') {
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag], $p);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class], $p);
+			}
+
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']], $p);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
+			}
+
+			$this->_set_mergedCSS($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
+		} elseif (!empty($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && ($inherit === 'TOPTABLE' || $inherit === 'TABLE')) { // NB looks at $this->tablecascadeCSS-1 for cascading CSS
+
+			// false, 9 = don't check for 'depth' and do set border dominance
+			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], $p, false, 9);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], $p, false, 9);
+			}
+
+			// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
+			if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
+				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
+					if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
+						$select = false;
+						if ($tag === 'TR') {
+							$row = $this->mpdf->row;
+							$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
+							$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
+							if ($this->mpdf->tabletfoot) {
+								$row -= $thnr;
+							} elseif (!$this->mpdf->tablethead) {
+								$row -= ($thnr + $tfnr);
+							}
+							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+								$select = $this->_nthchild($a, $row);
+							}
+						} elseif ($tag === 'TD' || $tag === 'TH') {
+							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+								$select = $this->_nthchild($a, $this->mpdf->col);
+							}
+						}
+						if ($select) {
+							$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
+						}
+					}
+				}
+			}
+
+			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], $p, false, 9);
+			foreach ($classes as $class) {
+				$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], $p, false, 9);
+			}
+
+			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], $p, false, 9);
 		}
 	}
 
@@ -3144,7 +3158,7 @@ class CssManager
 	 * @param string $path File path or URL
 	 * @return string Normalized path
 	 */
-	private function normalizePath($path)
+	protected function normalizePath($path)
 	{
 		if (!$this->mpdf->basepathIsLocal) {
 			return $path;
