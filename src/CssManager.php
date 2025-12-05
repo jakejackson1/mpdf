@@ -118,37 +118,11 @@ class CssManager
 	 */
 	public function ReadCSS($html)
 	{
-		preg_match_all('/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is', $html, $m);
-		$count_m = count($m[0]);
-		for ($i = 0; $i < $count_m; $i++) {
-			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-				$html = str_replace($m[0][$i], '', $html);
-			}
-		}
+		$html = $this->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
 
-		preg_match_all('/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is', $html, $m);
-		$count_m = count($m[0]);
-		for ($i = 0; $i < $count_m; $i++) {
-			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-				$html = str_replace($m[0][$i], '', $html);
-			}
-		}
+		$html = $this->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
 
-		// mPDF 5.5.02
-		// Remove Comment tags <!-- ... --> inside CSS as <style> in HTML document
-		// Remove Comment tags /* ...  */ inside CSS as <style> in HTML document
-		// But first, we replace upper and mixed case closing style tag with lower
-		// case so we can use str_replace later.
-		preg_match_all('/<style.*?>(.*?)<\/style>/si', $html, $m);
-		$count_m = count($m[1]);
-		if ($count_m) {
-			for ($i = 0; $i < $count_m; $i++) {
-				// Remove comment tags
-				$sub = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $m[1][$i]);
-				$sub = '>'.preg_replace('|/\*.*?\*/|s', ' ', $sub).'</style>';
-				$html = str_replace('>'.$m[1][$i].'</style>', $sub, $html);
-			}
-		}
+		$html = $this->removeCommentsFromStyleBlocks($html);
 
 		$html = preg_replace('/<!--mpdf/i', '', $html);
 		$html = preg_replace('/mpdf-->/i', '', $html);
@@ -288,15 +262,7 @@ class CssManager
 			}
 		}
 
-		// Replace any background: url(data:image... with temporary image file reference
-		preg_match_all("/(url\(data:image\/(jpeg|gif|png);base64,(.*?)\))/si", $CSSstr, $idata); // mPDF 5.7.2
-		$count_idata = count($idata[0]);
-		if ($count_idata) {
-			for ($i = 0; $i < $count_idata; $i++) {
-				$file = $this->cache->write('_tempCSSidata' . random_int(1, 10000) . '_' . $i . '.' . $idata[2][$i], base64_decode($idata[3][$i]));
-				$CSSstr = str_replace($idata[0][$i], 'url("' . $file . '")', $CSSstr);  // mPDF 5.5.17
-			}
-		}
+		$CSSstr = $this->processDataUriImages($CSSstr);
 
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 
@@ -509,6 +475,73 @@ class CssManager
 		$regexp = '/<style.*?>(.*?)<\/style>/si'; // it can be <style> or <style type="txt/css">
 		$html = preg_replace($regexp, '', $html);
 
+		return $html;
+	}
+
+	/**
+	 * Process data URI images in CSS.
+	 *
+	 * Converts data URI images to temporary files for processing.
+	 * Example: url(data:image/png;base64,...) becomes url("tempfile.png")
+	 *
+	 * @param string $cssStr CSS string potentially containing data URIs
+	 * @return string CSS string with data URIs replaced by temp file references
+	 */
+	protected function processDataUriImages($cssStr)
+	{
+		preg_match_all("/(url\(data:image\/(jpeg|gif|png);base64,(.*?)\))/si", $cssStr, $idata);
+		$count_idata = count($idata[0]);
+		if ($count_idata) {
+			for ($i = 0; $i < $count_idata; $i++) {
+				$file = $this->cache->write('_tempCSSidata' . random_int(1, 10000) . '_' . $i . '.' . $idata[2][$i], base64_decode($idata[3][$i]));
+				$cssStr = str_replace($idata[0][$i], 'url("' . $file . '")', $cssStr);
+			}
+		}
+		return $cssStr;
+	}
+
+	/**
+	 * Remove HTML and CSS comments from style blocks.
+	 *
+	 * Removes both HTML comments (<!-- -->) and CSS comments from
+	 * <style> tag contents while preserving the structure.
+	 *
+	 * @param string $html HTML content with style tags
+	 * @return string HTML with cleaned style blocks
+	 */
+	protected function removeCommentsFromStyleBlocks($html)
+	{
+		preg_match_all('/<style.*?>(.*?)<\/style>/si', $html, $m);
+		$count_m = count($m[1]);
+		if ($count_m) {
+			for ($i = 0; $i < $count_m; $i++) {
+				// Remove comment tags
+				$sub = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $m[1][$i]);
+				$sub = '>'.preg_replace('|/\*.*?\*/|s', ' ', $sub).'</style>';
+				$html = str_replace('>'.$m[1][$i].'</style>', $sub, $html);
+			}
+		}
+		return $html;
+	}
+
+	/**
+	 * Filter HTML elements by media query.
+	 *
+	 * Removes elements (style or link tags) that don't match the configured media type.
+	 *
+	 * @param string $html HTML content to filter
+	 * @param string $pattern Regex pattern to match elements
+	 * @return string Filtered HTML
+	 */
+	protected function filterByMediaQuery($html, $pattern)
+	{
+		preg_match_all($pattern, $html, $m);
+		$count_m = count($m[0]);
+		for ($i = 0; $i < $count_m; $i++) {
+			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
+				$html = str_replace($m[0][$i], '', $html);
+			}
+		}
 		return $html;
 	}
 
