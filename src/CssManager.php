@@ -759,7 +759,7 @@ class CssManager
 	 * @param string $bd Border property value
 	 * @return string Normalized border string in format "width style color"
 	 */
-	function _fix_borderStr($bd)
+	protected function _fix_borderStr($bd)
 	{
 		preg_match_all("/\((.*?)\)/", $bd, $m);
 		if (count($m[1])) {
@@ -1125,7 +1125,7 @@ class CssManager
 	 * @param array $prop CSS properties array
 	 * @return array Expanded CSS properties array
 	 */
-	function fixCSS($prop)
+	protected function fixCSS($prop)
 	{
 		if (!is_array($prop) || (count($prop) == 0)) {
 			return [];
@@ -1317,7 +1317,7 @@ class CssManager
 	 * @param string $value Box-shadow property value
 	 * @return array Array of shadow definitions
 	 */
-	function setCSSboxshadow($value)
+	public function setCSSboxshadow($value)
 	{
 		$sh = [];
 		$ss = explode(',', $this->normalizeShadowColors($value));
@@ -1405,7 +1405,7 @@ class CssManager
 	 * @param string $value Text-shadow property value
 	 * @return array Array of text shadow definitions
 	 */
-	function setCSStextshadow($value)
+	public function setCSStextshadow($value)
 	{
 		$sh = [];
 		$ss = explode(',', $this->normalizeShadowColors($value));
@@ -1429,7 +1429,7 @@ class CssManager
 	 * @param string $s Background property value
 	 * @return array Array with keys 'c' (color), 'i' (image), 'r' (repeat), 'p' (position)
 	 */
-	function parseCSSbackground($s)
+	protected function parseCSSbackground($s)
 	{
 		$bg = ['c' => false, 'i' => false, 'r' => false, 'p' => false,];
 		/* -- BACKGROUNDS -- */
@@ -1477,7 +1477,7 @@ class CssManager
 	 * @param string $value Property value(s) separated by spaces
 	 * @return array Associative array with keys 'T', 'R', 'B', 'L'
 	 */
-	function expandShorthandProperty($value)
+	protected function expandShorthandProperty($value)
 	{
 		$property = preg_split('/\s+/', trim($value));
 
@@ -1528,7 +1528,7 @@ class CssManager
 	 * @param string $k Property name (BORDER-RADIUS or specific corner)
 	 * @return array Array with keys like 'TL-H', 'TL-V', etc.
 	 */
-	function border_radius_expand($val, $k)
+	protected function border_radius_expand($val, $k)
 	{
 		if ($k === 'BORDER-RADIUS') {
 			return $this->parseBorderRadiusShorthand($val);
@@ -1647,7 +1647,7 @@ class CssManager
 	 * @param array $target Target CSS properties (modified by reference)
 	 * @return void
 	 */
-	function _mergeCSS($property, &$target)
+	protected function _mergeCSS($property, &$target)
 	{
 		if (empty($property)) {
 			return;
@@ -1747,7 +1747,7 @@ class CssManager
 	 * @param string $lang Language code
 	 * @return void
 	 */
-	function _mergeFullCSS($p, &$t, $tag, $classes, $id, $lang)
+	protected function _mergeFullCSS($p, &$t, $tag, $classes, $id, $lang)
 	{
 		// mPDF 6
 		if (isset($p[$tag])) {
@@ -1802,7 +1802,7 @@ class CssManager
 	 * @param int $val Dominance level value
 	 * @return void
 	 */
-	function setBorderDominance($prop, $val)
+	protected function setBorderDominance($prop, $val)
 	{
 		if (!empty($prop['BORDER-LEFT'])) {
 			$this->cell_border_dominance_L = $val;
@@ -1833,7 +1833,7 @@ class CssManager
 	 * @param int|bool $bd Border dominance level or false
 	 * @return void
 	 */
-	function _set_mergedCSS(&$m, &$p, $d = true, $bd = false)
+	protected function _set_mergedCSS(&$m, &$p, $d = true, $bd = false)
 	{
 		if (!isset($m)) {
 			return;
@@ -1916,7 +1916,7 @@ class CssManager
 	 * @param array $a Source border properties to merge
 	 * @return void
 	 */
-	function _mergeBorders(&$b, &$a)
+	protected function _mergeBorders(&$b, &$a)
 	{
 		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
 			$this->mergeSideBorder($b, $side, $a);
@@ -2173,7 +2173,7 @@ class CssManager
 	 * @param array $p CSS properties array (modified by reference)
 	 * @return void
 	 */
-	function inlinePropsToCSS($bilp, &$p)
+	protected function inlinePropsToCSS($bilp, &$p)
 	{
 		if (isset($bilp['family']) && $bilp['family']) {
 			$p['FONT-FAMILY'] = $bilp['family'];
@@ -2339,7 +2339,7 @@ class CssManager
 	 * @param array $attr HTML attributes array
 	 * @return array CSS properties that would be applied
 	 */
-	function PreviewBlockCSS($tag, $attr)
+	public function PreviewBlockCSS($tag, $attr)
 	{
 		// Looks ahead from current block level to a new level
 		$p = [];
@@ -2449,7 +2449,7 @@ class CssManager
 	 * @param int $c Current element index (0-based)
 	 * @return bool True if element matches the nth-child selector
 	 */
-	function _nthchild($f, $c)
+	protected function _nthchild($f, $c)
 	{
 		// $f is formula e.g. 2N+1 split into a preg_match array
 		// $c is the comparator value e.g row or column number
