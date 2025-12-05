@@ -83,6 +83,11 @@ class CssManager
 	protected $cssProperties = [];
 
 	/**
+	 * @var array
+	 */
+	protected $normalizedCssProperties = [];
+
+	/**
 	 * CssManager constructor.
 	 *
 	 * Initializes the CSS manager with required dependencies and sets up
@@ -866,10 +871,9 @@ class CssManager
 	 * font-family, font-size, line-height, font-style, font-weight, text-transform.
 	 *
 	 * @param string $value Font property value
-	 * @param array $newProperty Properties array to populate (modified by reference)
 	 * @return void
 	 */
-	protected function processFontProperty($value, &$newProperty)
+	protected function processFontProperty($value)
 	{
 		$value = $this->simplifyFontNames(trim($value));
 		$value = preg_replace('/\s*,\s*/', ',', $value);
@@ -881,34 +885,34 @@ class CssManager
 		}
 
 		// Last item is font-family
-		$newProperty['FONT-FAMILY'] = $bits[($numOfBits - 1)];
+		$this->normalizedCssProperties['FONT-FAMILY'] = $bits[($numOfBits - 1)];
 
 		// Second to last is font-size (possibly with /line-height)
 		$fs = $bits[($numOfBits - 2)];
 		if (preg_match('/(.*?)\/(.*)/', $fs, $fsp)) {
-			$newProperty['FONT-SIZE'] = $fsp[1];
-			$newProperty['LINE-HEIGHT'] = $fsp[2];
+			$this->normalizedCssProperties['FONT-SIZE'] = $fsp[1];
+			$this->normalizedCssProperties['LINE-HEIGHT'] = $fsp[2];
 		} else {
-			$newProperty['FONT-SIZE'] = $fs;
+			$this->normalizedCssProperties['FONT-SIZE'] = $fs;
 		}
 
 		// Check for font-style
 		if (preg_match('/(italic|oblique)/i', $value)) {
-			$newProperty['FONT-STYLE'] = 'italic';
+			$this->normalizedCssProperties['FONT-STYLE'] = 'italic';
 		} else {
-			$newProperty['FONT-STYLE'] = 'normal';
+			$this->normalizedCssProperties['FONT-STYLE'] = 'normal';
 		}
 
 		// Check for font-weight
 		if (stripos($value, 'bold') !== false) {
-			$newProperty['FONT-WEIGHT'] = 'bold';
+			$this->normalizedCssProperties['FONT-WEIGHT'] = 'bold';
 		} else {
-			$newProperty['FONT-WEIGHT'] = 'normal';
+			$this->normalizedCssProperties['FONT-WEIGHT'] = 'normal';
 		}
 
 		// Check for small-caps
 		if (stripos($value, 'small-caps') !== false) {
-			$newProperty['TEXT-TRANSFORM'] = 'uppercase';
+			$this->normalizedCssProperties['TEXT-TRANSFORM'] = 'uppercase';
 		}
 	}
 
@@ -916,34 +920,33 @@ class CssManager
 	 * Process FONT-VARIANT property.
 	 *
 	 * @param string $value Property value
-	 * @param array $newprop New properties array (modified by reference)
 	 * @return void
 	 */
-	protected function processFontVariantProperty($value, &$newprop)
+	protected function processFontVariantProperty($value)
 	{
 		if (preg_match('/(normal|none)/', $value, $m)) {
-			$newprop['FONT-VARIANT-LIGATURES'] = $m[1];
-			$newprop['FONT-VARIANT-CAPS'] = $m[1];
-			$newprop['FONT-VARIANT-NUMERIC'] = $m[1];
-			$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-LIGATURES'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-CAPS'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-NUMERIC'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-ALTERNATES'] = $m[1];
 
 			return;
 		}
 
 		if (preg_match_all('/(no-common-ligatures|\bcommon-ligatures|no-discretionary-ligatures|\bdiscretionary-ligatures|no-historical-ligatures|\bhistorical-ligatures|no-contextual|\bcontextual)/i', $value, $m)) {
-			$newprop['FONT-VARIANT-LIGATURES'] = implode(' ', $m[1]);
+			$this->normalizedCssProperties['FONT-VARIANT-LIGATURES'] = implode(' ', $m[1]);
 		}
 
 		if (preg_match('/(all-small-caps|\bsmall-caps|all-petite-caps|\bpetite-caps|unicase|titling-caps)/i', $value, $m)) {
-			$newprop['FONT-VARIANT-CAPS'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-CAPS'] = $m[1];
 		}
 
 		if (preg_match_all('/(lining-nums|oldstyle-nums|proportional-nums|tabular-nums|diagonal-fractions|stacked-fractions)/i', $value, $m)) {
-			$newprop['FONT-VARIANT-NUMERIC'] = implode(' ', $m[1]);
+			$this->normalizedCssProperties['FONT-VARIANT-NUMERIC'] = implode(' ', $m[1]);
 		}
 
 		if (preg_match('/(historical-forms)/i', $value, $m)) {
-			$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
+			$this->normalizedCssProperties['FONT-VARIANT-ALTERNATES'] = $m[1];
 		}
 	}
 
@@ -986,10 +989,9 @@ class CssManager
 	 *
 	 * @param string $propertyKey Property key
 	 * @param string $value Font family value
-	 * @param array $newProperty Properties array to populate (modified by reference)
 	 * @return void
 	 */
-	protected function processFontFamilyProperty($propertyKey, $value, &$newProperty)
+	protected function processFontFamilyProperty($propertyKey, $value)
 	{
 		/* Normalize the font list */
 		$fontList = array_map(
@@ -1015,7 +1017,7 @@ class CssManager
 				($this->mpdf->onlyCoreFonts && in_array($fontName, ['courier', 'times', 'helvetica', 'arial'], true)) ||
 				in_array($fontName, ['sjis', 'uhc', 'big5', 'gb'], true)
 			) {
-				$newProperty[$propertyKey] = $fontName;
+				$this->normalizedCssProperties[$propertyKey] = $fontName;
 				return;
 			}
 		}
@@ -1026,7 +1028,7 @@ class CssManager
 				in_array($fontName, $this->mpdf->serif_fonts, true) ||
 				in_array($fontName, $this->mpdf->mono_fonts, true)
 			) {
-				$newProperty[$propertyKey] = $fontName;
+				$this->normalizedCssProperties[$propertyKey] = $fontName;
 				return;
 			}
 		}
@@ -1040,35 +1042,34 @@ class CssManager
 	 *
 	 * @param string $propertyKey Property key (BORDER, BORDER-TOP, etc.)
 	 * @param string $value Property value
-	 * @param array $newProperty Properties array to populate (modified by reference)
 	 * @return void
 	 */
-	protected function processBorderProperty($propertyKey, $value, &$newProperty)
+	protected function processBorderProperty($propertyKey, $value)
 	{
 		switch ($propertyKey) {
 			case 'BORDER':
 				$value = $value !== '1' ? $this->normalizeBorderString($value) : '1px solid #000000';
 
-				$newProperty['BORDER-TOP'] = $value;
-				$newProperty['BORDER-RIGHT'] = $value;
-				$newProperty['BORDER-BOTTOM'] = $value;
-				$newProperty['BORDER-LEFT'] = $value;
+				$this->normalizedCssProperties['BORDER-TOP'] = $value;
+				$this->normalizedCssProperties['BORDER-RIGHT'] = $value;
+				$this->normalizedCssProperties['BORDER-BOTTOM'] = $value;
+				$this->normalizedCssProperties['BORDER-LEFT'] = $value;
 				break;
 
 			case 'BORDER-TOP':
-				$newProperty['BORDER-TOP'] = $this->normalizeBorderString($value);
+				$this->normalizedCssProperties['BORDER-TOP'] = $this->normalizeBorderString($value);
 				break;
 
 			case 'BORDER-RIGHT':
-				$newProperty['BORDER-RIGHT'] = $this->normalizeBorderString($value);
+				$this->normalizedCssProperties['BORDER-RIGHT'] = $this->normalizeBorderString($value);
 				break;
 
 			case 'BORDER-BOTTOM':
-				$newProperty['BORDER-BOTTOM'] = $this->normalizeBorderString($value);
+				$this->normalizedCssProperties['BORDER-BOTTOM'] = $this->normalizeBorderString($value);
 				break;
 
 			case 'BORDER-LEFT':
-				$newProperty['BORDER-LEFT'] = $this->normalizeBorderString($value);
+				$this->normalizedCssProperties['BORDER-LEFT'] = $this->normalizeBorderString($value);
 				break;
 		}
 	}
@@ -1078,43 +1079,42 @@ class CssManager
 	 *
 	 * @param string $key Property key
 	 * @param string $value Property value
-	 * @param array $newprop New properties array (modified by reference)
 	 * @return void
 	 */
-	protected function processBorderShorthandProperty($key, $value, &$newprop)
+	protected function processBorderShorthandProperty($key, $value)
 	{
 		if ($key === 'BORDER-STYLE') {
 			$e = $this->expandShorthandProperty($value);
 			if (!empty($e)) {
-				$newprop['BORDER-TOP-STYLE'] = $e['T'];
-				$newprop['BORDER-RIGHT-STYLE'] = $e['R'];
-				$newprop['BORDER-BOTTOM-STYLE'] = $e['B'];
-				$newprop['BORDER-LEFT-STYLE'] = $e['L'];
+				$this->normalizedCssProperties['BORDER-TOP-STYLE'] = $e['T'];
+				$this->normalizedCssProperties['BORDER-RIGHT-STYLE'] = $e['R'];
+				$this->normalizedCssProperties['BORDER-BOTTOM-STYLE'] = $e['B'];
+				$this->normalizedCssProperties['BORDER-LEFT-STYLE'] = $e['L'];
 			}
 		} elseif ($key === 'BORDER-WIDTH') {
 			$e = $this->expandShorthandProperty($value);
 			if (!empty($e)) {
-				$newprop['BORDER-TOP-WIDTH'] = $e['T'];
-				$newprop['BORDER-RIGHT-WIDTH'] = $e['R'];
-				$newprop['BORDER-BOTTOM-WIDTH'] = $e['B'];
-				$newprop['BORDER-LEFT-WIDTH'] = $e['L'];
+				$this->normalizedCssProperties['BORDER-TOP-WIDTH'] = $e['T'];
+				$this->normalizedCssProperties['BORDER-RIGHT-WIDTH'] = $e['R'];
+				$this->normalizedCssProperties['BORDER-BOTTOM-WIDTH'] = $e['B'];
+				$this->normalizedCssProperties['BORDER-LEFT-WIDTH'] = $e['L'];
 			}
 		} elseif ($key === 'BORDER-COLOR') {
 			$e = $this->expandShorthandProperty($value);
 			if (!empty($e)) {
-				$newprop['BORDER-TOP-COLOR'] = $e['T'];
-				$newprop['BORDER-RIGHT-COLOR'] = $e['R'];
-				$newprop['BORDER-BOTTOM-COLOR'] = $e['B'];
-				$newprop['BORDER-LEFT-COLOR'] = $e['L'];
+				$this->normalizedCssProperties['BORDER-TOP-COLOR'] = $e['T'];
+				$this->normalizedCssProperties['BORDER-RIGHT-COLOR'] = $e['R'];
+				$this->normalizedCssProperties['BORDER-BOTTOM-COLOR'] = $e['B'];
+				$this->normalizedCssProperties['BORDER-LEFT-COLOR'] = $e['L'];
 			}
 		} elseif ($key === 'BORDER-SPACING') {
 			$prop = preg_split('/\s+/', trim($value));
 			if (count($prop) === 1) {
-				$newprop['BORDER-SPACING-H'] = $prop[0];
-				$newprop['BORDER-SPACING-V'] = $prop[0];
+				$this->normalizedCssProperties['BORDER-SPACING-H'] = $prop[0];
+				$this->normalizedCssProperties['BORDER-SPACING-V'] = $prop[0];
 			} elseif (count($prop) === 2) {
-				$newprop['BORDER-SPACING-H'] = $prop[0];
-				$newprop['BORDER-SPACING-V'] = $prop[1];
+				$this->normalizedCssProperties['BORDER-SPACING-H'] = $prop[0];
+				$this->normalizedCssProperties['BORDER-SPACING-V'] = $prop[1];
 			}
 		}
 	}
@@ -1132,77 +1132,65 @@ class CssManager
 	 */
 	protected function normalizeCssProperties($prop)
 	{
-		if (!is_array($prop) || (count($prop) == 0)) {
+		if (!is_array($prop) || count($prop) === 0) {
 			return [];
 		}
 
-		$newprop = [];
+		$this->normalizedCssProperties = [];
 
 		foreach ($prop as $k => $v) {
-
 			if ($k !== 'BACKGROUND-IMAGE' && $k !== 'BACKGROUND' && $k !== 'ODD-HEADER-NAME' && $k !== 'EVEN-HEADER-NAME' && $k !== 'ODD-FOOTER-NAME' && $k !== 'EVEN-FOOTER-NAME' && $k !== 'HEADER' && $k !== 'FOOTER') {
 				$v = strtolower($v);
 			}
 
 			if ($k === 'FONT') {
-				$this->processFontProperty($v, $newprop);
+				$this->processFontProperty($v);
 			} elseif ($k === 'FONT-FAMILY') {
-				$this->processFontFamilyProperty($k, $v, $newprop);
+				$this->processFontFamilyProperty($k, $v);
 			} elseif ($k === 'FONT-VARIANT') {
-				$this->processFontVariantProperty($v, $newprop);
+				$this->processFontVariantProperty($v);
 			} elseif ($k === 'MARGIN') {
-
 				$tmp = $this->expandShorthandProperty($v);
 
-				$newprop['MARGIN-TOP'] = $tmp['T'];
-				$newprop['MARGIN-RIGHT'] = $tmp['R'];
-				$newprop['MARGIN-BOTTOM'] = $tmp['B'];
-				$newprop['MARGIN-LEFT'] = $tmp['L'];
-
+				$this->normalizedCssProperties['MARGIN-TOP'] = $tmp['T'];
+				$this->normalizedCssProperties['MARGIN-RIGHT'] = $tmp['R'];
+				$this->normalizedCssProperties['MARGIN-BOTTOM'] = $tmp['B'];
+				$this->normalizedCssProperties['MARGIN-LEFT'] = $tmp['L'];
 			} elseif ($k === 'BORDER-RADIUS' || $k === 'BORDER-TOP-LEFT-RADIUS' || $k === 'BORDER-TOP-RIGHT-RADIUS' || $k === 'BORDER-BOTTOM-LEFT-RADIUS' || $k === 'BORDER-BOTTOM-RIGHT-RADIUS') {
-				$this->processBorderRadiusProperty($k, $v, $newprop);
-
+				$this->processBorderRadiusProperty($k, $v);
 			} elseif ($k === 'PADDING') {
-
 				$tmp = $this->expandShorthandProperty($v);
 
-				$newprop['PADDING-TOP'] = $tmp['T'];
-				$newprop['PADDING-RIGHT'] = $tmp['R'];
-				$newprop['PADDING-BOTTOM'] = $tmp['B'];
-				$newprop['PADDING-LEFT'] = $tmp['L'];
-
+				$this->normalizedCssProperties['PADDING-TOP'] = $tmp['T'];
+				$this->normalizedCssProperties['PADDING-RIGHT'] = $tmp['R'];
+				$this->normalizedCssProperties['PADDING-BOTTOM'] = $tmp['B'];
+				$this->normalizedCssProperties['PADDING-LEFT'] = $tmp['L'];
 			} elseif (in_array($k, ['BORDER', 'BORDER-TOP', 'BORDER-RIGHT', 'BORDER-BOTTOM', 'BORDER-LEFT'], true)) {
-				$this->processBorderProperty($k, $v, $newprop);
+				$this->processBorderProperty($k, $v);
 			} elseif (in_array($k, ['BORDER-STYLE', 'BORDER-WIDTH', 'BORDER-COLOR', 'BORDER-SPACING'], true)) {
-				$this->processBorderShorthandProperty($k, $v, $newprop);
+				$this->processBorderShorthandProperty($k, $v);
 			} elseif ($k === 'TEXT-OUTLINE') {
-				$this->processTextOutlineProperty($v, $newprop);
-
+				$this->processTextOutlineProperty($v);
 			} elseif ($k === 'SIZE' || $k === 'SHEET-SIZE') {
-				$this->processPageSizeProperty($k, $v, $newprop);
-
+				$this->processPageSizeProperty($k, $v);
 			} elseif (in_array($k, ['BACKGROUND', 'BACKGROUND-IMAGE', 'BACKGROUND-REPEAT', 'BACKGROUND-POSITION'], true)) {
-				$this->processBackgroundProperty($k, $v, $newprop);
-
+				$this->processBackgroundProperty($k, $v);
 			} elseif ($k === 'IMAGE-ORIENTATION') {
-				$this->processImageOrientationProperty($v, $newprop);
-
+				$this->processImageOrientationProperty($v);
 			} elseif ($k === 'TEXT-ALIGN') {
-				$this->processTextAlignProperty($k, $v, $newprop);
-
+				$this->processTextAlignProperty($k, $v);
 			} elseif ($k === 'LIST-STYLE') {
-				$this->processListStyleProperty($v, $newprop);
+				$this->processListStyleProperty($v);
 
 				if (preg_match('/(inside|outside)/i', $v, $m)) {
-					$newprop['LIST-STYLE-POSITION'] = strtolower(trim($m[1]));
+					$this->normalizedCssProperties['LIST-STYLE-POSITION'] = strtolower(trim($m[1]));
 				}
-
 			} else {
-				$newprop[$k] = $v;
+				$this->normalizedCssProperties[$k] = $v;
 			}
 		}
 
-		return $newprop;
+		return $this->normalizedCssProperties;
 	}
 
 	/**
@@ -2749,51 +2737,50 @@ class CssManager
 	 *
 	 * @param string $k Property name
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processBackgroundProperty($k, $v, &$newprop)
+	protected function processBackgroundProperty($k, $v)
 	{
 		if ($k === 'BACKGROUND') {
 			$bg = $this->parseCssBackground($v);
 			if ($bg['c']) {
-				$newprop['BACKGROUND-COLOR'] = $bg['c'];
+				$this->normalizedCssProperties['BACKGROUND-COLOR'] = $bg['c'];
 			} else {
-				$newprop['BACKGROUND-COLOR'] = 'transparent';
+				$this->normalizedCssProperties['BACKGROUND-COLOR'] = 'transparent';
 			}
 
 			if ($bg['i']) {
-				$newprop['BACKGROUND-IMAGE'] = $bg['i'];
+				$this->normalizedCssProperties['BACKGROUND-IMAGE'] = $bg['i'];
 				if ($bg['r']) {
-					$newprop['BACKGROUND-REPEAT'] = $bg['r'];
+					$this->normalizedCssProperties['BACKGROUND-REPEAT'] = $bg['r'];
 				}
 				if ($bg['p']) {
-					$newprop['BACKGROUND-POSITION'] = $bg['p'];
+					$this->normalizedCssProperties['BACKGROUND-POSITION'] = $bg['p'];
 				}
 			} else {
-				$newprop['BACKGROUND-IMAGE'] = '';
+				$this->normalizedCssProperties['BACKGROUND-IMAGE'] = '';
 			}
 		} elseif ($k === 'BACKGROUND-IMAGE') {
 			if (preg_match('/(-moz-)*(repeating-)*(linear|radial)-gradient\(.*\)/i', $v, $m)) {
-				$newprop['BACKGROUND-IMAGE'] = $m[0];
+				$this->normalizedCssProperties['BACKGROUND-IMAGE'] = $m[0];
 				return;
 			}
 
 			if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
-				$newprop['BACKGROUND-IMAGE'] = $m[1];
+				$this->normalizedCssProperties['BACKGROUND-IMAGE'] = $m[1];
 			} elseif (strtolower($v) === 'none') {
-				$newprop['BACKGROUND-IMAGE'] = '';
+				$this->normalizedCssProperties['BACKGROUND-IMAGE'] = '';
 			}
 		} elseif ($k === 'BACKGROUND-REPEAT') {
 			if (preg_match('/(repeat-x|repeat-y|no-repeat|repeat)/i', $v, $m)) {
-				$newprop['BACKGROUND-REPEAT'] = strtolower($m[1]);
+				$this->normalizedCssProperties['BACKGROUND-REPEAT'] = strtolower($m[1]);
 			}
 		} elseif ($k === 'BACKGROUND-POSITION') {
 			$s = $v;
 			$bits = preg_split('/\s+/', trim($s));
 			$normalizedPosition = $this->normalizeBackgroundPosition($bits);
 			if ($normalizedPosition !== false) {
-				$newprop['BACKGROUND-POSITION'] = $normalizedPosition;
+				$this->normalizedCssProperties['BACKGROUND-POSITION'] = $normalizedPosition;
 			}
 		}
 	}
@@ -2805,43 +2792,42 @@ class CssManager
 	 *
 	 * @param string $k Property name
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processBorderRadiusProperty($k, $v, &$newprop)
+	protected function processBorderRadiusProperty($k, $v)
 	{
 		$tmp = $this->expandBorderRadius($v, $k);
 
 		if (isset($tmp['TL-H'])) {
-			$newprop['BORDER-TOP-LEFT-RADIUS-H'] = $tmp['TL-H'];
+			$this->normalizedCssProperties['BORDER-TOP-LEFT-RADIUS-H'] = $tmp['TL-H'];
 		}
 
 		if (isset($tmp['TL-V'])) {
-			$newprop['BORDER-TOP-LEFT-RADIUS-V'] = $tmp['TL-V'];
+			$this->normalizedCssProperties['BORDER-TOP-LEFT-RADIUS-V'] = $tmp['TL-V'];
 		}
 
 		if (isset($tmp['TR-H'])) {
-			$newprop['BORDER-TOP-RIGHT-RADIUS-H'] = $tmp['TR-H'];
+			$this->normalizedCssProperties['BORDER-TOP-RIGHT-RADIUS-H'] = $tmp['TR-H'];
 		}
 
 		if (isset($tmp['TR-V'])) {
-			$newprop['BORDER-TOP-RIGHT-RADIUS-V'] = $tmp['TR-V'];
+			$this->normalizedCssProperties['BORDER-TOP-RIGHT-RADIUS-V'] = $tmp['TR-V'];
 		}
 
 		if (isset($tmp['BL-H'])) {
-			$newprop['BORDER-BOTTOM-LEFT-RADIUS-H'] = $tmp['BL-H'];
+			$this->normalizedCssProperties['BORDER-BOTTOM-LEFT-RADIUS-H'] = $tmp['BL-H'];
 		}
 
 		if (isset($tmp['BL-V'])) {
-			$newprop['BORDER-BOTTOM-LEFT-RADIUS-V'] = $tmp['BL-V'];
+			$this->normalizedCssProperties['BORDER-BOTTOM-LEFT-RADIUS-V'] = $tmp['BL-V'];
 		}
 
 		if (isset($tmp['BR-H'])) {
-			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-H'] = $tmp['BR-H'];
+			$this->normalizedCssProperties['BORDER-BOTTOM-RIGHT-RADIUS-H'] = $tmp['BR-H'];
 		}
 
 		if (isset($tmp['BR-V'])) {
-			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-V'] = $tmp['BR-V'];
+			$this->normalizedCssProperties['BORDER-BOTTOM-RIGHT-RADIUS-V'] = $tmp['BR-V'];
 		}
 	}
 
@@ -2851,21 +2837,20 @@ class CssManager
 	 * Handles TEXT-OUTLINE shorthand.
 	 *
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processTextOutlineProperty($v, &$newprop)
+	protected function processTextOutlineProperty($v)
 	{
 		$prop = preg_split('/\s+/', trim($v));
 
 		if (strtolower(trim($v)) === 'none') {
-			$newprop['TEXT-OUTLINE'] = 'none';
+			$this->normalizedCssProperties['TEXT-OUTLINE'] = 'none';
 		} elseif (count($prop) == 2) {
-			$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
-			$newprop['TEXT-OUTLINE-COLOR'] = $prop[1];
+			$this->normalizedCssProperties['TEXT-OUTLINE-WIDTH'] = $prop[0];
+			$this->normalizedCssProperties['TEXT-OUTLINE-COLOR'] = $prop[1];
 		} elseif (count($prop) == 3) {
-			$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
-			$newprop['TEXT-OUTLINE-COLOR'] = $prop[2];
+			$this->normalizedCssProperties['TEXT-OUTLINE-WIDTH'] = $prop[0];
+			$this->normalizedCssProperties['TEXT-OUTLINE-COLOR'] = $prop[2];
 		}
 	}
 
@@ -2876,26 +2861,25 @@ class CssManager
 	 *
 	 * @param string $k Property name
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processPageSizeProperty($k, $v, &$newprop)
+	protected function processPageSizeProperty($k, $v)
 	{
 		$prop = preg_split('/\s+/', trim($v));
 
 		if ($k === 'SIZE') {
 			if (preg_match('/(auto|portrait|landscape)/', $prop[0])) {
-				$newprop['SIZE'] = strtoupper($prop[0]);
+				$this->normalizedCssProperties['SIZE'] = strtoupper($prop[0]);
 			} elseif (count($prop) == 1) {
-				$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
-				$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[0]);
+				$this->normalizedCssProperties['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
+				$this->normalizedCssProperties['SIZE']['H'] = $this->sizeConverter->convert($prop[0]);
 			} elseif (count($prop) == 2) {
-				$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
-				$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[1]);
+				$this->normalizedCssProperties['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
+				$this->normalizedCssProperties['SIZE']['H'] = $this->sizeConverter->convert($prop[1]);
 			}
 		} elseif ($k === 'SHEET-SIZE') {
 			if (count($prop) == 2) {
-				$newprop['SHEET-SIZE'] = [$this->sizeConverter->convert($prop[0]), $this->sizeConverter->convert($prop[1])];
+				$this->normalizedCssProperties['SHEET-SIZE'] = [$this->sizeConverter->convert($prop[0]), $this->sizeConverter->convert($prop[1])];
 			} else {
 				if (preg_match('/([0-9a-zA-Z]*)-L/i', $v, $m)) { // e.g. A4-L = A$ landscape
 					$ft = PageFormat::getSizeFromName($m[1]);
@@ -2904,7 +2888,7 @@ class CssManager
 					$format = PageFormat::getSizeFromName($v);
 				}
 				if ($format) {
-					$newprop['SHEET-SIZE'] = [$format[0] / Mpdf::SCALE, $format[1] / Mpdf::SCALE];
+					$this->normalizedCssProperties['SHEET-SIZE'] = [$format[0] / Mpdf::SCALE, $format[1] / Mpdf::SCALE];
 				}
 			}
 		}
@@ -2916,10 +2900,9 @@ class CssManager
 	 * Handles IMAGE-ORIENTATION property.
 	 *
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processImageOrientationProperty($v, &$newprop)
+	protected function processImageOrientationProperty($v)
 	{
 		if (!preg_match('/([\-]*[0-9\.]+)(deg|grad|rad)/i', $v, $m)) {
 			return;
@@ -2941,7 +2924,7 @@ class CssManager
 		$angle /= 90;
 		$angle = round($angle) * 90;
 
-		$newprop['IMAGE-ORIENTATION'] = $angle;
+		$this->normalizedCssProperties['IMAGE-ORIENTATION'] = $angle;
 	}
 
 	/**
@@ -2951,37 +2934,36 @@ class CssManager
 	 *
 	 * @param string $k Property name
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processTextAlignProperty($k, $v, &$newprop)
+	protected function processTextAlignProperty($k, $v)
 	{
 		if (preg_match('/["\'](.){1}["\']/i', $v, $m)) {
 			$d = array_search($m[1], $this->mpdf->decimal_align);
 
 			if ($d !== false) {
-				$newprop['TEXT-ALIGN'] = $d;
+				$this->normalizedCssProperties['TEXT-ALIGN'] = $d;
 			}
 			if (preg_match('/(center|left|right)/i', $v, $m)) {
-				$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
+				$this->normalizedCssProperties['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
 			} else {
-				$newprop['TEXT-ALIGN'] .= 'R';
+				$this->normalizedCssProperties['TEXT-ALIGN'] .= 'R';
 			} // default = R
 		} elseif (preg_match('/["\'](\\\[a-fA-F0-9]{1,6})["\']/i', $v, $m)) {
 			$utf8 = UtfString::codeHex2utf(substr($m[1], 1, 6));
 			$d = array_search($utf8, $this->mpdf->decimal_align);
 
 			if ($d !== false) {
-				$newprop['TEXT-ALIGN'] = $d;
+				$this->normalizedCssProperties['TEXT-ALIGN'] = $d;
 			}
 
 			if (preg_match('/(center|left|right)/i', $v, $m)) {
-				$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
+				$this->normalizedCssProperties['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
 			} else {
-				$newprop['TEXT-ALIGN'] .= 'R';
+				$this->normalizedCssProperties['TEXT-ALIGN'] .= 'R';
 			} // default = R
 		} else {
-			$newprop[$k] = $v;
+			$this->normalizedCssProperties[$k] = $v;
 		}
 	}
 
@@ -2991,24 +2973,23 @@ class CssManager
 	 * Handles LIST-STYLE property.
 	 *
 	 * @param string $v Property value
-	 * @param array $newprop Target properties array (passed by reference)
 	 * @return void
 	 */
-	protected function processListStyleProperty($v, &$newprop)
+	protected function processListStyleProperty($v)
 	{
 		if (preg_match('/none/i', $v, $m)) {
-			$newprop['LIST-STYLE-TYPE'] = 'none';
-			$newprop['LIST-STYLE-IMAGE'] = 'none';
+			$this->normalizedCssProperties['LIST-STYLE-TYPE'] = 'none';
+			$this->normalizedCssProperties['LIST-STYLE-IMAGE'] = 'none';
 		}
 
 		if (preg_match('/(lower-roman|upper-roman|lower-latin|lower-alpha|upper-latin|upper-alpha|decimal|disc|circle|square|arabic-indic|bengali|devanagari|gujarati|gurmukhi|kannada|malayalam|oriya|persian|tamil|telugu|thai|urdu|cambodian|khmer|lao|cjk-decimal|hebrew)/i', $v, $m)) {
-			$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
+			$this->normalizedCssProperties['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
 		} elseif (preg_match('/U\+([a-fA-F0-9]+)/i', $v, $m)) {
-			$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
+			$this->normalizedCssProperties['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
 		}
 
 		if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
-			$newprop['LIST-STYLE-IMAGE'] = strtolower(trim($m[1]));
+			$this->normalizedCssProperties['LIST-STYLE-IMAGE'] = strtolower(trim($m[1]));
 		}
 	}
 
