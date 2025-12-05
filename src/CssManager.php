@@ -1424,14 +1424,34 @@ class CssManager
 			case 0:
 				return [];
 			case 1:
-				return ['T' => $property[0], 'R' => $property[0], 'B' => $property[0], 'L' => $property[0]];
+				return [
+					'T' => $property[0],
+					'R' => $property[0],
+					'B' => $property[0],
+					'L' => $property[0]
+				];
 			case 2:
-				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[0], 'L' => $property[1]];
+				return [
+					'T' => $property[0],
+					'R' => $property[1],
+					'B' => $property[0],
+					'L' => $property[1]
+				];
 			case 3:
-				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[2], 'L' => $property[1]];
+				return [
+					'T' => $property[0],
+					'R' => $property[1],
+					'B' => $property[2],
+					'L' => $property[1]
+				];
 			default:
 				// Ignore rule parts after first 4 values (most likely !important)
-				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[2], 'L' => $property[3]];
+				return [
+					'T' => $property[0],
+					'R' => $property[1],
+					'B' => $property[2],
+					'L' => $property[3]
+				];
 		}
 	}
 
@@ -1447,10 +1467,8 @@ class CssManager
 	 * @param string $k Property name (BORDER-RADIUS or specific corner)
 	 * @return array Array with keys like 'TL-H', 'TL-V', etc.
 	 */
-	function border_radius_expand($val, $k)
+	protected function border_radius_expand($val, $k)
 	{
-		$b = [];
-
 		if ($k === 'BORDER-RADIUS') {
 			return $this->parseBorderRadiusShorthand($val);
 		}
@@ -1458,17 +1476,18 @@ class CssManager
 		// Parse 2
 		$prop = preg_split('/\s+/', trim($val));
 
-		if (count($prop) == 1) {
+		if (count($prop) === 1) {
 			$h = $v = $val;
 		} else {
 			$h = $prop[0];
 			$v = $prop[1];
 		}
 
-		if ($h == 0 || $v == 0) {
+		if ($h === 0 || $v === 0) {
 			$h = $v = 0;
 		}
 
+		$b = [];
 		if ($k === 'BORDER-TOP-LEFT-RADIUS') {
 			$b['TL-H'] = $h;
 			$b['TL-V'] = $v;
@@ -1485,7 +1504,6 @@ class CssManager
 
 		return $b;
 	}
-	/* -- END BORDER-RADIUS -- */
 
 	/**
 	 * Parse border-radius shorthand values.
@@ -1564,7 +1582,6 @@ class CssManager
 		$target = $target ? $this->array_merge_recursive_unique($target, $property) : $property;
 	}
 
-	// for CSS handling
 	/**
 	 * Recursively merge arrays with unique handling.
 	 *
