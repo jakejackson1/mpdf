@@ -1140,7 +1140,7 @@ class CssManager
 	{
 		$c = preg_match_all('/(rgba|rgb|device-cmyka|cmyka|device-cmyk|cmyk|hsla|hsl)\(.*?\)/', $value, $x); // mPDF 5.6.05
 		for ($i = 0; $i < $c; $i++) {
-			$col = preg_replace('/,/', '*', $x[0][$i]);
+			$col = preg_replace('/,\s/', '*', $x[0][$i]);
 			$value = str_replace($x[0][$i], $col, $value);
 		}
 
