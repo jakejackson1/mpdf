@@ -1871,32 +1871,32 @@ class CssManager
 
 				// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
 			if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-					foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
-						if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-							$select = false;
-							if ($tag === 'TR') {
-								$row = $this->mpdf->row;
-								$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-								$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
-								if ($this->mpdf->tabletfoot) {
-									$row -= $thnr;
-								} elseif (!$this->mpdf->tablethead) {
-									$row -= ($thnr + $tfnr);
-								}
-								if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-									$select = $this->_nthchild($a, $row);
-								}
-							} elseif ($tag === 'TD' || $tag === 'TH') {
-								if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-									$select = $this->_nthchild($a, $this->mpdf->col);
-								}
+				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
+					if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
+						$select = false;
+						if ($tag === 'TR') {
+							$row = $this->mpdf->row;
+							$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
+							$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
+							if ($this->mpdf->tabletfoot) {
+								$row -= $thnr;
+							} elseif (!$this->mpdf->tablethead) {
+								$row -= ($thnr + $tfnr);
 							}
-							if ($select) {
-								$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
+							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+								$select = $this->_nthchild($a, $row);
 							}
+						} elseif ($tag === 'TD' || $tag === 'TH') {
+							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+								$select = $this->_nthchild($a, $this->mpdf->col);
+							}
+						}
+						if ($select) {
+							$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
 						}
 					}
 				}
+			}
 
 			$this->_set_mergedCSS($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], $p, false, 9);
 			foreach ($classes as $class) {
