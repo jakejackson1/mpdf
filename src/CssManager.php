@@ -95,12 +95,12 @@ class CssManager
 		$this->cache = $cache;
 		$this->sizeConverter = $sizeConverter;
 		$this->assetFetcher = $assetFetcher;
+		$this->colorConverter = $colorConverter;
 
 		$this->tablecascadeCSS = [];
 		$this->CSS = [];
 		$this->cascadeCSS = [];
 		$this->tbCSSlvl = 0;
-		$this->colorConverter = $colorConverter;
 	}
 
 	/**
