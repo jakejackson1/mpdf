@@ -78,6 +78,11 @@ class CssManager
 	public $cell_border_dominance_T;
 
 	/**
+	 * @var array
+	 */
+	protected $cssProperties = [];
+
+	/**
 	 * CssManager constructor.
 	 *
 	 * Initializes the CSS manager with required dependencies and sets up
@@ -1833,7 +1838,15 @@ class CssManager
 	 * @param int|bool $bd Border dominance level or false
 	 * @return void
 	 */
-	protected function setMergedCss(&$m, &$p, $d = true, $bd = false)
+	/**
+	 * Merge CSS properties with existing properties.
+	 *
+	 * @param array $m Source CSS properties
+	 * @param bool $d Use default strict mode
+	 * @param bool|int $bd Border dominance level (or false)
+	 * @return void
+	 */
+	protected function setMergedCss(&$m, $d = true, $bd = false)
 	{
 		if (!isset($m)) {
 			return;
@@ -1845,8 +1858,8 @@ class CssManager
 			} // *TABLES*
 
 			if (is_array($m)) {
-				$p = array_merge($p, $m);
-				$this->mergeBorderProperties($p, $m);
+				$this->cssProperties = array_merge($this->cssProperties, $m);
+				$this->mergeBorderProperties($m);
 			}
 		}
 	}
@@ -1857,14 +1870,13 @@ class CssManager
 	 * Helper method for mergeBorderProperties to handle merging of individual side properties
 	 * (style, width, color) into the shorthand border property.
 	 *
-	 * @param array $b Target border array (modified by reference)
 	 * @param string $side Side to merge (TOP, RIGHT, BOTTOM, LEFT)
 	 * @param array $a Source border properties
 	 * @return void
 	 */
-	protected function mergeSideBorder(&$b, $side, $a)
+	protected function mergeSideBorder($side, $a)
 	{
-		// Merges $a['BORDER-TOP-STYLE'] to $b['BORDER-TOP'] etc.
+		// Merges $a['BORDER-TOP-STYLE'] to $this->cssProperties['BORDER-TOP'] etc.
 		$defaults = [
 			'WIDTH' => '0px',
 			'STYLE' => 'none',
@@ -1872,7 +1884,7 @@ class CssManager
 		];
 
 		$borderKey = 'BORDER-' . $side;
-		$currentBorder = isset($b[$borderKey]) ? trim($b[$borderKey]) : '';
+		$currentBorder = isset($this->cssProperties[$borderKey]) ? trim($this->cssProperties[$borderKey]) : '';
 
 		foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
 			$propertyKey = $borderKey . '-' . $el;
@@ -1884,14 +1896,14 @@ class CssManager
 			if ($currentBorder) {
 				// Update existing border value
 				if ($el === 'STYLE') {
-					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
+					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
 				} elseif ($el === 'WIDTH') {
-					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
+					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
 				} else { // COLOR
-					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
+					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
 				}
 
-				$currentBorder = $b[$borderKey]; // Update current border for next iteration
+				$currentBorder = $this->cssProperties[$borderKey]; // Update current border for next iteration
 			} else {
 				// Build new border from scratch with defaults
 				if (!isset($borderParts)) {
@@ -1899,27 +1911,22 @@ class CssManager
 				}
 
 				$borderParts[$el] = $value;
-				$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
-				$currentBorder = $b[$borderKey];
+				$this->cssProperties[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
+				$currentBorder = $this->cssProperties[$borderKey];
 			}
 		}
 	}
 
 	/**
-	 * Merge individual border properties into shorthand border properties.
+	 * Merge borders into CSS properties.
 	 *
-	 * Converts individual border properties like BORDER-TOP-STYLE, BORDER-TOP-WIDTH,
-	 * BORDER-TOP-COLOR into the shorthand BORDER-TOP property. This ensures consistency
-	 * when CSS cascading rules apply individual border components.
-	 *
-	 * @param array $b Target border array (modified by reference)
-	 * @param array $a Source border properties to merge
+	 * @param array $a properties to merge
 	 * @return void
 	 */
-	protected function mergeBorderProperties(&$b, &$a)
+	protected function mergeBorderProperties(&$a)
 	{
 		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
-			$this->mergeSideBorder($b, $side, $a);
+			$this->mergeSideBorder($side, $a);
 		}
 	}
 
@@ -1938,7 +1945,7 @@ class CssManager
 	 */
 	public function MergeCSS($inherit, $tag, $attr)
 	{
-		$p = [];
+		$this->cssProperties = [];
 
 		$attr = is_array($attr) ? $attr : [];
 
@@ -1965,16 +1972,16 @@ class CssManager
 		}
 
 		$this->mergeTableCascadingCss($inherit, $tag, $attr, $classes);
-		$this->mergeBlockCascadingCss($inherit, $tag, $attr, $classes, $p);
-		$this->mergeInlineAttributes($tag, $attr, $p);
-		$this->mergeDefaultCss($tag, $p);
-		$this->mergeTableSpecificCss($tag, $attr, $p);
-		$this->mergeStylesheetSelectors($tag, $attr, $classes, $p, $shortlang);
-		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $p, $shortlang);
-		$this->mergeCascadedCss($inherit, $tag, $attr, $classes, $p);
-		$this->mergeInlineStyle($tag, $attr, $p);
+		$this->mergeBlockCascadingCss($inherit, $tag, $attr, $classes);
+		$this->mergeInlineAttributes($tag, $attr);
+		$this->mergeDefaultCss($tag);
+		$this->mergeTableSpecificCss($tag, $attr);
+		$this->mergeStylesheetSelectors($tag, $attr, $classes, $shortlang);
+		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $shortlang);
+		$this->mergeCascadedCss($inherit, $tag, $attr, $classes);
+		$this->mergeInlineStyle($tag, $attr);
 
-		return $p;
+		return $this->cssProperties;
 	}
 
 	/**
@@ -1983,11 +1990,10 @@ class CssManager
 	 * @param string $tag HTML tag
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param array $p CSS properties (modified by reference)
 	 * @param string $shortlang Short language code (e.g. 'en')
 	 * @return void
 	 */
-	protected function mergeTagSpecificSelectors($tag, $attr, $classes, &$p, $shortlang)
+	protected function mergeTagSpecificSelectors($tag, $attr, $classes, $shortlang)
 	{
 		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
 		foreach ($classes as $class) {
@@ -1998,11 +2004,11 @@ class CssManager
 
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
+			}
 
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
+				$this->mergeBorderProperties($zp);
 			}
 		}
 
@@ -2012,20 +2018,21 @@ class CssManager
 				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
+				}
+
 				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->mergeBorderProperties($p, $zp);
+					$this->cssProperties = array_merge($this->cssProperties, $zp);
+					$this->mergeBorderProperties($zp);
 				}
 			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $shortlang])) {
 				$zp = $this->CSS[$tag . '>>LANG>>' . $shortlang];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setBorderDominance($zp, 9);
-				} // *TABLES*
+				}
 
 				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->mergeBorderProperties($p, $zp);
+					$this->cssProperties = array_merge($this->cssProperties, $zp);
+					$this->mergeBorderProperties($zp);
 				}
 			}
 		}
@@ -2035,11 +2042,11 @@ class CssManager
 			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
+			}
 
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
+				$this->mergeBorderProperties($zp);
 			}
 		}
 	}
@@ -2051,79 +2058,84 @@ class CssManager
 	 * @param string $tag HTML tag
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param array $p CSS properties (modified by reference)
 	 * @return void
 	 */
-	protected function mergeCascadedCss($inherit, $tag, $attr, $classes, &$p)
+	protected function mergeCascadedCss($inherit, $tag, $attr, $classes)
 	{
 		// Cascaded e.g. div.class p only works for block level
 		if ($inherit === 'BLOCK' && !empty($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag], $p);
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag]);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class], $p);
+				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class]);
 			}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']], $p);
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']]);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
+				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
 			}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
 		} elseif ($inherit === 'INLINE') {
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag], $p);
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag]);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class], $p);
+				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class]);
 			}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']], $p);
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']]);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class], $p);
+				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
 			}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']], $p);
-		} elseif (!empty($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && ($inherit === 'TOPTABLE' || $inherit === 'TABLE')) { // NB looks at $this->tablecascadeCSS-1 for cascading CSS
+			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
+		} elseif (!empty($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && ($inherit === 'TOPTABLE' || $inherit === 'TABLE')) {
+			// NB looks at $this->tablecascadeCSS-1 for cascading CSS
 
 			// false, 9 = don't check for 'depth' and do set border dominance
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], $p, false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], false, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], $p, false, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], false, 9);
 			}
 
 			// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
 			if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
 				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
-					if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-						$select = false;
-						if ($tag === 'TR') {
-							$row = $this->mpdf->row;
-							$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-							$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
-							if ($this->mpdf->tabletfoot) {
-								$row -= $thnr;
-							} elseif (!$this->mpdf->tablethead) {
-								$row -= ($thnr + $tfnr);
-							}
-							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-								$select = $this->matchesNthChild($a, $row);
-							}
-						} elseif ($tag === 'TD' || $tag === 'TH') {
-							if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-								$select = $this->matchesNthChild($a, $this->mpdf->col);
-							}
+					if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
+						continue;
+					}
+					$select = false;
+					if ($tag === 'TR') {
+						$row = $this->mpdf->row;
+						$table = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
+						$tableHeadCount = isset($table['is_thead']) ? count($table['is_thead']) : 0;
+						$tableFootCount = isset($table['is_tfoot']) ? count($table['is_tfoot']) : 0;
+
+						if ($this->mpdf->tabletfoot) {
+							$row -= $tableHeadCount;
+						} elseif (!$this->mpdf->tablethead) {
+							$row -= ($tableHeadCount + $tableFootCount);
 						}
-						if ($select) {
-							$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $p, false, 9);
+
+						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+							$select = $this->matchesNthChild($a, $row);
 						}
+					} elseif ($tag === 'TD' || $tag === 'TH') {
+						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+							$select = $this->matchesNthChild($a, $this->mpdf->col);
+						}
+					}
+
+					if ($select) {
+						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], false, 9);
 					}
 				}
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], $p, false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], false, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], $p, false, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], false, 9);
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], $p, false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], false, 9);
 		}
 	}
 
@@ -2137,60 +2149,60 @@ class CssManager
 	 * @param array $p CSS properties array (modified by reference)
 	 * @return void
 	 */
-	protected function convertInlinePropertiesToCss($bilp, &$p)
+	protected function convertInlinePropertiesToCss($bilp)
 	{
 		if (isset($bilp['family']) && $bilp['family']) {
-			$p['FONT-FAMILY'] = $bilp['family'];
+			$this->cssProperties['FONT-FAMILY'] = $bilp['family'];
 		}
 
 		if (isset($bilp['I']) && $bilp['I']) {
-			$p['FONT-STYLE'] = 'italic';
+			$this->cssProperties['FONT-STYLE'] = 'italic';
 		}
 
 		if (isset($bilp['sizePt']) && $bilp['sizePt']) {
-			$p['FONT-SIZE'] = $bilp['sizePt'] . 'pt';
+			$this->cssProperties['FONT-SIZE'] = $bilp['sizePt'] . 'pt';
 		}
 
 		if (isset($bilp['B']) && $bilp['B']) {
-			$p['FONT-WEIGHT'] = 'bold';
+			$this->cssProperties['FONT-WEIGHT'] = 'bold';
 		}
 
 		if (isset($bilp['colorarray']) && $bilp['colorarray']) {
 			$cor = $bilp['colorarray'];
-			$p['COLOR'] = $this->colorConverter->colAtoString($cor);
+			$this->cssProperties['COLOR'] = $this->colorConverter->colAtoString($cor);
 		}
 
 		if (isset($bilp['lSpacingCSS']) && $bilp['lSpacingCSS']) {
-			$p['LETTER-SPACING'] = $bilp['lSpacingCSS'];
+			$this->cssProperties['LETTER-SPACING'] = $bilp['lSpacingCSS'];
 		}
 
 		if (isset($bilp['wSpacingCSS']) && $bilp['wSpacingCSS']) {
-			$p['WORD-SPACING'] = $bilp['wSpacingCSS'];
+			$this->cssProperties['WORD-SPACING'] = $bilp['wSpacingCSS'];
 		}
 
 		if (isset($bilp['textparam']) && $bilp['textparam']) {
 			if (isset($bilp['textparam']['hyphens'])) {
 				if ($bilp['textparam']['hyphens'] == 2) {
-					$p['HYPHENS'] = 'none';
+					$this->cssProperties['HYPHENS'] = 'none';
 				}
 				if ($bilp['textparam']['hyphens'] == 1) {
-					$p['HYPHENS'] = 'auto';
+					$this->cssProperties['HYPHENS'] = 'auto';
 				}
 				if ($bilp['textparam']['hyphens'] == 0) {
-					$p['HYPHENS'] = 'manual';
+					$this->cssProperties['HYPHENS'] = 'manual';
 				}
 			}
 
 			if (isset($bilp['textparam']['outline-s']) && !$bilp['textparam']['outline-s']) {
-				$p['TEXT-OUTLINE'] = 'none';
+				$this->cssProperties['TEXT-OUTLINE'] = 'none';
 			}
 
 			if (isset($bilp['textparam']['outline-COLOR']) && $bilp['textparam']['outline-COLOR']) {
-				$p['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($bilp['textparam']['outline-COLOR']);
+				$this->cssProperties['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($bilp['textparam']['outline-COLOR']);
 			}
 
 			if (isset($bilp['textparam']['outline-WIDTH']) && $bilp['textparam']['outline-WIDTH']) {
-				$p['TEXT-OUTLINE-WIDTH'] = $bilp['textparam']['outline-WIDTH'] . 'mm';
+				$this->cssProperties['TEXT-OUTLINE-WIDTH'] = $bilp['textparam']['outline-WIDTH'] . 'mm';
 			}
 		}
 
@@ -2198,60 +2210,60 @@ class CssManager
 			// CSS says text-decoration is not inherited, but IE7 does??
 			if ($bilp['textvar'] & TextVars::FD_LINETHROUGH) {
 				if ($bilp['textvar'] & TextVars::FD_UNDERLINE) {
-					$p['TEXT-DECORATION'] = 'underline line-through';
+					$this->cssProperties['TEXT-DECORATION'] = 'underline line-through';
 				} else {
-					$p['TEXT-DECORATION'] = 'line-through';
+					$this->cssProperties['TEXT-DECORATION'] = 'line-through';
 				}
 			} elseif ($bilp['textvar'] & TextVars::FD_UNDERLINE) {
-				$p['TEXT-DECORATION'] = 'underline';
+				$this->cssProperties['TEXT-DECORATION'] = 'underline';
 			} else {
-				$p['TEXT-DECORATION'] = 'none';
+				$this->cssProperties['TEXT-DECORATION'] = 'none';
 			}
 
 			if ($bilp['textvar'] & TextVars::FA_SUPERSCRIPT) {
-				$p['VERTICAL-ALIGN'] = 'super';
+				$this->cssProperties['VERTICAL-ALIGN'] = 'super';
 			} elseif ($bilp['textvar'] & TextVars::FA_SUBSCRIPT) {
-				$p['VERTICAL-ALIGN'] = 'sub';
+				$this->cssProperties['VERTICAL-ALIGN'] = 'sub';
 			} else {
-				$p['VERTICAL-ALIGN'] = 'baseline';
+				$this->cssProperties['VERTICAL-ALIGN'] = 'baseline';
 			}
 
 			if ($bilp['textvar'] & TextVars::FT_CAPITALIZE) {
-				$p['TEXT-TRANSFORM'] = 'capitalize';
+				$this->cssProperties['TEXT-TRANSFORM'] = 'capitalize';
 			} elseif ($bilp['textvar'] & TextVars::FT_UPPERCASE) {
-				$p['TEXT-TRANSFORM'] = 'uppercase';
+				$this->cssProperties['TEXT-TRANSFORM'] = 'uppercase';
 			} elseif ($bilp['textvar'] & TextVars::FT_LOWERCASE) {
-				$p['TEXT-TRANSFORM'] = 'lowercase';
+				$this->cssProperties['TEXT-TRANSFORM'] = 'lowercase';
 			} else {
-				$p['TEXT-TRANSFORM'] = 'none';
+				$this->cssProperties['TEXT-TRANSFORM'] = 'none';
 			}
 
 			if ($bilp['textvar'] & TextVars::FC_KERNING) {
-				$p['FONT-KERNING'] = 'normal';
+				$this->cssProperties['FONT-KERNING'] = 'normal';
 			} // ignore 'auto' as default already applied
 			else {
-				$p['FONT-KERNING'] = 'none';
+				$this->cssProperties['FONT-KERNING'] = 'none';
 			}
 
 			if ($bilp['textvar'] & TextVars::FA_SUPERSCRIPT) {
-				$p['FONT-VARIANT-POSITION'] = 'super';
+				$this->cssProperties['FONT-VARIANT-POSITION'] = 'super';
 			}
 			elseif ($bilp['textvar'] & TextVars::FA_SUBSCRIPT) {
-				$p['FONT-VARIANT-POSITION'] = 'sub';
+				$this->cssProperties['FONT-VARIANT-POSITION'] = 'sub';
 			} else {
-				$p['FONT-VARIANT-POSITION'] = 'normal';
+				$this->cssProperties['FONT-VARIANT-POSITION'] = 'normal';
 			}
 
 			if ($bilp['textvar'] & TextVars::FC_SMALLCAPS) {
-				$p['FONT-VARIANT-CAPS'] = 'small-caps';
+				$this->cssProperties['FONT-VARIANT-CAPS'] = 'small-caps';
 			}
 		}
 
 		if (isset($bilp['fontLanguageOverride'])) {
 			if ($bilp['fontLanguageOverride']) {
-				$p['FONT-LANGUAGE-OVERRIDE'] = $bilp['fontLanguageOverride'];
+				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = $bilp['fontLanguageOverride'];
 			} else {
-				$p['FONT-LANGUAGE-OVERRIDE'] = 'normal';
+				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = 'normal';
 			}
 		}
 		// All the variations of font-variant-* we are going to set as font-feature-settings...
@@ -2289,7 +2301,7 @@ class CssManager
 				}
 			}
 
-			$p['FONT-FEATURE-SETTINGS'] = implode(', ', $ffs);
+			$this->cssProperties['FONT-FEATURE-SETTINGS'] = implode(', ', $ffs);
 		}
 	}
 
@@ -2306,7 +2318,8 @@ class CssManager
 	public function PreviewBlockCSS($tag, $attr)
 	{
 		// Looks ahead from current block level to a new level
-		$p = [];
+		$oldCssProperties = $this->cssProperties;
+		$this->cssProperties = [];
 
 		$oldcascadeCSS = $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'];
 		$classes = [];
@@ -2320,7 +2333,7 @@ class CssManager
 		if (isset($this->mpdf->defaultCSS[$tag])) {
 			$zp = $this->normalizeCssProperties($this->mpdf->defaultCSS[$tag]);
 			if (is_array($zp)) {
-				$p = array_merge($zp, $p);
+				$this->cssProperties = array_merge($zp, $this->cssProperties);
 			} // Inherited overwrites default
 		}
 
@@ -2328,7 +2341,7 @@ class CssManager
 		if (isset($this->CSS[$tag])) {
 			$zp = $this->CSS[$tag];
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
 
@@ -2338,8 +2351,9 @@ class CssManager
 			if (isset($this->CSS['CLASS>>' . $class])) {
 				$zp = $this->CSS['CLASS>>' . $class];
 			}
+
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
 
@@ -2347,7 +2361,7 @@ class CssManager
 		if (isset($attr['ID']) && isset($this->CSS['ID>>' . $attr['ID']])) {
 			$zp = $this->CSS['ID>>' . $attr['ID']];
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
 
@@ -2357,8 +2371,9 @@ class CssManager
 			if (isset($this->CSS[$tag . '>>CLASS>>' . $class])) {
 				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
 			}
+
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
 
@@ -2366,39 +2381,43 @@ class CssManager
 		if (isset($attr['ID']) && isset($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
 			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
 
 		// STYLESHEET TAG e.g. div h1    div p
-		$this->setMergedCss($oldcascadeCSS[$tag], $p);
+		$this->setMergedCss($oldcascadeCSS[$tag]);
+
 		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
 		foreach ($classes as $class) {
-			$this->setMergedCss($oldcascadeCSS['CLASS>>' . $class], $p);
+			$this->setMergedCss($oldcascadeCSS['CLASS>>' . $class]);
 		}
 
 		// STYLESHEET CLASS e.g. #smallone{}  #redletter{}
 		if (isset($attr['ID'])) {
-			$this->setMergedCss($oldcascadeCSS['ID>>' . $attr['ID']], $p);
+			$this->setMergedCss($oldcascadeCSS['ID>>' . $attr['ID']]);
 		}
 
 		// STYLESHEET CLASS e.g. div.smallone{}  p.redletter{}
 		foreach ($classes as $class) {
-			$this->setMergedCss($oldcascadeCSS[$tag . '>>CLASS>>' . $class], $p);
+			$this->setMergedCss($oldcascadeCSS[$tag . '>>CLASS>>' . $class]);
 		}
 
 		// STYLESHEET CLASS e.g. div#smallone{}  p#redletter{}
 		if (isset($attr['ID'])) {
-			$this->setMergedCss($oldcascadeCSS[$tag . '>>ID>>' . $attr['ID']], $p);
+			$this->setMergedCss($oldcascadeCSS[$tag . '>>ID>>' . $attr['ID']]);
 		}
 
 		// INLINE STYLE e.g. style="CSS:property"
 		if (isset($attr['STYLE'])) {
 			$zp = $this->readInlineCSS($attr['STYLE']);
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
 		}
+
+		$p = $this->cssProperties;
+		$this->cssProperties = $oldCssProperties;
 
 		return $p;
 	}
@@ -2417,7 +2436,7 @@ class CssManager
 	{
 		// $f is formula e.g. 2N+1 split into a preg_match array
 		// $c is the comparator value e.g row or column number
-		$c += 1;
+		++$c;
 		$select = false;
 
 		$f_count = count($f);
@@ -2432,18 +2451,18 @@ class CssManager
 			$b = $f[1] + 0;
 		} // e.g. (+6)
 		elseif ($f_count === 3) {  // e.g. (2N)
-			if ($f[2] == '') {
+			if ($f[2] === '') {
 				$a = 1;
-			} elseif ($f[2] == '-') {
+			} elseif ($f[2] === '-') {
 				$a = -1;
 			} else {
 				$a = $f[2] + 0;
 			}
 			$b = 0;
 		} elseif ($f_count === 4) {  // e.g. (2N+6)
-			if ($f[2] == '') {
+			if ($f[2] === '') {
 				$a = 1;
-			} elseif ($f[2] == '-') {
+			} elseif ($f[2] === '-') {
 				$a = -1;
 			} else {
 				$a = $f[2] + 0;
@@ -2456,8 +2475,8 @@ class CssManager
 			if (((($c % $a) - $b) % $a) === 0 && $c >= $b) {
 				$select = true;
 			}
-		} elseif ($a == 0) {
-			if ($c == $b) {
+		} elseif ($a === 0) {
+			if ($c === $b) {
 				$select = true;
 			}
 		} else {  // if ($a<0)
@@ -2465,6 +2484,7 @@ class CssManager
 				$select = true;
 			}
 		}
+
 		return $select;
 	}
 
@@ -2485,7 +2505,6 @@ class CssManager
 			return;
 		}
 
-		// $tag = TABLE
 		if ($inherit === 'TOPTABLE') {
 			// Save Cascading CSS e.g. "div.topic p" at this block level
 			if (isset($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'])) {
@@ -2495,7 +2514,6 @@ class CssManager
 			}
 		}
 
-		// Set Inherited properties
 		// Cascade everything from last level that is not an actual property, or defined by current tag/attributes
 		if (isset($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && is_array($this->tablecascadeCSS[$this->tbCSSlvl - 1])) {
 			foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $v) {
@@ -2512,7 +2530,7 @@ class CssManager
 			$attr['LANG']
 		);
 
-		// Cascading forward CSS e.g. "table.topic td" for this table in $this->tablecascadeCSS
+		// Cascading forward CSS
 		if (isset($this->tablecascadeCSS[$this->tbCSSlvl - 1])) {
 			$this->mergeFullCssRules(
 				$this->tablecascadeCSS[$this->tbCSSlvl - 1],
@@ -2534,10 +2552,9 @@ class CssManager
 	 * @param string $tag HTML tag name
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param array $p Current CSS properties (passed by reference)
 	 * @return void
 	 */
-	protected function mergeBlockCascadingCss($inherit, $tag, $attr, $classes, &$p)
+	protected function mergeBlockCascadingCss($inherit, $tag, $attr, $classes)
 	{
 		if ($inherit !== 'BLOCK') {
 			return;
@@ -2580,56 +2597,56 @@ class CssManager
 
 		// Block properties which are inherited
 		if (!empty($previousBlock['margin_collapse'])) {
-			$p['MARGIN-COLLAPSE'] = 'COLLAPSE';
+			$this->cssProperties['MARGIN-COLLAPSE'] = 'COLLAPSE';
 		}
 
 		// custom tag, but follows CSS principle that border-collapse is inherited
 		if (!empty($previousBlock['line_height'])) {
-			$p['LINE-HEIGHT'] = $previousBlock['line_height'];
+			$this->cssProperties['LINE-HEIGHT'] = $previousBlock['line_height'];
 		}
 
 		// mPDF 6
 		if (!empty($previousBlock['line_stacking_strategy'])) {
-			$p['LINE-STACKING-STRATEGY'] = $previousBlock['line_stacking_strategy'];
+			$this->cssProperties['LINE-STACKING-STRATEGY'] = $previousBlock['line_stacking_strategy'];
 		}
 
 		if (!empty($previousBlock['line_stacking_shift'])) {
-			$p['LINE-STACKING-SHIFT'] = $previousBlock['line_stacking_shift'];
+			$this->cssProperties['LINE-STACKING-SHIFT'] = $previousBlock['line_stacking_shift'];
 		}
 
 		if (!empty($previousBlock['direction'])) {
-			$p['DIRECTION'] = $previousBlock['direction'];
+			$this->cssProperties['DIRECTION'] = $previousBlock['direction'];
 		}
 
 		// mPDF 6  Lists
 		if ($tag === 'LI' && !empty($previousBlock['list_style_type'])) {
-			$p['LIST-STYLE-TYPE'] = $previousBlock['list_style_type'];
+			$this->cssProperties['LIST-STYLE-TYPE'] = $previousBlock['list_style_type'];
 		}
 
 		if (!empty($previousBlock['list_style_image'])) {
-			$p['LIST-STYLE-IMAGE'] = $previousBlock['list_style_image'];
+			$this->cssProperties['LIST-STYLE-IMAGE'] = $previousBlock['list_style_image'];
 		}
 
 		if (!empty($previousBlock['list_style_position'])) {
-			$p['LIST-STYLE-POSITION'] = $previousBlock['list_style_position'];
+			$this->cssProperties['LIST-STYLE-POSITION'] = $previousBlock['list_style_position'];
 		}
 
 		if (!empty($previousBlock['align'])) {
 			switch ($previousBlock['align']) {
 				case 'L':
-					$p['TEXT-ALIGN'] = 'left';
+					$this->cssProperties['TEXT-ALIGN'] = 'left';
 					break;
 
 				case 'J':
-					$p['TEXT-ALIGN'] = 'justify';
+					$this->cssProperties['TEXT-ALIGN'] = 'justify';
 					break;
 
 				case 'R':
-					$p['TEXT-ALIGN'] = 'right';
+					$this->cssProperties['TEXT-ALIGN'] = 'right';
 					break;
 
 				case 'C':
-					$p['TEXT-ALIGN'] = 'center';
+					$this->cssProperties['TEXT-ALIGN'] = 'center';
 					break;
 			}
 		}
@@ -2637,15 +2654,15 @@ class CssManager
 		if (!empty($previousBlock['bgcolorarray']) && ($this->mpdf->ColActive || $this->mpdf->keep_block_together)) {
 			// Doesn't officially inherit, but default value is transparent (?=inherited)
 			$cor = $previousBlock['bgcolorarray'];
-			$p['BACKGROUND-COLOR'] = $this->colorConverter->colAtoString($cor);
+			$this->cssProperties['BACKGROUND-COLOR'] = $this->colorConverter->colAtoString($cor);
 		}
 
 		if (isset($previousBlock['text_indent'])) {
-			$p['TEXT-INDENT'] = $previousBlock['text_indent'];
+			$this->cssProperties['TEXT-INDENT'] = $previousBlock['text_indent'];
 		}
 
 		if (isset($previousBlock['InlineProperties'])) {
-			$this->convertInlinePropertiesToCss($previousBlock['InlineProperties'], $p); // mPDF 5.7.1
+			$this->convertInlinePropertiesToCss($previousBlock['InlineProperties'], $this->cssProperties); // mPDF 5.7.1
 		}
 	}
 
@@ -2656,73 +2673,72 @@ class CssManager
 	 *
 	 * @param string $tag HTML tag name
 	 * @param array $attr HTML attributes
-	 * @param array $p Current CSS properties (passed by reference)
 	 * @return void
 	 */
-	protected function mergeInlineAttributes($tag, $attr, &$p)
+	protected function mergeInlineAttributes($tag, $attr)
 	{
 		if (!empty($attr['DIR'])) {
-			$p['DIRECTION'] = $attr['DIR'];
+			$this->cssProperties['DIRECTION'] = $attr['DIR'];
 		}
 
 		if (!empty($attr['LANG'])) {
-			$p['LANG'] = $attr['LANG'];
+			$this->cssProperties['LANG'] = $attr['LANG'];
 		}
 
 		if (!empty($attr['COLOR'])) {
-			$p['COLOR'] = $attr['COLOR'];
+			$this->cssProperties['COLOR'] = $attr['COLOR'];
 		}
 
 		if ($tag !== 'INPUT') {
 			if (!empty($attr['WIDTH'])) {
-				$p['WIDTH'] = $attr['WIDTH'];
+				$this->cssProperties['WIDTH'] = $attr['WIDTH'];
 			}
 			
 			if (!empty($attr['HEIGHT'])) {
-				$p['HEIGHT'] = $attr['HEIGHT'];
+				$this->cssProperties['HEIGHT'] = $attr['HEIGHT'];
 			}
 		}
 
 		if ($tag === 'FONT') {
 			if (!empty($attr['FACE'])) {
-				$p['FONT-FAMILY'] = $attr['FACE'];
+				$this->cssProperties['FONT-FAMILY'] = $attr['FACE'];
 			}
 			
 			$size = isset($attr['SIZE']) ? $attr['SIZE'] : '';
 			if ($size === '+1') {
-				$p['FONT-SIZE'] = '120%';
+				$this->cssProperties['FONT-SIZE'] = '120%';
 			} elseif ($size === '-1') {
-				$p['FONT-SIZE'] = '86%';
+				$this->cssProperties['FONT-SIZE'] = '86%';
 			} elseif ($size === '1') {
-				$p['FONT-SIZE'] = 'XX-SMALL';
+				$this->cssProperties['FONT-SIZE'] = 'XX-SMALL';
 			} elseif ($size == '2') {
-				$p['FONT-SIZE'] = 'X-SMALL';
+				$this->cssProperties['FONT-SIZE'] = 'X-SMALL';
 			} elseif ($size == '3') {
-				$p['FONT-SIZE'] = 'SMALL';
+				$this->cssProperties['FONT-SIZE'] = 'SMALL';
 			} elseif ($size == '4') {
-				$p['FONT-SIZE'] = 'MEDIUM';
+				$this->cssProperties['FONT-SIZE'] = 'MEDIUM';
 			} elseif ($size == '5') {
-				$p['FONT-SIZE'] = 'LARGE';
+				$this->cssProperties['FONT-SIZE'] = 'LARGE';
 			} elseif ($size == '6') {
-				$p['FONT-SIZE'] = 'X-LARGE';
+				$this->cssProperties['FONT-SIZE'] = 'X-LARGE';
 			} elseif ($size == '7') {
-				$p['FONT-SIZE'] = 'XX-LARGE';
+				$this->cssProperties['FONT-SIZE'] = 'XX-LARGE';
 			}
 
 		}
 
 		if (!empty($attr['VALIGN'])) {
-			$p['VERTICAL-ALIGN'] = $attr['VALIGN'];
+			$this->cssProperties['VERTICAL-ALIGN'] = $attr['VALIGN'];
 		}
 
 		if (!empty($attr['VSPACE'])) {
-			$p['MARGIN-TOP'] = $attr['VSPACE'];
-			$p['MARGIN-BOTTOM'] = $attr['VSPACE'];
+			$this->cssProperties['MARGIN-TOP'] = $attr['VSPACE'];
+			$this->cssProperties['MARGIN-BOTTOM'] = $attr['VSPACE'];
 		}
 
 		if (!empty($attr['HSPACE'])) {
-			$p['MARGIN-LEFT'] = $attr['HSPACE'];
-			$p['MARGIN-RIGHT'] = $attr['HSPACE'];
+			$this->cssProperties['MARGIN-LEFT'] = $attr['HSPACE'];
+			$this->cssProperties['MARGIN-RIGHT'] = $attr['HSPACE'];
 		}
 	}
 
@@ -2745,6 +2761,7 @@ class CssManager
 			} else {
 				$newprop['BACKGROUND-COLOR'] = 'transparent';
 			}
+
 			if ($bg['i']) {
 				$newprop['BACKGROUND-IMAGE'] = $bg['i'];
 				if ($bg['r']) {
@@ -2761,6 +2778,7 @@ class CssManager
 				$newprop['BACKGROUND-IMAGE'] = $m[0];
 				return;
 			}
+
 			if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
 				$newprop['BACKGROUND-IMAGE'] = $m[1];
 			} elseif (strtolower($v) === 'none') {
@@ -2797,24 +2815,31 @@ class CssManager
 		if (isset($tmp['TL-H'])) {
 			$newprop['BORDER-TOP-LEFT-RADIUS-H'] = $tmp['TL-H'];
 		}
+
 		if (isset($tmp['TL-V'])) {
 			$newprop['BORDER-TOP-LEFT-RADIUS-V'] = $tmp['TL-V'];
 		}
+
 		if (isset($tmp['TR-H'])) {
 			$newprop['BORDER-TOP-RIGHT-RADIUS-H'] = $tmp['TR-H'];
 		}
+
 		if (isset($tmp['TR-V'])) {
 			$newprop['BORDER-TOP-RIGHT-RADIUS-V'] = $tmp['TR-V'];
 		}
+
 		if (isset($tmp['BL-H'])) {
 			$newprop['BORDER-BOTTOM-LEFT-RADIUS-H'] = $tmp['BL-H'];
 		}
+
 		if (isset($tmp['BL-V'])) {
 			$newprop['BORDER-BOTTOM-LEFT-RADIUS-V'] = $tmp['BL-V'];
 		}
+
 		if (isset($tmp['BR-H'])) {
 			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-H'] = $tmp['BR-H'];
 		}
+
 		if (isset($tmp['BR-V'])) {
 			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-V'] = $tmp['BR-V'];
 		}
@@ -2896,25 +2921,27 @@ class CssManager
 	 */
 	protected function processImageOrientationProperty($v, &$newprop)
 	{
-		if (preg_match('/([\-]*[0-9\.]+)(deg|grad|rad)/i', $v, $m)) {
-			$angle = $m[1] + 0;
-
-			if (strtolower($m[2]) === 'grad') {
-				$angle *= (360 / 400);
-			} elseif (strtolower($m[2]) === 'rad') {
-				$angle = rad2deg($angle);
-			}
-
-			while ($angle < 0) {
-				$angle += 360;
-			}
-
-			$angle %= 360;
-			$angle /= 90;
-			$angle = round($angle) * 90;
-
-			$newprop['IMAGE-ORIENTATION'] = $angle;
+		if (!preg_match('/([\-]*[0-9\.]+)(deg|grad|rad)/i', $v, $m)) {
+			return;
 		}
+
+		$angle = $m[1] + 0;
+
+		if (strtolower($m[2]) === 'grad') {
+			$angle *= (360 / 400);
+		} elseif (strtolower($m[2]) === 'rad') {
+			$angle = rad2deg($angle);
+		}
+
+		while ($angle < 0) {
+			$angle += 360;
+		}
+
+		$angle %= 360;
+		$angle /= 90;
+		$angle = round($angle) * 90;
+
+		$newprop['IMAGE-ORIENTATION'] = $angle;
 	}
 
 	/**
@@ -2940,7 +2967,6 @@ class CssManager
 			} else {
 				$newprop['TEXT-ALIGN'] .= 'R';
 			} // default = R
-
 		} elseif (preg_match('/["\'](\\\[a-fA-F0-9]{1,6})["\']/i', $v, $m)) {
 			$utf8 = UtfString::codeHex2utf(substr($m[1], 1, 6));
 			$d = array_search($utf8, $this->mpdf->decimal_align);
@@ -2954,7 +2980,6 @@ class CssManager
 			} else {
 				$newprop['TEXT-ALIGN'] .= 'R';
 			} // default = R
-
 		} else {
 			$newprop[$k] = $v;
 		}
@@ -2990,27 +3015,25 @@ class CssManager
 	/**
 	 * Merge stylesheet selectors.
 	 *
-	 * Applies CSS rules from stylesheets based on tag, class, ID, and other selectors.
+	 * Applies CSS rules from stylesheets based on tag, class, ID,
 	 *
-	 * @param string $tag HTML tag name
+	 * @param string $tag HTML tag
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param array $p Current CSS properties (passed by reference)
-	 * @param string $shortlang Short language code (e.g. 'en' from 'en-GB')
+	 * @param string $shortlang Short language code (e.g. 'en')
 	 * @return void
 	 */
-	protected function mergeStylesheetSelectors($tag, $attr, $classes, &$p, $shortlang)
+	protected function mergeStylesheetSelectors($tag, $attr, $classes, $shortlang)
 	{
 		// STYLESHEET TAG e.g. h1  p  div  table
-		if (!empty($this->CSS[$tag])) {
+		if (isset($this->CSS[$tag])) {
 			$zp = $this->CSS[$tag];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
 			} // *TABLES*
-
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
+				$this->mergeBorderProperties($zp);
 			}
 		}
 
@@ -3026,8 +3049,8 @@ class CssManager
 			}
 
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
+				$this->mergeBorderProperties($zp);
 			}
 		}
 
@@ -3062,17 +3085,14 @@ class CssManager
 						}
 
 						if (is_array($zp)) {
-							$p = array_merge($p, $zp);
-							$this->mergeBorderProperties($p, $zp);
+							$this->cssProperties = array_merge($this->cssProperties, $zp);
+							$this->mergeBorderProperties($zp);
 						}
 					}
 				}
 			}
 		}
 
-		/* -- END TABLES -- */
-
-		//===============================================
 		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
 		if (isset($attr['LANG'])) {
 			if (!empty($this->CSS['LANG>>' . $attr['LANG']])) {
@@ -3082,8 +3102,8 @@ class CssManager
 				} // *TABLES*
 
 				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->mergeBorderProperties($p, $zp);
+					$this->cssProperties = array_merge($this->cssProperties, $zp);
+					$this->mergeBorderProperties($zp);
 				}
 			} elseif (!empty($this->CSS['LANG>>' . $shortlang])) {
 				$zp = $this->CSS['LANG>>' . $shortlang];
@@ -3092,13 +3112,12 @@ class CssManager
 				} // *TABLES*
 
 				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->mergeBorderProperties($p, $zp);
+					$this->cssProperties = array_merge($this->cssProperties, $zp);
+					$this->mergeBorderProperties($zp);
 				}
 			}
 		}
 
-		//===============================================
 		// STYLESHEET ID e.g. #smallone{}  #redletter{}
 		if (!empty($attr['ID']) && !empty($this->CSS['ID>>' . $attr['ID']])) {
 			$zp = $this->CSS['ID>>' . $attr['ID']];
@@ -3107,8 +3126,8 @@ class CssManager
 			} // *TABLES*
 
 			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
+				$this->cssProperties = array_merge($this->cssProperties, $zp);
+				$this->mergeBorderProperties($zp);
 			}
 		}
 	}
@@ -3152,22 +3171,21 @@ class CssManager
 	 *
 	 * @param string $tag HTML tag name
 	 * @param array $attr HTML attributes
-	 * @param array $p CSS properties (passed by reference)
 	 * @return void
 	 */
-	protected function mergeTableSpecificCss($tag, $attr, &$p)
+	protected function mergeTableSpecificCss($tag, $attr)
 	{
 		// cellSpacing overwrites TABLE default but not specific CSS set on table
 		if ($tag === 'TABLE' && isset($attr['CELLSPACING'])) {
-			$p['BORDER-SPACING-H'] = $p['BORDER-SPACING-V'] = $attr['CELLSPACING'];
+			$this->cssProperties['BORDER-SPACING-H'] = $this->cssProperties['BORDER-SPACING-V'] = $attr['CELLSPACING'];
 		}
 
 		// cellPadding overwrites TD/TH default but not specific CSS set on cell
 		if (($tag === 'TD' || $tag === 'TH') && isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding']) && ($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] || $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] === '0')) {
-			$p['PADDING-LEFT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-RIGHT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-TOP'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$this->cssProperties['PADDING-LEFT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$this->cssProperties['PADDING-RIGHT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$this->cssProperties['PADDING-TOP'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$this->cssProperties['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
 		}
 	}
 
@@ -3175,10 +3193,9 @@ class CssManager
 	 * Merge default CSS for the tag.
 	 *
 	 * @param string $tag HTML tag name
-	 * @param array $p CSS properties (passed by reference)
 	 * @return void
 	 */
-	protected function mergeDefaultCss($tag, &$p)
+	protected function mergeDefaultCss($tag)
 	{
 		if (!isset($this->mpdf->defaultCSS[$tag])) {
 			return;
@@ -3186,8 +3203,8 @@ class CssManager
 
 		$zp = $this->normalizeCssProperties($this->mpdf->defaultCSS[$tag]);
 		if (is_array($zp)) {  // Default overwrites Inherited
-			$p = array_merge($p, $zp);  // !! Note other way round !!
-			$this->mergeBorderProperties($p, $zp);
+			$this->cssProperties = array_merge($this->cssProperties, $zp);  // !! Note other way round !!
+			$this->mergeBorderProperties($zp);
 		}
 	}
 
@@ -3196,10 +3213,9 @@ class CssManager
 	 *
 	 * @param string $tag HTML tag name
 	 * @param array $attr HTML attributes
-	 * @param array $p CSS properties (passed by reference)
 	 * @return void
 	 */
-	protected function mergeInlineStyle($tag, $attr, &$p)
+	protected function mergeInlineStyle($tag, $attr)
 	{
 		// INLINE STYLE e.g. style="CSS:property"
 		if (!isset($attr['STYLE'])) {
@@ -3212,8 +3228,8 @@ class CssManager
 		} // *TABLES*
 
 		if (is_array($zp)) {
-			$p = array_merge($p, $zp);
-			$this->mergeBorderProperties($p, $zp);
+			$this->cssProperties = array_merge($this->cssProperties, $zp);
+			$this->mergeBorderProperties($zp);
 		}
 	}
 }
