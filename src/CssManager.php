@@ -1069,6 +1069,52 @@ class CssManager
 	}
 
 	/**
+	 * Process border shorthand properties (STYLE, WIDTH, COLOR, SPACING).
+	 *
+	 * @param string $key Property key
+	 * @param string $value Property value
+	 * @param array $newprop New properties array (modified by reference)
+	 * @return void
+	 */
+	protected function processBorderShorthandProperty($key, $value, &$newprop)
+	{
+		if ($key === 'BORDER-STYLE') {
+			$e = $this->expandShorthandProperty($value);
+			if (!empty($e)) {
+				$newprop['BORDER-TOP-STYLE'] = $e['T'];
+				$newprop['BORDER-RIGHT-STYLE'] = $e['R'];
+				$newprop['BORDER-BOTTOM-STYLE'] = $e['B'];
+				$newprop['BORDER-LEFT-STYLE'] = $e['L'];
+			}
+		} elseif ($key === 'BORDER-WIDTH') {
+			$e = $this->expandShorthandProperty($value);
+			if (!empty($e)) {
+				$newprop['BORDER-TOP-WIDTH'] = $e['T'];
+				$newprop['BORDER-RIGHT-WIDTH'] = $e['R'];
+				$newprop['BORDER-BOTTOM-WIDTH'] = $e['B'];
+				$newprop['BORDER-LEFT-WIDTH'] = $e['L'];
+			}
+		} elseif ($key === 'BORDER-COLOR') {
+			$e = $this->expandShorthandProperty($value);
+			if (!empty($e)) {
+				$newprop['BORDER-TOP-COLOR'] = $e['T'];
+				$newprop['BORDER-RIGHT-COLOR'] = $e['R'];
+				$newprop['BORDER-BOTTOM-COLOR'] = $e['B'];
+				$newprop['BORDER-LEFT-COLOR'] = $e['L'];
+			}
+		} elseif ($key === 'BORDER-SPACING') {
+			$prop = preg_split('/\s+/', trim($value));
+			if (count($prop) === 1) {
+				$newprop['BORDER-SPACING-H'] = $prop[0];
+				$newprop['BORDER-SPACING-V'] = $prop[0];
+			} elseif (count($prop) === 2) {
+				$newprop['BORDER-SPACING-H'] = $prop[0];
+				$newprop['BORDER-SPACING-V'] = $prop[1];
+			}
+		}
+	}
+
+	/**
 	 * Process and expand CSS shorthand properties.
 	 *
 	 * Takes an array of CSS properties and expands shorthand properties
@@ -1122,48 +1168,8 @@ class CssManager
 
 			} elseif (in_array($k, ['BORDER', 'BORDER-TOP', 'BORDER-RIGHT', 'BORDER-BOTTOM', 'BORDER-LEFT'], true)) {
 				$this->processBorderProperty($k, $v, $newprop);
-			} elseif ($k === 'BORDER-STYLE') {
-
-				$e = $this->expandShorthandProperty($v);
-
-				if (!empty($e)) {
-					$newprop['BORDER-TOP-STYLE'] = $e['T'];
-					$newprop['BORDER-RIGHT-STYLE'] = $e['R'];
-					$newprop['BORDER-BOTTOM-STYLE'] = $e['B'];
-					$newprop['BORDER-LEFT-STYLE'] = $e['L'];
-				}
-
-			} elseif ($k === 'BORDER-WIDTH') {
-
-				$e = $this->expandShorthandProperty($v);
-				if (!empty($e)) {
-					$newprop['BORDER-TOP-WIDTH'] = $e['T'];
-					$newprop['BORDER-RIGHT-WIDTH'] = $e['R'];
-					$newprop['BORDER-BOTTOM-WIDTH'] = $e['B'];
-					$newprop['BORDER-LEFT-WIDTH'] = $e['L'];
-				}
-
-			} elseif ($k === 'BORDER-COLOR') {
-
-				$e = $this->expandShorthandProperty($v);
-				if (!empty($e)) {
-					$newprop['BORDER-TOP-COLOR'] = $e['T'];
-					$newprop['BORDER-RIGHT-COLOR'] = $e['R'];
-					$newprop['BORDER-BOTTOM-COLOR'] = $e['B'];
-					$newprop['BORDER-LEFT-COLOR'] = $e['L'];
-				}
-
-			} elseif ($k === 'BORDER-SPACING') {
-
-				$prop = preg_split('/\s+/', trim($v));
-				if (count($prop) == 1) {
-					$newprop['BORDER-SPACING-H'] = $prop[0];
-					$newprop['BORDER-SPACING-V'] = $prop[0];
-				} elseif (count($prop) == 2) {
-					$newprop['BORDER-SPACING-H'] = $prop[0];
-					$newprop['BORDER-SPACING-V'] = $prop[1];
-				}
-
+			} elseif (in_array($k, ['BORDER-STYLE', 'BORDER-WIDTH', 'BORDER-COLOR', 'BORDER-SPACING'], true)) {
+				$this->processBorderShorthandProperty($k, $v, $newprop);
 			} elseif ($k === 'TEXT-OUTLINE') {
 				$this->processTextOutlineProperty($v, $newprop);
 
