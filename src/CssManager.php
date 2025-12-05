@@ -195,7 +195,6 @@ class CssManager
 			if ($CSSextblock) {
 				// look for embedded @import stylesheets in other stylesheets
 				// and fix url paths (including background-images) relative to stylesheet
-				// $regexpem = '/@import url\([\'\"]{0,1}(.*?\.css)[\'\"]{0,1}\)/si';
 				$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
 				$xem = preg_match_all($regexpem, $CSSextblock, $cxtem);
 				$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
@@ -207,20 +206,7 @@ class CssManager
 						$CSSext[] = $cxtembedded;
 					}
 				}
-				$regexpem = '/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si';
-				$xem = preg_match_all($regexpem, $CSSextblock, $cxtem);
-				if ($xem) {
-					$count_cxtem = count($cxtem[0]);
-					for ($i = 0; $i < $count_cxtem; $i++) {
-						// path is relative to original stylesheet!!
-						$embedded = $cxtem[2][$i];
-						if (!preg_match('/^data:image/i', $embedded)) { // mPDF 5.5.13
-							$this->mpdf->GetFullPath($embedded, $cssBasePath);
-							$CSSextblock = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $embedded . $cxtem[3][$i]), $CSSextblock);
-						}
-					}
-				}
-				$CSSstr .= ' ' . $CSSextblock;
+				$CSSstr .= ' ' . $this->resolveBackgroundUrls($CSSextblock, $cssBasePath);
 			}
 			$match--;
 			$ind++;
@@ -230,20 +216,7 @@ class CssManager
 		$regexp = '/<style.*?>(.*?)<\/style>/si';
 		$match = preg_match_all($regexp, $html, $CSSblock);
 		if ($match) {
-			$tmpCSSstr = implode(' ', $CSSblock[1]);
-			$regexpem = '/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si';
-			$xem = preg_match_all($regexpem, $tmpCSSstr, $cxtem);
-			if ($xem) {
-				$count_cxtem = count($cxtem[0]);
-				for ($i = 0; $i < $count_cxtem; $i++) {
-					$embedded = $cxtem[2][$i];
-					if (!preg_match('/^data:image/i', $embedded)) { // mPDF 5.5.13
-						$this->mpdf->GetFullPath($embedded);
-						$tmpCSSstr = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $embedded . $cxtem[3][$i]), $tmpCSSstr);
-					}
-				}
-			}
-			$CSSstr .= ' ' . $tmpCSSstr;
+			$CSSstr .= ' ' . $this->resolveBackgroundUrls(implode(' ', $CSSblock[1]));
 		}
 
 		// Remove comments
@@ -476,6 +449,37 @@ class CssManager
 		$html = preg_replace($regexp, '', $html);
 
 		return $html;
+	}
+
+	/**
+	 * Resolve background image URLs in CSS.
+	 *
+	 * Converts relative URLs to absolute paths using GetFullPath.
+	 * Skips data URIs which are already absolute.
+	 *
+	 * @param string $cssStr CSS string potentially containing background URLs
+	 * @param string|null $basePath Optional base path for resolving relative URLs
+	 * @return string CSS string with resolved URLs
+	 */
+	protected function resolveBackgroundUrls($cssStr, $basePath = null)
+	{
+		$regexpem = '/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si';
+		$xem = preg_match_all($regexpem, $cssStr, $cxtem);
+		if ($xem) {
+			$count_cxtem = count($cxtem[0]);
+			for ($i = 0; $i < $count_cxtem; $i++) {
+				$embedded = $cxtem[2][$i];
+				if (!preg_match('/^data:image/i', $embedded)) {
+					if ($basePath !== null) {
+						$this->mpdf->GetFullPath($embedded, $basePath);
+					} else {
+						$this->mpdf->GetFullPath($embedded);
+					}
+					$cssStr = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $embedded . $cxtem[3][$i]), $cssStr);
+				}
+			}
+		}
+		return $cssStr;
 	}
 
 	/**
