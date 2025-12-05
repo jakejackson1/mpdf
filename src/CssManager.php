@@ -181,203 +181,17 @@ class CssManager
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 		$CSSstr = $this->processUrlsInCss($CSSstr);
 
-		//@TODO refactor
 		if ($CSSstr) {
-
-			$classproperties = []; // mPDF 6
 			preg_match_all('/(.*?)\{(.*?)\}/', $CSSstr, $styles);
 			$styles_count = count($styles[1]);
 			for ($i = 0; $i < $styles_count; $i++) {
-
-				// SET array e.g. $classproperties['COLOR'] = '#ffffff';
 				$stylestr = trim($styles[2][$i]);
-				$stylearr = explode(';', $stylestr);
-
-				foreach ($stylearr as $sta) {
-					if (trim($sta)) {
-						// Changed to allow style="background: url('http://www.bpm1.com/bg.jpg')"
-						$tmp = explode(':', $sta, 2);
-						$property = $tmp[0];
-						if (isset($tmp[1])) {
-							$value = $tmp[1];
-						} else {
-							$value = '';
-						}
-						$value = str_replace('%ZZ', ';', $value); // mPDF 5.7.4 URLs
-						$property = trim($property);
-						$value = preg_replace('/\s*!important/i', '', $value);
-						$value = trim($value);
-						if ($property && ($value || $value === '0')) {
-							// Ignores -webkit-gradient so doesn't override -moz-
-							if ((strtoupper($property) === 'BACKGROUND-IMAGE' || strtoupper($property) === 'BACKGROUND') && false !== stripos($value, '-webkit-gradient')) {
-								continue;
-							}
-							$classproperties[strtoupper($property)] = $value;
-						}
-					}
-				}
-
-				$classproperties = $this->fixCSS($classproperties);
+				$classproperties = $this->parseCSSProperties($stylestr);
 				$tagstr = strtoupper(trim($styles[1][$i]));
 				$tagarr = explode(',', $tagstr);
-				$pageselectors = false; // used to turn on $this->mpdf->mirrorMargins
-
 				foreach ($tagarr as $tg) {
-
-					if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $tg, $m)) {
-						$tg = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $tg);
-					}
-
-					$tags = preg_split('/\s+/', trim($tg));
-					$level = count($tags);
-					$t = '';
-					$t2 = '';
-					$t3 = '';
-
-					if (trim($tags[0]) === '@PAGE') {
-
-						if (isset($tags[0])) {
-							$t = trim($tags[0]);
-						}
-
-						if (isset($tags[1])) {
-							$t2 = trim($tags[1]);
-						}
-
-						if (isset($tags[2])) {
-							$t3 = trim($tags[2]);
-						}
-
-						$tag = '';
-						if ($level === 1) {
-							$tag = $t;
-						} elseif ($level === 2 && preg_match('/^[:](.*)$/', $t2, $m)) {
-							$tag = $t . '>>PSEUDO>>' . $m[1];
-							if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
-								$pageselectors = true;
-							} // used to turn on $this->mpdf->mirrorMargins
-						} elseif ($level === 2) {
-							$tag = $t . '>>NAMED>>' . $t2;
-						} elseif ($level === 3 && preg_match('/^[:](.*)$/', $t3, $m)) {
-							$tag = $t . '>>NAMED>>' . $t2 . '>>PSEUDO>>' . $m[1];
-							if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
-								$pageselectors = true;
-							} // used to turn on $this->mpdf->mirrorMargins
-						}
-
-						if (isset($this->CSS[$tag]) && $tag) {
-							$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
-						} elseif ($tag) {
-							$this->CSS[$tag] = $classproperties;
-						}
-
-					} elseif ($level === 1) {  // e.g. p or .class or #id or p.class or p#id
-
-						if (isset($tags[0])) {
-							$t = trim($tags[0]);
-						}
-
-						if ($t) {
-
-							$tag = '';
-
-							if (preg_match('/^[.](.*)$/', $t, $m)) {
-								$classes = explode('.', $m[1]);
-								sort($classes);
-								$tag = 'CLASS>>' . join('.', $classes);
-							} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
-								$tag = 'ID>>' . $m[1];
-							} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-								$tag = 'LANG>>' . strtolower($m[1]);
-							} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-								$tag = 'LANG>>' . strtolower($m[1]);
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-								$classes = explode('.', $m[2]);
-								sort($classes);
-								$tag = $m[1] . '>>CLASS>>' . join('.', $classes);
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
-								$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
-								$tag = $m[1] . '>>ID>>' . $m[2];
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-								$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) {  // mPDF 6  Special case for lang as attribute selector
-								$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-							} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
-								$tag = $t;
-							}
-
-							if (isset($this->CSS[$tag]) && $tag) {
-								$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
-							} elseif ($tag) {
-								$this->CSS[$tag] = $classproperties;
-							}
-						}
-
-					} else {
-
-						$tmp = [];
-
-						for ($n = 0; $n < $level; $n++) {
-
-							$tag = '';
-
-							if (isset($tags[$n])) {
-								$t = trim($tags[$n]);
-							} else {
-								$t = '';
-							}
-
-							if ($t) {
-
-								if (preg_match('/^[.](.*)$/', $t, $m)) {
-									$classes = explode('.', $m[1]);
-									sort($classes);
-									$tag = 'CLASS>>' . join('.', $classes);
-								} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
-									$tag = 'ID>>' . $m[1];
-								} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-									$tag = 'LANG>>' . strtolower($m[1]);
-								} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-									$tag = 'LANG>>' . strtolower($m[1]);
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-									$classes = explode('.', $m[2]);
-									sort($classes);
-									$tag = $m[1] . '>>CLASS>>' . join('.', $classes);
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
-									$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
-									$tag = $m[1] . '>>ID>>' . $m[2];
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-									$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-									$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-								} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
-									$tag = $t;
-								}
-
-								if ($tag) {
-									$tmp[] = $tag;
-								} else {
-									break;
-								}
-							}
-						}
-
-						if ($tag) {
-							$x = &$this->cascadeCSS;
-							foreach ($tmp as $tp) {
-								$x = &$x[$tp];
-							}
-							$x = $this->array_merge_recursive_unique($x, $classproperties);
-							$x['depth'] = $level;
-						}
-					}
+					$this->processCSSSelector($tg, $classproperties);
 				}
-				if ($pageselectors) {
-					$this->mpdf->mirrorMargins = true;
-				}
-				$classproperties = [];
 			}
 		}
 
@@ -386,6 +200,232 @@ class CssManager
 		$html = preg_replace($regexp, '', $html);
 
 		return $html;
+	}
+
+	/**
+	 * Process a CSS selector.
+	 *
+	 * Delegates processing to specific methods based on the selector type
+	 * (@page, simple, or cascaded).
+	 *
+	 * @param string $tg Selector string
+	 * @param array $classproperties CSS properties
+	 * @return void
+	 */
+	protected function processCSSSelector($tg, $classproperties)
+	{
+		if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $tg, $m)) {
+			$tg = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $tg);
+		}
+
+		$tags = preg_split('/\s+/', trim($tg));
+		$level = count($tags);
+		if (trim($tags[0]) === '@PAGE') {
+			$this->processPageSelector($tags, $classproperties);
+		} elseif ($level === 1) {  // e.g. p or .class or #id or p.class or p#id
+			$this->processSimpleSelector($tags, $classproperties);
+		} else {
+			$this->processCascadedSelector($tags, $classproperties);
+		}
+	}
+
+	/**
+	 * Process @PAGE selector.
+	 *
+	 * @param array $tags Selector tags array
+	 * @param array $classproperties CSS properties
+	 * @return void
+	 */
+	protected function processPageSelector($tags, $classproperties)
+	{
+		$level = count($tags);
+		$t = '';
+		$t2 = '';
+		$t3 = '';
+
+		if (isset($tags[0])) {
+			$t = trim($tags[0]);
+		}
+
+		if (isset($tags[1])) {
+			$t2 = trim($tags[1]);
+		}
+
+		if (isset($tags[2])) {
+			$t3 = trim($tags[2]);
+		}
+
+		$tag = '';
+		if ($level === 1) {
+			$tag = $t;
+		} elseif ($level === 2 && preg_match('/^[:](.*)$/', $t2, $m)) {
+			$tag = $t . '>>PSEUDO>>' . $m[1];
+			if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
+				$this->mpdf->mirrorMargins = true;
+			}
+		} elseif ($level === 2) {
+			$tag = $t . '>>NAMED>>' . $t2;
+		} elseif ($level === 3 && preg_match('/^[:](.*)$/', $t3, $m)) {
+			$tag = $t . '>>NAMED>>' . $t2 . '>>PSEUDO>>' . $m[1];
+			if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
+				$this->mpdf->mirrorMargins = true;
+			}
+		}
+
+		if (isset($this->CSS[$tag]) && $tag) {
+			$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+		} elseif ($tag) {
+			$this->CSS[$tag] = $classproperties;
+		}
+	}
+
+	/**
+	 * Process simple selector (depth 1).
+	 *
+	 * @param array $tags Selector tags array
+	 * @param array $classproperties CSS properties
+	 * @return void
+	 */
+	protected function processSimpleSelector($tags, $classproperties)
+	{
+		$t = isset($tags[0]) ? trim($tags[0]) : '';
+		if (empty($t)) {
+			return;
+		}
+
+		$tag = '';
+		if (preg_match('/^[.](.*)$/', $t, $m)) {
+			$classes = explode('.', $m[1]);
+			sort($classes);
+			$tag = 'CLASS>>' . implode('.', $classes);
+		} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
+			$tag = 'ID>>' . $m[1];
+		} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
+			$tag = 'LANG>>' . strtolower($m[1]);
+		} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
+			$tag = 'LANG>>' . strtolower($m[1]);
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
+			$classes = explode('.', $m[2]);
+			sort($classes);
+			$tag = $m[1] . '>>CLASS>>' . implode('.', $classes);
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
+			$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
+			$tag = $m[1] . '>>ID>>' . $m[2];
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
+			$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) {  // mPDF 6  Special case for lang as attribute selector
+			$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
+		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
+			$tag = $t;
+		}
+
+		if (isset($this->CSS[$tag]) && $tag) {
+			$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+		} elseif ($tag) {
+			$this->CSS[$tag] = $classproperties;
+		}
+	}
+
+	/**
+	 * Process cascaded selector (depth > 1).
+	 *
+	 * @param array $tags Selector tags array
+	 * @param array $classproperties CSS properties
+	 * @return void
+	 */
+	protected function processCascadedSelector($tags, $classproperties)
+	{
+		$tmp = [];
+		$level = count($tags);
+
+		for ($n = 0; $n < $level; $n++) {
+			$tag = '';
+			$t = isset($tags[$n]) ? trim($tags[$n]) : '';
+			if (empty($t)) {
+				continue;
+			}
+
+			if (preg_match('/^[.](.*)$/', $t, $m)) {
+				$classes = explode('.', $m[1]);
+				sort($classes);
+				$tag = 'CLASS>>' . join('.', $classes);
+			} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
+				$tag = 'ID>>' . $m[1];
+			} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
+				$tag = 'LANG>>' . strtolower($m[1]);
+			} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
+				$tag = 'LANG>>' . strtolower($m[1]);
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
+				$classes = explode('.', $m[2]);
+				sort($classes);
+				$tag = $m[1] . '>>CLASS>>' . join('.', $classes);
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
+				$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
+				$tag = $m[1] . '>>ID>>' . $m[2];
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
+				$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
+				$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
+			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
+				$tag = $t;
+			}
+
+			if (!$tag) {
+				break;
+			}
+
+			$tmp[] = $tag;
+		}
+
+		if (!empty($tag)) {
+			$x = &$this->cascadeCSS;
+			foreach ($tmp as $tp) {
+				$x = &$x[$tp];
+			}
+
+			$x = $this->array_merge_recursive_unique($x, $classproperties);
+			$x['depth'] = $level;
+		}
+	}
+
+	/**
+	 * Parse CSS property string into an array.
+	 *
+	 * @param string $stylestr CSS style string (e.g. "color: red; font-size: 12px")
+	 * @return array Associative array of CSS properties
+	 */
+	protected function parseCSSProperties($stylestr)
+	{
+		$classproperties = [];
+		$stylearr = explode(';', $stylestr);
+
+		foreach ($stylearr as $sta) {
+			if (trim($sta)) {
+				// Changed to allow style="background: url('http://www.bpm1.com/bg.jpg')"
+				$tmp = explode(':', $sta, 2);
+				$property = $tmp[0];
+				if (isset($tmp[1])) {
+					$value = $tmp[1];
+				} else {
+					$value = '';
+				}
+				$value = str_replace('%ZZ', ';', $value); // mPDF 5.7.4 URLs
+				$property = trim($property);
+				$value = preg_replace('/\s*!important/i', '', $value);
+				$value = trim($value);
+				if ($property && ($value || $value === '0')) {
+					// Ignores -webkit-gradient so doesn't override -moz-
+					if ((strtoupper($property) === 'BACKGROUND-IMAGE' || strtoupper($property) === 'BACKGROUND') && false !== stripos($value, '-webkit-gradient')) {
+						continue;
+					}
+					$classproperties[strtoupper($property)] = $value;
+				}
+			}
+		}
+
+		return $this->fixCSS($classproperties);
 	}
 
 	/**
