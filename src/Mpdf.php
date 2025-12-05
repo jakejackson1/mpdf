@@ -332,10 +332,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $lastblocklevelchange;
 	var $nestedtablejustfinished;
 	var $linebreakjustfinished;
-	var $cell_border_dominance_L;
-	var $cell_border_dominance_R;
-	var $cell_border_dominance_T;
-	var $cell_border_dominance_B;
 	var $table_keep_together;
 	var $plainCell_properties;
 	var $shrin_k1;

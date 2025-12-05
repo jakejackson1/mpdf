@@ -63,22 +63,22 @@ class CssManager
 	/**
 	 * @var int|null Border dominance level for bottom cell borders
 	 */
-	var $cell_border_dominance_B;
+	public $cell_border_dominance_B;
 
 	/**
 	 * @var int|null Border dominance level for left cell borders
 	 */
-	var $cell_border_dominance_L;
+	public $cell_border_dominance_L;
 
 	/**
 	 * @var int|null Border dominance level for right cell borders
 	 */
-	var $cell_border_dominance_R;
+	public $cell_border_dominance_R;
 
 	/**
 	 * @var int|null Border dominance level for top cell borders
 	 */
-	var $cell_border_dominance_T;
+	public $cell_border_dominance_T;
 
 	/**
 	 * CssManager constructor.
