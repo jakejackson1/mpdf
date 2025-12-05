@@ -492,35 +492,35 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testExpand24_WithOneValue()
 	{
-		$result   = $this->cssManager->expand24('10px');
+		$result   = $this->cssManager->expandShorthandProperty('10px');
 		$expected = ['T' => '10px', 'R' => '10px', 'B' => '10px', 'L' => '10px'];
 		$this->assertEquals($expected, $result);
 	}
 
 	public function testExpand24_WithTwoValues()
 	{
-		$result   = $this->cssManager->expand24('10px 20px');
+		$result   = $this->cssManager->expandShorthandProperty('10px 20px');
 		$expected = ['T' => '10px', 'R' => '20px', 'B' => '10px', 'L' => '20px'];
 		$this->assertEquals($expected, $result);
 	}
 
 	public function testExpand24_WithThreeValues()
 	{
-		$result   = $this->cssManager->expand24('10px 20px 30px');
+		$result   = $this->cssManager->expandShorthandProperty('10px 20px 30px');
 		$expected = ['T' => '10px', 'R' => '20px', 'B' => '30px', 'L' => '20px'];
 		$this->assertEquals($expected, $result);
 	}
 
 	public function testExpand24_WithFourValues()
 	{
-		$result   = $this->cssManager->expand24('10px 20px 30px 40px');
+		$result   = $this->cssManager->expandShorthandProperty('10px 20px 30px 40px');
 		$expected = ['T' => '10px', 'R' => '20px', 'B' => '30px', 'L' => '40px'];
 		$this->assertEquals($expected, $result);
 	}
 
 	public function testExpand24_WithMoreThanFourValues_IgnoresExtra()
 	{
-		$result   = $this->cssManager->expand24('10px 20px 30px 40px 50px');
+		$result   = $this->cssManager->expandShorthandProperty('10px 20px 30px 40px 50px');
 		$expected = ['T' => '10px', 'R' => '20px', 'B' => '30px', 'L' => '40px'];
 		$this->assertEquals($expected, $result);
 	}

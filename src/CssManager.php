@@ -954,7 +954,7 @@ class CssManager
 
 			} elseif ($k === 'MARGIN') {
 
-				$tmp = $this->expand24($v);
+				$tmp = $this->expandShorthandProperty($v);
 
 				$newprop['MARGIN-TOP'] = $tmp['T'];
 				$newprop['MARGIN-RIGHT'] = $tmp['R'];
@@ -992,7 +992,7 @@ class CssManager
 
 			} elseif ($k === 'PADDING') {
 
-				$tmp = $this->expand24($v);
+				$tmp = $this->expandShorthandProperty($v);
 
 				$newprop['PADDING-TOP'] = $tmp['T'];
 				$newprop['PADDING-RIGHT'] = $tmp['R'];
@@ -1003,7 +1003,7 @@ class CssManager
 				$this->processBorderProperty($k, $v, $newprop);
 			} elseif ($k === 'BORDER-STYLE') {
 
-				$e = $this->expand24($v);
+				$e = $this->expandShorthandProperty($v);
 
 				if (!empty($e)) {
 					$newprop['BORDER-TOP-STYLE'] = $e['T'];
@@ -1014,7 +1014,7 @@ class CssManager
 
 			} elseif ($k === 'BORDER-WIDTH') {
 
-				$e = $this->expand24($v);
+				$e = $this->expandShorthandProperty($v);
 				if (!empty($e)) {
 					$newprop['BORDER-TOP-WIDTH'] = $e['T'];
 					$newprop['BORDER-RIGHT-WIDTH'] = $e['R'];
@@ -1024,7 +1024,7 @@ class CssManager
 
 			} elseif ($k === 'BORDER-COLOR') {
 
-				$e = $this->expand24($v);
+				$e = $this->expandShorthandProperty($v);
 				if (!empty($e)) {
 					$newprop['BORDER-TOP-COLOR'] = $e['T'];
 					$newprop['BORDER-RIGHT-COLOR'] = $e['R'];
@@ -1409,32 +1409,26 @@ class CssManager
 	 * the standard CSS clockwise pattern (top, right, bottom, left).
 	 * Used for margin, padding, border-width, border-style, and border-color.
 	 *
-	 * @param string $mp Property value(s) separated by spaces
+	 * @param string $value Property value(s) separated by spaces
 	 * @return array Associative array with keys 'T', 'R', 'B', 'L'
 	 */
-	function expand24($mp)
+	function expandShorthandProperty($value)
 	{
-		$prop = preg_split('/\s+/', trim($mp));
-		$prop_count = count($prop);
+		$property = preg_split('/\s+/', trim($value));
 
-		if ($prop_count === 1) {
-			return ['T' => $prop[0], 'R' => $prop[0], 'B' => $prop[0], 'L' => $prop[0]];
+		switch (count($property)) {
+			case 0:
+				return [];
+			case 1:
+				return ['T' => $property[0], 'R' => $property[0], 'B' => $property[0], 'L' => $property[0]];
+			case 2:
+				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[0], 'L' => $property[1]];
+			case 3:
+				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[2], 'L' => $property[1]];
+			default:
+				// Ignore rule parts after first 4 values (most likely !important)
+				return ['T' => $property[0], 'R' => $property[1], 'B' => $property[2], 'L' => $property[3]];
 		}
-
-		if ($prop_count === 2) {
-			return ['T' => $prop[0], 'R' => $prop[1], 'B' => $prop[0], 'L' => $prop[1]];
-		}
-
-		if ($prop_count === 3) {
-			return ['T' => $prop[0], 'R' => $prop[1], 'B' => $prop[2], 'L' => $prop[1]];
-		}
-
-		// Ignore rule parts after first 4 values (most likely !important)
-		if ($prop_count >= 4) {
-			return ['T' => $prop[0], 'R' => $prop[1], 'B' => $prop[2], 'L' => $prop[3]];
-		}
-
-		return [];
 	}
 
 	/* -- BORDER-RADIUS -- */
