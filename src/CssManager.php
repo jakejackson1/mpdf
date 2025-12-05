@@ -1042,33 +1042,7 @@ class CssManager
 				$newprop['MARGIN-LEFT'] = $tmp['L'];
 
 			} elseif ($k === 'BORDER-RADIUS' || $k === 'BORDER-TOP-LEFT-RADIUS' || $k === 'BORDER-TOP-RIGHT-RADIUS' || $k === 'BORDER-BOTTOM-LEFT-RADIUS' || $k === 'BORDER-BOTTOM-RIGHT-RADIUS') {
-
-				$tmp = $this->border_radius_expand($v, $k);
-
-				if (isset($tmp['TL-H'])) {
-					$newprop['BORDER-TOP-LEFT-RADIUS-H'] = $tmp['TL-H'];
-				}
-				if (isset($tmp['TL-V'])) {
-					$newprop['BORDER-TOP-LEFT-RADIUS-V'] = $tmp['TL-V'];
-				}
-				if (isset($tmp['TR-H'])) {
-					$newprop['BORDER-TOP-RIGHT-RADIUS-H'] = $tmp['TR-H'];
-				}
-				if (isset($tmp['TR-V'])) {
-					$newprop['BORDER-TOP-RIGHT-RADIUS-V'] = $tmp['TR-V'];
-				}
-				if (isset($tmp['BL-H'])) {
-					$newprop['BORDER-BOTTOM-LEFT-RADIUS-H'] = $tmp['BL-H'];
-				}
-				if (isset($tmp['BL-V'])) {
-					$newprop['BORDER-BOTTOM-LEFT-RADIUS-V'] = $tmp['BL-V'];
-				}
-				if (isset($tmp['BR-H'])) {
-					$newprop['BORDER-BOTTOM-RIGHT-RADIUS-H'] = $tmp['BR-H'];
-				}
-				if (isset($tmp['BR-V'])) {
-					$newprop['BORDER-BOTTOM-RIGHT-RADIUS-V'] = $tmp['BR-V'];
-				}
+				$this->processBorderRadiusProperty($k, $v, $newprop);
 
 			} elseif ($k === 'PADDING') {
 
@@ -1124,179 +1098,22 @@ class CssManager
 				}
 
 			} elseif ($k === 'TEXT-OUTLINE') {
+				$this->processTextOutlineProperty($v, $newprop);
 
-				$prop = preg_split('/\s+/', trim($v));
+			} elseif ($k === 'SIZE' || $k === 'SHEET-SIZE') {
+				$this->processPageSizeProperty($k, $v, $newprop);
 
-				if (strtolower(trim($v)) === 'none') {
-					$newprop['TEXT-OUTLINE'] = 'none';
-				} elseif (count($prop) == 2) {
-					$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
-					$newprop['TEXT-OUTLINE-COLOR'] = $prop[1];
-				} elseif (count($prop) == 3) {
-					$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
-					$newprop['TEXT-OUTLINE-COLOR'] = $prop[2];
-				}
-
-			} elseif ($k === 'SIZE') {
-
-				$prop = preg_split('/\s+/', trim($v));
-
-				if (preg_match('/(auto|portrait|landscape)/', $prop[0])) {
-					$newprop['SIZE'] = strtoupper($prop[0]);
-				} elseif (count($prop) == 1) {
-					$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
-					$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[0]);
-				} elseif (count($prop) == 2) {
-					$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
-					$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[1]);
-				}
-
-			} elseif ($k === 'SHEET-SIZE') {
-
-				$prop = preg_split('/\s+/', trim($v));
-
-				if (count($prop) == 2) {
-
-					$newprop['SHEET-SIZE'] = [$this->sizeConverter->convert($prop[0]), $this->sizeConverter->convert($prop[1])];
-
-				} else {
-
-					if (preg_match('/([0-9a-zA-Z]*)-L/i', $v, $m)) { // e.g. A4-L = A$ landscape
-						$ft = PageFormat::getSizeFromName($m[1]);
-						$format = [$ft[1], $ft[0]];
-					} else {
-						$format = PageFormat::getSizeFromName($v);
-					}
-					if ($format) {
-						$newprop['SHEET-SIZE'] = [$format[0] / Mpdf::SCALE, $format[1] / Mpdf::SCALE];
-					}
-
-				}
-
-			} elseif ($k === 'BACKGROUND') {
-
-				$bg = $this->parseCSSbackground($v);
-
-				if ($bg['c']) {
-					$newprop['BACKGROUND-COLOR'] = $bg['c'];
-				} else {
-					$newprop['BACKGROUND-COLOR'] = 'transparent';
-				}
-
-				if ($bg['i']) {
-					$newprop['BACKGROUND-IMAGE'] = $bg['i'];
-					if ($bg['r']) {
-						$newprop['BACKGROUND-REPEAT'] = $bg['r'];
-					}
-					if ($bg['p']) {
-						$newprop['BACKGROUND-POSITION'] = $bg['p'];
-					}
-				} else {
-					$newprop['BACKGROUND-IMAGE'] = '';
-				}
-
-			} elseif ($k === 'BACKGROUND-IMAGE') {
-
-				if (preg_match('/(-moz-)*(repeating-)*(linear|radial)-gradient\(.*\)/i', $v, $m)) {
-					$newprop['BACKGROUND-IMAGE'] = $m[0];
-					continue;
-				}
-
-				if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
-					$newprop['BACKGROUND-IMAGE'] = $m[1];
-				} elseif (strtolower($v) === 'none') {
-					$newprop['BACKGROUND-IMAGE'] = '';
-				}
-
-			} elseif ($k === 'BACKGROUND-REPEAT') {
-
-				if (preg_match('/(repeat-x|repeat-y|no-repeat|repeat)/i', $v, $m)) {
-					$newprop['BACKGROUND-REPEAT'] = strtolower($m[1]);
-				}
-
-			} elseif ($k === 'BACKGROUND-POSITION') {
-
-				$s = $v;
-				$bits = preg_split('/\s+/', trim($s));
-
-				$normalizedPosition = $this->normalizeBackgroundPosition($bits);
-				if ($normalizedPosition !== false) {
-					$newprop['BACKGROUND-POSITION'] = $normalizedPosition;
-				}
+			} elseif (in_array($k, ['BACKGROUND', 'BACKGROUND-IMAGE', 'BACKGROUND-REPEAT', 'BACKGROUND-POSITION'], true)) {
+				$this->processBackgroundProperty($k, $v, $newprop);
 
 			} elseif ($k === 'IMAGE-ORIENTATION') {
-
-				if (preg_match('/([\-]*[0-9\.]+)(deg|grad|rad)/i', $v, $m)) {
-
-					$angle = $m[1] + 0;
-
-					if (strtolower($m[2]) === 'grad') {
-						$angle *= (360 / 400);
-					} elseif (strtolower($m[2]) === 'rad') {
-						$angle = rad2deg($angle);
-					}
-
-					while ($angle < 0) {
-						$angle += 360;
-					}
-
-					$angle %= 360;
-					$angle /= 90;
-					$angle = round($angle) * 90;
-
-					$newprop['IMAGE-ORIENTATION'] = $angle;
-				}
+				$this->processImageOrientationProperty($v, $newprop);
 
 			} elseif ($k === 'TEXT-ALIGN') {
-
-				if (preg_match('/["\'](.){1}["\']/i', $v, $m)) {
-
-					$d = array_search($m[1], $this->mpdf->decimal_align);
-
-					if ($d !== false) {
-						$newprop['TEXT-ALIGN'] = $d;
-					}
-					if (preg_match('/(center|left|right)/i', $v, $m)) {
-						$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
-					} else {
-						$newprop['TEXT-ALIGN'] .= 'R';
-					} // default = R
-
-				} elseif (preg_match('/["\'](\\\[a-fA-F0-9]{1,6})["\']/i', $v, $m)) {
-
-					$utf8 = UtfString::codeHex2utf(substr($m[1], 1, 6));
-					$d = array_search($utf8, $this->mpdf->decimal_align);
-
-					if ($d !== false) {
-						$newprop['TEXT-ALIGN'] = $d;
-					}
-
-					if (preg_match('/(center|left|right)/i', $v, $m)) {
-						$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
-					} else {
-						$newprop['TEXT-ALIGN'] .= 'R';
-					} // default = R
-
-				} else {
-					$newprop[$k] = $v;
-				}
+				$this->processTextAlignProperty($k, $v, $newprop);
 
 			} elseif ($k === 'LIST-STYLE') {
-
-				if (preg_match('/none/i', $v, $m)) {
-					$newprop['LIST-STYLE-TYPE'] = 'none';
-					$newprop['LIST-STYLE-IMAGE'] = 'none';
-				}
-
-				if (preg_match('/(lower-roman|upper-roman|lower-latin|lower-alpha|upper-latin|upper-alpha|decimal|disc|circle|square|arabic-indic|bengali|devanagari|gujarati|gurmukhi|kannada|malayalam|oriya|persian|tamil|telugu|thai|urdu|cambodian|khmer|lao|cjk-decimal|hebrew)/i', $v, $m)) {
-					$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
-				} elseif (preg_match('/U\+([a-fA-F0-9]+)/i', $v, $m)) {
-					$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
-				}
-
-				if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
-					$newprop['LIST-STYLE-IMAGE'] = strtolower(trim($m[1]));
-				}
+				$this->processListStyleProperty($v, $newprop);
 
 				if (preg_match('/(inside|outside)/i', $v, $m)) {
 					$newprop['LIST-STYLE-POSITION'] = strtolower(trim($m[1]));
@@ -2629,6 +2446,267 @@ class CssManager
 		if (!empty($attr['HSPACE'])) {
 			$p['MARGIN-LEFT'] = $attr['HSPACE'];
 			$p['MARGIN-RIGHT'] = $attr['HSPACE'];
+		}
+	}
+
+	/**
+	 * Process background related CSS properties.
+	 *
+	 * Handles BACKGROUND, BACKGROUND-IMAGE, BACKGROUND-REPEAT, and BACKGROUND-POSITION.
+	 *
+	 * @param string $k Property name
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processBackgroundProperty($k, $v, &$newprop)
+	{
+		if ($k === 'BACKGROUND') {
+			$bg = $this->parseCSSbackground($v);
+			if ($bg['c']) {
+				$newprop['BACKGROUND-COLOR'] = $bg['c'];
+			} else {
+				$newprop['BACKGROUND-COLOR'] = 'transparent';
+			}
+			if ($bg['i']) {
+				$newprop['BACKGROUND-IMAGE'] = $bg['i'];
+				if ($bg['r']) {
+					$newprop['BACKGROUND-REPEAT'] = $bg['r'];
+				}
+				if ($bg['p']) {
+					$newprop['BACKGROUND-POSITION'] = $bg['p'];
+				}
+			} else {
+				$newprop['BACKGROUND-IMAGE'] = '';
+			}
+		} elseif ($k === 'BACKGROUND-IMAGE') {
+			if (preg_match('/(-moz-)*(repeating-)*(linear|radial)-gradient\(.*\)/i', $v, $m)) {
+				$newprop['BACKGROUND-IMAGE'] = $m[0];
+				return;
+			}
+			if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
+				$newprop['BACKGROUND-IMAGE'] = $m[1];
+			} elseif (strtolower($v) === 'none') {
+				$newprop['BACKGROUND-IMAGE'] = '';
+			}
+		} elseif ($k === 'BACKGROUND-REPEAT') {
+			if (preg_match('/(repeat-x|repeat-y|no-repeat|repeat)/i', $v, $m)) {
+				$newprop['BACKGROUND-REPEAT'] = strtolower($m[1]);
+			}
+		} elseif ($k === 'BACKGROUND-POSITION') {
+			$s = $v;
+			$bits = preg_split('/\s+/', trim($s));
+			$normalizedPosition = $this->normalizeBackgroundPosition($bits);
+			if ($normalizedPosition !== false) {
+				$newprop['BACKGROUND-POSITION'] = $normalizedPosition;
+			}
+		}
+	}
+
+	/**
+	 * Process border radius CSS properties.
+	 *
+	 * Handles BORDER-RADIUS and individual corner radii.
+	 *
+	 * @param string $k Property name
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processBorderRadiusProperty($k, $v, &$newprop)
+	{
+		$tmp = $this->border_radius_expand($v, $k);
+
+		if (isset($tmp['TL-H'])) {
+			$newprop['BORDER-TOP-LEFT-RADIUS-H'] = $tmp['TL-H'];
+		}
+		if (isset($tmp['TL-V'])) {
+			$newprop['BORDER-TOP-LEFT-RADIUS-V'] = $tmp['TL-V'];
+		}
+		if (isset($tmp['TR-H'])) {
+			$newprop['BORDER-TOP-RIGHT-RADIUS-H'] = $tmp['TR-H'];
+		}
+		if (isset($tmp['TR-V'])) {
+			$newprop['BORDER-TOP-RIGHT-RADIUS-V'] = $tmp['TR-V'];
+		}
+		if (isset($tmp['BL-H'])) {
+			$newprop['BORDER-BOTTOM-LEFT-RADIUS-H'] = $tmp['BL-H'];
+		}
+		if (isset($tmp['BL-V'])) {
+			$newprop['BORDER-BOTTOM-LEFT-RADIUS-V'] = $tmp['BL-V'];
+		}
+		if (isset($tmp['BR-H'])) {
+			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-H'] = $tmp['BR-H'];
+		}
+		if (isset($tmp['BR-V'])) {
+			$newprop['BORDER-BOTTOM-RIGHT-RADIUS-V'] = $tmp['BR-V'];
+		}
+	}
+
+	/**
+	 * Process text outline CSS properties.
+	 *
+	 * Handles TEXT-OUTLINE shorthand.
+	 *
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processTextOutlineProperty($v, &$newprop)
+	{
+		$prop = preg_split('/\s+/', trim($v));
+
+		if (strtolower(trim($v)) === 'none') {
+			$newprop['TEXT-OUTLINE'] = 'none';
+		} elseif (count($prop) == 2) {
+			$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
+			$newprop['TEXT-OUTLINE-COLOR'] = $prop[1];
+		} elseif (count($prop) == 3) {
+			$newprop['TEXT-OUTLINE-WIDTH'] = $prop[0];
+			$newprop['TEXT-OUTLINE-COLOR'] = $prop[2];
+		}
+	}
+
+	/**
+	 * Process page size CSS properties.
+	 *
+	 * Handles SIZE and SHEET-SIZE properties.
+	 *
+	 * @param string $k Property name
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processPageSizeProperty($k, $v, &$newprop)
+	{
+		$prop = preg_split('/\s+/', trim($v));
+
+		if ($k === 'SIZE') {
+			if (preg_match('/(auto|portrait|landscape)/', $prop[0])) {
+				$newprop['SIZE'] = strtoupper($prop[0]);
+			} elseif (count($prop) == 1) {
+				$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
+				$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[0]);
+			} elseif (count($prop) == 2) {
+				$newprop['SIZE']['W'] = $this->sizeConverter->convert($prop[0]);
+				$newprop['SIZE']['H'] = $this->sizeConverter->convert($prop[1]);
+			}
+		} elseif ($k === 'SHEET-SIZE') {
+			if (count($prop) == 2) {
+				$newprop['SHEET-SIZE'] = [$this->sizeConverter->convert($prop[0]), $this->sizeConverter->convert($prop[1])];
+			} else {
+				if (preg_match('/([0-9a-zA-Z]*)-L/i', $v, $m)) { // e.g. A4-L = A$ landscape
+					$ft = PageFormat::getSizeFromName($m[1]);
+					$format = [$ft[1], $ft[0]];
+				} else {
+					$format = PageFormat::getSizeFromName($v);
+				}
+				if ($format) {
+					$newprop['SHEET-SIZE'] = [$format[0] / Mpdf::SCALE, $format[1] / Mpdf::SCALE];
+				}
+			}
+		}
+	}
+
+	/**
+	 * Process image orientation CSS properties.
+	 *
+	 * Handles IMAGE-ORIENTATION property.
+	 *
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processImageOrientationProperty($v, &$newprop)
+	{
+		if (preg_match('/([\-]*[0-9\.]+)(deg|grad|rad)/i', $v, $m)) {
+			$angle = $m[1] + 0;
+
+			if (strtolower($m[2]) === 'grad') {
+				$angle *= (360 / 400);
+			} elseif (strtolower($m[2]) === 'rad') {
+				$angle = rad2deg($angle);
+			}
+
+			while ($angle < 0) {
+				$angle += 360;
+			}
+
+			$angle %= 360;
+			$angle /= 90;
+			$angle = round($angle) * 90;
+
+			$newprop['IMAGE-ORIENTATION'] = $angle;
+		}
+	}
+
+	/**
+	 * Process text align CSS properties.
+	 *
+	 * Handles TEXT-ALIGN property including decimal alignment.
+	 *
+	 * @param string $k Property name
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processTextAlignProperty($k, $v, &$newprop)
+	{
+		if (preg_match('/["\'](.){1}["\']/i', $v, $m)) {
+			$d = array_search($m[1], $this->mpdf->decimal_align);
+
+			if ($d !== false) {
+				$newprop['TEXT-ALIGN'] = $d;
+			}
+			if (preg_match('/(center|left|right)/i', $v, $m)) {
+				$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
+			} else {
+				$newprop['TEXT-ALIGN'] .= 'R';
+			} // default = R
+
+		} elseif (preg_match('/["\'](\\\[a-fA-F0-9]{1,6})["\']/i', $v, $m)) {
+			$utf8 = UtfString::codeHex2utf(substr($m[1], 1, 6));
+			$d = array_search($utf8, $this->mpdf->decimal_align);
+
+			if ($d !== false) {
+				$newprop['TEXT-ALIGN'] = $d;
+			}
+
+			if (preg_match('/(center|left|right)/i', $v, $m)) {
+				$newprop['TEXT-ALIGN'] .= strtoupper(substr($m[1], 0, 1));
+			} else {
+				$newprop['TEXT-ALIGN'] .= 'R';
+			} // default = R
+
+		} else {
+			$newprop[$k] = $v;
+		}
+	}
+
+	/**
+	 * Process list style CSS properties.
+	 *
+	 * Handles LIST-STYLE property.
+	 *
+	 * @param string $v Property value
+	 * @param array $newprop Target properties array (passed by reference)
+	 * @return void
+	 */
+	protected function processListStyleProperty($v, &$newprop)
+	{
+		if (preg_match('/none/i', $v, $m)) {
+			$newprop['LIST-STYLE-TYPE'] = 'none';
+			$newprop['LIST-STYLE-IMAGE'] = 'none';
+		}
+
+		if (preg_match('/(lower-roman|upper-roman|lower-latin|lower-alpha|upper-latin|upper-alpha|decimal|disc|circle|square|arabic-indic|bengali|devanagari|gujarati|gurmukhi|kannada|malayalam|oriya|persian|tamil|telugu|thai|urdu|cambodian|khmer|lao|cjk-decimal|hebrew)/i', $v, $m)) {
+			$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
+		} elseif (preg_match('/U\+([a-fA-F0-9]+)/i', $v, $m)) {
+			$newprop['LIST-STYLE-TYPE'] = strtolower(trim($m[1]));
+		}
+
+		if (preg_match('/url\([\'\"]{0,1}(.*?)[\'\"]{0,1}\)/i', $v, $m)) {
+			$newprop['LIST-STYLE-IMAGE'] = strtolower(trim($m[1]));
 		}
 	}
 
