@@ -12,9 +12,6 @@ use Mpdf\Utils\UtfString;
 
 class CssManager
 {
-	// URL processing
-	const URL_TEMP_MARKER = '%ZZ';
-
 	/**
 	 * @var \Mpdf\Mpdf
 	 */
@@ -205,7 +202,7 @@ class CssManager
 						} else {
 							$value = '';
 						}
-						$value = str_replace(self::URL_TEMP_MARKER, ';', $value); // mPDF 5.7.4 URLs
+						$value = str_replace('%ZZ', ';', $value); // mPDF 5.7.4 URLs
 						$property = trim($property);
 						$value = preg_replace('/\s*!important/i', '', $value);
 						$value = trim($value);
@@ -589,13 +586,11 @@ class CssManager
 			return $css;
 		}
 
-		$tempMarker = self::URL_TEMP_MARKER;
-
 		// Process urls with double quotes
 		preg_match_all('/url\(\"(.*?)\"\)/', $css, $m);
 		$count_m = count($m[1]);
 		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
 			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
 		}
 
@@ -603,7 +598,7 @@ class CssManager
 		preg_match_all('/url\(\'(.*?)\'\)/', $css, $m);
 		$count_m = count($m[1]);
 		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
 			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
 		}
 
@@ -611,7 +606,7 @@ class CssManager
 		preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $css, $m);
 		$count_m = count($m[1]);
 		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', $tempMarker], $m[1][$i]);
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
 			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
 		}
 
@@ -704,7 +699,7 @@ class CssManager
 				continue;
 			}
 
-			$values[$i] = str_replace(self::URL_TEMP_MARKER, ';', $values[$i]); // mPDF 5.7.4 URLs
+			$values[$i] = str_replace('%ZZ', ';', $values[$i]); // mPDF 5.7.4 URLs
 			$classproperties[strtoupper($properties[$i])] = trim($values[$i]);
 		}
 
