@@ -1467,13 +1467,27 @@ class CssManager
 	 * @param string $k Property name (BORDER-RADIUS or specific corner)
 	 * @return array Array with keys like 'TL-H', 'TL-V', etc.
 	 */
-	protected function border_radius_expand($val, $k)
+	function border_radius_expand($val, $k)
 	{
 		if ($k === 'BORDER-RADIUS') {
 			return $this->parseBorderRadiusShorthand($val);
 		}
 
-		// Parse 2
+		return $this->parseBorderRadiusCorner($val, $k);
+	}
+
+	/**
+	 * Parse individual border-radius corner values.
+	 *
+	 * Helper method for border_radius_expand to parse values for a specific corner.
+	 *
+	 * @param string $val Border radius value(s)
+	 * @param string $k Property name (specific corner)
+	 * @return array Array with keys like 'TL-H', 'TL-V', etc.
+	 */
+	protected function parseBorderRadiusCorner($val, $k)
+	{
+		$b = [];
 		$prop = preg_split('/\s+/', trim($val));
 
 		if (count($prop) === 1) {
@@ -1487,7 +1501,6 @@ class CssManager
 			$h = $v = 0;
 		}
 
-		$b = [];
 		if ($k === 'BORDER-TOP-LEFT-RADIUS') {
 			$b['TL-H'] = $h;
 			$b['TL-V'] = $v;
@@ -1790,6 +1803,7 @@ class CssManager
 	 */
 	protected function mergeSideBorder(&$b, $side, $a)
 	{
+		// Merges $a['BORDER-TOP-STYLE'] to $b['BORDER-TOP'] etc.
 		$defaults = [
 			'WIDTH' => '0px',
 			'STYLE' => 'none',
@@ -1798,32 +1812,34 @@ class CssManager
 
 		$borderKey = 'BORDER-' . $side;
 		$currentBorder = isset($b[$borderKey]) ? trim($b[$borderKey]) : '';
-		
+
 		foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
 			$propertyKey = $borderKey . '-' . $el;
-			
-			if (isset($a[$propertyKey])) {
-				$value = trim($a[$propertyKey]);
-				
-				if ($currentBorder) {
-					// Update existing border value
-					if ($el === 'STYLE') {
-						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
-					} elseif ($el === 'WIDTH') {
-						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
-					} else { // COLOR
-						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
-					}
-					$currentBorder = $b[$borderKey]; // Update current border for next iteration
-				} else {
-					// Build new border from scratch with defaults
-					if (!isset($borderParts)) {
-						$borderParts = $defaults;
-					}
-					$borderParts[$el] = $value;
-					$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
-					$currentBorder = $b[$borderKey];
+			if (!isset($a[$propertyKey])) {
+				continue;
+			}
+
+			$value = trim($a[$propertyKey]);
+			if ($currentBorder) {
+				// Update existing border value
+				if ($el === 'STYLE') {
+					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
+				} elseif ($el === 'WIDTH') {
+					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
+				} else { // COLOR
+					$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
 				}
+
+				$currentBorder = $b[$borderKey]; // Update current border for next iteration
+			} else {
+				// Build new border from scratch with defaults
+				if (!isset($borderParts)) {
+					$borderParts = $defaults;
+				}
+
+				$borderParts[$el] = $value;
+				$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
+				$currentBorder = $b[$borderKey];
 			}
 		}
 	}
@@ -1841,13 +1857,6 @@ class CssManager
 	 */
 	function _mergeBorders(&$b, &$a)
 	{
-		// Merges $a['BORDER-TOP-STYLE'] to $b['BORDER-TOP'] etc.
-		$defaults = [
-			'WIDTH' => '0px',
-			'STYLE' => 'none',
-			'COLOR' => '#000000'
-		];
-		
 		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
 			$this->mergeSideBorder($b, $side, $a);
 		}
