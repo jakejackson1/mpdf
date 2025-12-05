@@ -544,62 +544,62 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixBorderStr_WithSingleStyle()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['solid']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['solid']);
 		$this->assertEquals('medium solid #000000', $result);
 	}
 
 	public function testFixBorderStr_WithSingleColor()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['#ff0000']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['#ff0000']);
 		// Real implementation parses color first, so order is: color style default-color
 		$this->assertEquals('#ff0000 none #000000', $result);
 	}
 
 	public function testFixBorderStr_WithSingleWidth()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['2px']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['2px']);
 		$this->assertEquals('2px none #000000', $result);
 	}
 
 	public function testFixBorderStr_WithWidthAndStyle()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['2px solid']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['2px solid']);
 		$this->assertEquals('2px solid #000000', $result);
 	}
 
 	public function testFixBorderStr_WithStyleAndColor()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['solid #ff0000']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['solid #ff0000']);
 		$this->assertEquals('medium solid #ff0000', $result);
 	}
 
 	public function testFixBorderStr_WithWidthAndColor()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['2px #ff0000']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['2px #ff0000']);
 		$this->assertEquals('2px none #ff0000', $result);
 	}
 
 	public function testFixBorderStr_WithAllThreeComponents()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['2px solid #ff0000']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['2px solid #ff0000']);
 		$this->assertEquals('2px solid #ff0000', $result);
 	}
 
 	public function testFixBorderStr_WithReorderedComponents()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['#ff0000 2px solid']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['#ff0000 2px solid']);
 		$this->assertEquals('2px solid #ff0000', $result);
 	}
 
 	public function testFixBorderStr_WithNone()
 	{
-		$result = $this->invokeMethod($this->cssManager, '_fix_borderStr', ['none']);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeBorderString', ['none']);
 		$this->assertEquals('medium none #000000', $result);
 	}
 
 	public function testBorderRadiusExpand_WithSingleValue()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['10px', 'BORDER-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['10px', 'BORDER-RADIUS']);
 		$expected = [
 			'TL-H' => '10px',
 			'TR-H' => '10px',
@@ -615,7 +615,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testBorderRadiusExpand_WithTwoValues()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['10px 20px', 'BORDER-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['10px 20px', 'BORDER-RADIUS']);
 		$expected = [
 			'TL-H' => '10px',
 			'TR-H' => '20px',
@@ -631,7 +631,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testBorderRadiusExpand_WithFourValues()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['10px 20px 30px 40px', 'BORDER-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['10px 20px 30px 40px', 'BORDER-RADIUS']);
 		$expected = [
 			'TL-H' => '10px',
 			'TR-H' => '20px',
@@ -647,7 +647,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testBorderRadiusExpand_WithSlashSeparatedValues()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['10px 20px / 30px 40px', 'BORDER-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['10px 20px / 30px 40px', 'BORDER-RADIUS']);
 		$expected = [
 			'TL-H' => '10px',
 			'TR-H' => '20px',
@@ -663,14 +663,14 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testBorderRadiusExpand_TopLeftRadius()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['10px 20px', 'BORDER-TOP-LEFT-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['10px 20px', 'BORDER-TOP-LEFT-RADIUS']);
 		$expected = ['TL-H' => '10px', 'TL-V' => '20px'];
 		$this->assertEquals($expected, $result);
 	}
 
 	public function testBorderRadiusExpand_TopRightRadius()
 	{
-		$result   = $this->invokeMethod($this->cssManager, 'border_radius_expand', ['15px', 'BORDER-TOP-RIGHT-RADIUS']);
+		$result   = $this->invokeMethod($this->cssManager, 'expandBorderRadius', ['15px', 'BORDER-TOP-RIGHT-RADIUS']);
 		$expected = ['TR-H' => '15px', 'TR-V' => '15px'];
 		$this->assertEquals($expected, $result);
 	}
@@ -705,54 +705,54 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testNthchild_WithOdd()
 	{
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [['ODD'], 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['ODD'], 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [['ODD'], 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['ODD'], 3])); // row 4
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 0])); // row 1
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 1])); // row 2
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 2])); // row 3
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 3])); // row 4
 	}
 
 	public function testNthchild_WithEven()
 	{
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['EVEN'], 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [['EVEN'], 1])); // row 2
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['EVEN'], 2])); // row 3
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [['EVEN'], 3])); // row 4
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 0])); // row 1
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 1])); // row 2
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 2])); // row 3
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 3])); // row 4
 	}
 
 	public function testNthchild_WithSpecificNumber()
 	{
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['', '3'], 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['', '3'], 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [['', '3'], 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [['', '3'], 3])); // row 4
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 0])); // row 1
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 1])); // row 2
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 2])); // row 3
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 3])); // row 4
 	}
 
 	public function testNthchild_With2nPlus1()
 	{
 		$formula = ['', '', '2', '+1'];
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 3])); // row 4
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
 	}
 
 	public function testNthchild_With3nPlus2()
 	{
 		$formula = ['', '', '3', '+2'];
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 1])); // row 2
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 3])); // row 4
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 4])); // row 5
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 4])); // row 5
 	}
 
 	public function testNthchild_WithNegativeFormula()
 	{
 		$formula = ['', '', '-', '+3'];
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, '_nthchild', [$formula, 3])); // row 4
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
+		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
+		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
 	}
 
 	public function testReadInlineCSS_WithSimpleProperty()
@@ -787,19 +787,19 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_WithEmptyArray()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [[]]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [[]]);
 		$this->assertEquals([], $result);
 	}
 
 	public function testFixCSS_WithNonArray()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [null]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [null]);
 		$this->assertEquals([], $result);
 	}
 
 	public function testFixCSS_WithMargin()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['MARGIN' => '10px']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['MARGIN' => '10px']]);
 		$this->assertArrayHasKey('MARGIN-TOP', $result);
 		$this->assertArrayHasKey('MARGIN-RIGHT', $result);
 		$this->assertArrayHasKey('MARGIN-BOTTOM', $result);
@@ -809,7 +809,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_WithPadding()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['PADDING' => '5px 10px']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['PADDING' => '5px 10px']]);
 		$this->assertArrayHasKey('PADDING-TOP', $result);
 		$this->assertArrayHasKey('PADDING-RIGHT', $result);
 		$this->assertEquals('5px', $result['PADDING-TOP']);
@@ -818,14 +818,14 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_WithBorderSimple()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['BORDER' => '1px solid #000000']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['BORDER' => '1px solid #000000']]);
 		$this->assertArrayHasKey('BORDER-TOP', $result);
 		$this->assertEquals('1px solid #000000', $result['BORDER-TOP']);
 	}
 
 	public function testFixCSS_WithBorderStyle()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['BORDER-STYLE' => 'solid dashed']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['BORDER-STYLE' => 'solid dashed']]);
 		$this->assertArrayHasKey('BORDER-TOP-STYLE', $result);
 		$this->assertArrayHasKey('BORDER-RIGHT-STYLE', $result);
 		$this->assertEquals('solid', $result['BORDER-TOP-STYLE']);
@@ -836,7 +836,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	{
 		$this->mpdf->available_unifonts = ['dejavusans'];
 
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['FONT-FAMILY' => 'DejaVu Sans, Arial']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['FONT-FAMILY' => 'DejaVu Sans, Arial']]);
 		$this->assertArrayHasKey('FONT-FAMILY', $result);
 		$this->assertEquals('dejavusans', $result['FONT-FAMILY']);
 	}
@@ -907,7 +907,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testParseCSSbackground_WithColorOnly()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'parseCSSbackground', ['#ff0000']);
+		$result = $this->invokeMethod($this->cssManager, 'parseCssBackground', ['#ff0000']);
 		$this->assertEquals('#ff0000', $result['c']);
 		$this->assertFalse($result['i']);
 		$this->assertFalse($result['r']);
@@ -916,28 +916,28 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testParseCSSbackground_WithUrl()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'parseCSSbackground', ['url(image.jpg)']);
+		$result = $this->invokeMethod($this->cssManager, 'parseCssBackground', ['url(image.jpg)']);
 		$this->assertEquals('image.jpg', $result['i']);
 		$this->assertFalse($result['c']);
 	}
 
 	public function testParseCSSbackground_WithUrlAndColor()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'parseCSSbackground', ['#fff url(bg.png)']);
+		$result = $this->invokeMethod($this->cssManager, 'parseCssBackground', ['#fff url(bg.png)']);
 		$this->assertEquals('#fff', $result['c']);
 		$this->assertEquals('bg.png', $result['i']);
 	}
 
 	public function testParseCSSbackground_WithUrlAndRepeat()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'parseCSSbackground', ['url(bg.png) repeat-x']);
+		$result = $this->invokeMethod($this->cssManager, 'parseCssBackground', ['url(bg.png) repeat-x']);
 		$this->assertEquals('bg.png', $result['i']);
 		$this->assertEquals('repeat-x', $result['r']);
 	}
 
 	public function testParseCSSbackground_WithUrlAndPosition()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'parseCSSbackground', ['url(bg.png) center top']);
+		$result = $this->invokeMethod($this->cssManager, 'parseCssBackground', ['url(bg.png) center top']);
 		$this->assertEquals('bg.png', $result['i']);
 		$this->assertEquals('50% 0%', $result['p']);
 	}
@@ -945,7 +945,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	public function testParseCSSbackground_WithGradient()
 	{
 		$gradient = 'linear-gradient(to bottom, #fff, #000)';
-		$result   = $this->invokeMethod($this->cssManager, 'parseCSSbackground', [$gradient]);
+		$result   = $this->invokeMethod($this->cssManager, 'parseCssBackground', [$gradient]);
 		$this->assertEquals($gradient, $result['i']);
 	}
 
@@ -982,7 +982,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$b = ['BORDER-TOP' => '1px solid #000'];
 		$a = ['BORDER-TOP-STYLE' => 'dashed'];
 
-		$this->invokeMethod($this->cssManager, '_mergeBorders', [&$b, &$a]);
+		$this->invokeMethod($this->cssManager, 'mergeBorderProperties', [&$b, &$a]);
 
 		$this->assertEquals('1px dashed #000', $b['BORDER-TOP']);
 	}
@@ -992,7 +992,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$b = ['BORDER-LEFT' => '1px solid #000'];
 		$a = ['BORDER-LEFT-WIDTH' => '3px'];
 
-		$this->invokeMethod($this->cssManager, '_mergeBorders', [&$b, &$a]);
+		$this->invokeMethod($this->cssManager, 'mergeBorderProperties', [&$b, &$a]);
 
 		$this->assertEquals('3px solid #000', $b['BORDER-LEFT']);
 	}
@@ -1002,7 +1002,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$b = ['BORDER-RIGHT' => '1px solid #000'];
 		$a = ['BORDER-RIGHT-COLOR' => '#ff0000'];
 
-		$this->invokeMethod($this->cssManager, '_mergeBorders', [&$b, &$a]);
+		$this->invokeMethod($this->cssManager, 'mergeBorderProperties', [&$b, &$a]);
 
 		$this->assertEquals('1px solid #ff0000', $b['BORDER-RIGHT']);
 	}
@@ -1012,7 +1012,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$b = [];
 		$a = ['BORDER-BOTTOM-STYLE' => 'dotted'];
 
-		$this->invokeMethod($this->cssManager, '_mergeBorders', [&$b, &$a]);
+		$this->invokeMethod($this->cssManager, 'mergeBorderProperties', [&$b, &$a]);
 
 		$this->assertEquals('0px dotted #000000', $b['BORDER-BOTTOM']);
 	}
@@ -1022,7 +1022,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['color' => 'red'];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeCSS', [$p, &$t]);
+		$this->invokeMethod($this->cssManager, 'mergeCssProperties', [$p, &$t]);
 
 		$this->assertEquals(['color' => 'red'], $t);
 	}
@@ -1032,7 +1032,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['color' => 'red'];
 		$t = ['font-size' => '12px'];
 
-		$this->invokeMethod($this->cssManager, '_mergeCSS', [$p, &$t]);
+		$this->invokeMethod($this->cssManager, 'mergeCssProperties', [$p, &$t]);
 
 		$this->assertArrayHasKey('color', $t);
 		$this->assertArrayHasKey('font-size', $t);
@@ -1043,7 +1043,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = null;
 		$t = ['color' => 'blue'];
 
-		$this->invokeMethod($this->cssManager, '_mergeCSS', [$p, &$t]);
+		$this->invokeMethod($this->cssManager, 'mergeCssProperties', [$p, &$t]);
 
 		$this->assertEquals(['color' => 'blue'], $t);
 	}
@@ -1374,7 +1374,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['DIV' => ['color' => 'red']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', [], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', [], '', '']);
 
 		$this->assertArrayHasKey('color', $t);
 		$this->assertEquals('red', $t['color']);
@@ -1385,7 +1385,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['CLASS>>myclass' => ['font-size' => '14px']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', ['myclass'], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', ['myclass'], '', '']);
 
 		$this->assertArrayHasKey('font-size', $t);
 		$this->assertEquals('14px', $t['font-size']);
@@ -1396,7 +1396,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['ID>>myid' => ['background' => 'blue']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', [], 'myid', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', [], 'myid', '']);
 
 		$this->assertArrayHasKey('background', $t);
 		$this->assertEquals('blue', $t['background']);
@@ -1407,7 +1407,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['LANG>>fr' => ['font-family' => 'Arial']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', [], '', 'fr']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', [], '', 'fr']);
 
 		$this->assertArrayHasKey('font-family', $t);
 		$this->assertEquals('Arial', $t['font-family']);
@@ -1418,7 +1418,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['DIV>>CLASS>>highlight' => ['font-weight' => 'bold']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', ['highlight'], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', ['highlight'], '', '']);
 
 		$this->assertArrayHasKey('font-weight', $t);
 		$this->assertEquals('bold', $t['font-weight']);
@@ -1429,7 +1429,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['P>>ID>>content' => ['line-height' => '1.5']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'P', [], 'content', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'P', [], 'content', '']);
 
 		$this->assertArrayHasKey('line-height', $t);
 		$this->assertEquals('1.5', $t['line-height']);
@@ -1440,7 +1440,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['SPAN>>LANG>>fr' => ['text-decoration' => 'underline']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'SPAN', [], '', 'fr']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'SPAN', [], '', 'fr']);
 
 		$this->assertArrayHasKey('text-decoration', $t);
 		$this->assertEquals('underline', $t['text-decoration']);
@@ -1457,7 +1457,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['TR>>SELECTORNTHCHILD>>ODD' => ['background-color' => 'yellow']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'TR', [], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'TR', [], '', '']);
 
 		// Row 1 is odd, so style should be applied
 		$this->assertArrayHasKey('background-color', $t);
@@ -1476,7 +1476,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['TR>>SELECTORNTHCHILD>>EVEN' => ['background-color' => 'lightblue']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'TR', [], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'TR', [], '', '']);
 
 		// Row 2 is even, so style should be applied
 		$this->assertArrayHasKey('background-color', $t);
@@ -1494,7 +1494,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['TR>>SELECTORNTHCHILD>>2N+1' => ['border' => '1px solid red']];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'TR', [], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'TR', [], '', '']);
 
 		// Row 3 matches 2n+1 (odd rows), so style should be applied
 		$this->assertArrayHasKey('border', $t);
@@ -1512,7 +1512,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		];
 		$t = [];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', ['myclass'], 'myid', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', ['myclass'], 'myid', '']);
 
 		// All matching selectors should be applied in order
 		$this->assertArrayHasKey('color', $t);
@@ -1530,7 +1530,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$p = ['SPAN' => ['color' => 'red']];
 		$t = ['existing' => 'value'];
 
-		$this->invokeMethod($this->cssManager, '_mergeFullCSS', [$p, &$t, 'DIV', [], '', '']);
+		$this->invokeMethod($this->cssManager, 'mergeFullCssRules', [$p, &$t, 'DIV', [], '', '']);
 
 		// Should not add the SPAN style since tag doesn't match
 		$this->assertArrayNotHasKey('color', $t);
@@ -1599,7 +1599,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['family' => 'Arial'];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FAMILY', $p);
 		$this->assertEquals('Arial', $p['FONT-FAMILY']);
@@ -1610,7 +1610,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['B' => true, 'I' => true];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-WEIGHT', $p);
 		$this->assertArrayHasKey('FONT-STYLE', $p);
@@ -1623,7 +1623,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['sizePt' => 14];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-SIZE', $p);
 		$this->assertEquals('14pt', $p['FONT-SIZE']);
@@ -1643,7 +1643,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['colorarray' => $colorBinary];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('COLOR', $p);
 		// The result should be an RGB string
@@ -1655,7 +1655,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FD_UNDERLINE];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-DECORATION', $p);
 		$this->assertEquals('underline', $p['TEXT-DECORATION']);
@@ -1666,7 +1666,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FA_SUPERSCRIPT];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('VERTICAL-ALIGN', $p);
 		$this->assertEquals('super', $p['VERTICAL-ALIGN']);
@@ -1677,7 +1677,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['lSpacingCSS' => '2px'];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('LETTER-SPACING', $p);
 		$this->assertEquals('2px', $p['LETTER-SPACING']);
@@ -1688,7 +1688,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['wSpacingCSS' => '5px'];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('WORD-SPACING', $p);
 		$this->assertEquals('5px', $p['WORD-SPACING']);
@@ -1699,7 +1699,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['hyphens' => 2]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('HYPHENS', $p);
 		$this->assertEquals('none', $p['HYPHENS']);
@@ -1710,7 +1710,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['hyphens' => 1]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('HYPHENS', $p);
 		$this->assertEquals('auto', $p['HYPHENS']);
@@ -1721,7 +1721,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['hyphens' => 0]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('HYPHENS', $p);
 		$this->assertEquals('manual', $p['HYPHENS']);
@@ -1732,7 +1732,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['outline-s' => false]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-OUTLINE', $p);
 		$this->assertEquals('none', $p['TEXT-OUTLINE']);
@@ -1752,7 +1752,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['outline-COLOR' => $colorBinary]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-OUTLINE-COLOR', $p);
 		$this->assertStringContainsString('rgb(0, 0, 255)', $p['TEXT-OUTLINE-COLOR']);
@@ -1763,7 +1763,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textparam' => ['outline-WIDTH' => 0.5]];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-OUTLINE-WIDTH', $p);
 		$this->assertEquals('0.5mm', $p['TEXT-OUTLINE-WIDTH']);
@@ -1774,7 +1774,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FD_LINETHROUGH];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-DECORATION', $p);
 		$this->assertEquals('line-through', $p['TEXT-DECORATION']);
@@ -1785,7 +1785,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FD_UNDERLINE | TextVars::FD_LINETHROUGH];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-DECORATION', $p);
 		$this->assertEquals('underline line-through', $p['TEXT-DECORATION']);
@@ -1796,7 +1796,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => 1024]; // Value that doesn't match FD_UNDERLINE or FD_LINETHROUGH
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-DECORATION', $p);
 		$this->assertEquals('none', $p['TEXT-DECORATION']);
@@ -1807,7 +1807,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FA_SUBSCRIPT];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('VERTICAL-ALIGN', $p);
 		$this->assertEquals('sub', $p['VERTICAL-ALIGN']);
@@ -1818,7 +1818,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => 1024]; // Value that doesn't match FA_SUPERSCRIPT or FA_SUBSCRIPT
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('VERTICAL-ALIGN', $p);
 		$this->assertEquals('baseline', $p['VERTICAL-ALIGN']);
@@ -1829,7 +1829,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FT_CAPITALIZE];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-TRANSFORM', $p);
 		$this->assertEquals('capitalize', $p['TEXT-TRANSFORM']);
@@ -1840,7 +1840,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FT_UPPERCASE];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-TRANSFORM', $p);
 		$this->assertEquals('uppercase', $p['TEXT-TRANSFORM']);
@@ -1851,7 +1851,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FT_LOWERCASE];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-TRANSFORM', $p);
 		$this->assertEquals('lowercase', $p['TEXT-TRANSFORM']);
@@ -1862,7 +1862,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => 1024]; // Value that doesn't match any text-transform flags
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('TEXT-TRANSFORM', $p);
 		$this->assertEquals('none', $p['TEXT-TRANSFORM']);
@@ -1873,7 +1873,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FC_KERNING];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-KERNING', $p);
 		$this->assertEquals('normal', $p['FONT-KERNING']);
@@ -1884,7 +1884,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => 1024]; // Value that doesn't match FC_KERNING
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-KERNING', $p);
 		$this->assertEquals('none', $p['FONT-KERNING']);
@@ -1895,7 +1895,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FA_SUPERSCRIPT];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-VARIANT-POSITION', $p);
 		$this->assertEquals('super', $p['FONT-VARIANT-POSITION']);
@@ -1906,7 +1906,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FA_SUBSCRIPT];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-VARIANT-POSITION', $p);
 		$this->assertEquals('sub', $p['FONT-VARIANT-POSITION']);
@@ -1917,7 +1917,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => 1024]; // Value that doesn't match FA_SUPERSCRIPT or FA_SUBSCRIPT
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-VARIANT-POSITION', $p);
 		$this->assertEquals('normal', $p['FONT-VARIANT-POSITION']);
@@ -1928,7 +1928,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['textvar' => TextVars::FC_SMALLCAPS];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-VARIANT-CAPS', $p);
 		$this->assertEquals('small-caps', $p['FONT-VARIANT-CAPS']);
@@ -1939,7 +1939,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['fontLanguageOverride' => 'TRK'];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-LANGUAGE-OVERRIDE', $p);
 		$this->assertEquals('TRK', $p['FONT-LANGUAGE-OVERRIDE']);
@@ -1950,7 +1950,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['fontLanguageOverride' => ''];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-LANGUAGE-OVERRIDE', $p);
 		$this->assertEquals('normal', $p['FONT-LANGUAGE-OVERRIDE']);
@@ -1961,7 +1961,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['OTLtags' => ['Minus' => 'liga kern']];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'liga' 0, 'kern' 0", $p['FONT-FEATURE-SETTINGS']);
@@ -1972,7 +1972,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['OTLtags' => ['Plus' => 'smcp swsh']];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'smcp' 1, 'swsh' 1", $p['FONT-FEATURE-SETTINGS']);
@@ -1983,7 +1983,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['OTLtags' => ['FFMinus' => 'dlig']];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'dlig' 0", $p['FONT-FEATURE-SETTINGS']);
@@ -1994,7 +1994,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['OTLtags' => ['FFPlus' => 'salt']];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'salt' 1", $p['FONT-FEATURE-SETTINGS']);
@@ -2005,7 +2005,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$bilp = ['OTLtags' => ['FFPlus' => 'salt4']];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'salt' 4", $p['FONT-FEATURE-SETTINGS']);
@@ -2023,7 +2023,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		];
 		$p    = [];
 
-		$this->invokeMethod($this->cssManager, 'inlinePropsToCSS', [$bilp, &$p]);
+		$this->invokeMethod($this->cssManager, 'convertInlinePropertiesToCss', [$bilp, &$p]);
 
 		$this->assertArrayHasKey('FONT-FEATURE-SETTINGS', $p);
 		$this->assertEquals("'liga' 0, 'dlig' 0, 'smcp' 1, 'salt' 4", $p['FONT-FEATURE-SETTINGS']);
@@ -2031,7 +2031,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_ComplexBorderRadius()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['BORDER-RADIUS' => '10px 20px / 30px']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['BORDER-RADIUS' => '10px 20px / 30px']]);
 
 		$this->assertArrayHasKey('BORDER-TOP-LEFT-RADIUS-H', $result);
 		$this->assertArrayHasKey('BORDER-TOP-LEFT-RADIUS-V', $result);
@@ -2041,7 +2041,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_ListStyle()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['LIST-STYLE' => 'disc inside']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['LIST-STYLE' => 'disc inside']]);
 
 		$this->assertArrayHasKey('LIST-STYLE-TYPE', $result);
 		$this->assertArrayHasKey('LIST-STYLE-POSITION', $result);
@@ -2051,7 +2051,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testFixCSS_TextAlign()
 	{
-		$result = $this->invokeMethod($this->cssManager, 'fixCSS', [['TEXT-ALIGN' => 'center']]);
+		$result = $this->invokeMethod($this->cssManager, 'normalizeCssProperties', [['TEXT-ALIGN' => 'center']]);
 
 		$this->assertArrayHasKey('TEXT-ALIGN', $result);
 		$this->assertEquals('center', $result['TEXT-ALIGN']);
