@@ -181,6 +181,7 @@ class CssManager
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 		$CSSstr = $this->processUrlsInCss($CSSstr);
 
+		//@TODO refactor
 		if ($CSSstr) {
 
 			$classproperties = []; // mPDF 6
@@ -442,17 +443,20 @@ class CssManager
 	 */
 	protected function processMediaQueries($cssStr)
 	{
-		if (preg_match('/@media/', $cssStr)) {
-			preg_match_all('/@media(.*?)\{(([^\{\}]*\{[^\{\}]*\})+)\s*\}/is', $cssStr, $m);
-			$count_m = count($m[0]);
-			for ($i = 0; $i < $count_m; $i++) {
-				if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-					$cssStr = str_replace($m[0][$i], '', $cssStr);
-				} else {
-					$cssStr = str_replace($m[0][$i], ' ' . $m[2][$i] . ' ', $cssStr);
-				}
+		if (!preg_match('/@media/', $cssStr)) {
+			return $cssStr;
+		}
+
+		preg_match_all('/@media(.*?)\{(([^\{\}]*\{[^\{\}]*\})+)\s*\}/is', $cssStr, $m);
+		$count_m = count($m[0]);
+		for ($i = 0; $i < $count_m; $i++) {
+			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
+				$cssStr = str_replace($m[0][$i], '', $cssStr);
+			} else {
+				$cssStr = str_replace($m[0][$i], ' ' . $m[2][$i] . ' ', $cssStr);
 			}
 		}
+
 		return $cssStr;
 	}
 
@@ -822,25 +826,7 @@ class CssManager
 	 */
 	protected function processFontProperty($value, &$newProperty)
 	{
-		$value = trim($value);
-
-		// Remove quoted font names and simplify
-		preg_match_all('/\"(.*?)\"/', $value, $ff);
-		if (count($ff[1])) {
-			foreach ($ff[1] as $ffp) {
-				$w = preg_split('/\s+/', $ffp);
-				$value = preg_replace('/\"' . $ffp . '\"/', $w[0], $value);
-			}
-		}
-
-		preg_match_all('/\'(.*?)\'/', $value, $ff);
-		if (count($ff[1])) {
-			foreach ($ff[1] as $ffp) {
-				$w = preg_split('/\s+/', $ffp);
-				$value = preg_replace('/\'' . $ffp . '\'/', $w[0], $value);
-			}
-		}
-
+		$value = $this->simplifyFontNames(trim($value));
 		$value = preg_replace('/\s*,\s*/', ',', $value);
 		$bits = preg_split('/\s+/', $value);
 		$numOfBits = count($bits);
@@ -869,16 +855,47 @@ class CssManager
 		}
 
 		// Check for font-weight
-		if (false !== stripos($value, 'bold')) {
+		if (stripos($value, 'bold') !== false) {
 			$newProperty['FONT-WEIGHT'] = 'bold';
 		} else {
 			$newProperty['FONT-WEIGHT'] = 'normal';
 		}
 
 		// Check for small-caps
-		if (false !== stripos($value, 'small-caps')) {
+		if (stripos($value, 'small-caps') !== false) {
 			$newProperty['TEXT-TRANSFORM'] = 'uppercase';
 		}
+	}
+
+	/**
+	 * Simplify font names by removing quotes.
+	 *
+	 * Helper method for processFontProperty to remove quotes from font names
+	 * to simplify subsequent parsing.
+	 *
+	 * @param string $value Font property value
+	 * @return string Simplified font property value
+	 */
+	protected function simplifyFontNames($value)
+	{
+		// Remove quoted font names and simplify
+		preg_match_all('/\"(.*?)\"/', $value, $ff);
+		if (count($ff[1])) {
+			foreach ($ff[1] as $ffp) {
+				$w = preg_split('/\s+/', $ffp);
+				$value = preg_replace('/\"' . $ffp . '\"/', $w[0], $value);
+			}
+		}
+
+		preg_match_all('/\'(.*?)\'/', $value, $ff);
+		if (count($ff[1])) {
+			foreach ($ff[1] as $ffp) {
+				$w = preg_split('/\s+/', $ffp);
+				$value = preg_replace('/\'' . $ffp . '\'/', $w[0], $value);
+			}
+		}
+		
+		return $value;
 	}
 
 	/**
