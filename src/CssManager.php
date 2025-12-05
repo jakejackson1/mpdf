@@ -119,29 +119,22 @@ class CssManager
 	public function ReadCSS($html)
 	{
 		$html = $this->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
-
 		$html = $this->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
-
 		$html = $this->removeCommentsFromStyleBlocks($html);
-
 		$html = $this->removeHtmlComments($html);
 
 		$CSSext = $this->extractExternalStylesheetUrls($html);
-		$match = count($CSSext);
-
-		$ind = 0;
 		$CSSstr = '';
+
+		$match = count($CSSext);
+		$ind = 0;
 
 		if (!is_array($this->cascadeCSS)) {
 			$this->cascadeCSS = [];
 		}
 
 		while ($match) {
-
-			$path = $CSSext[$ind];
-
-			$path = htmlspecialchars_decode($path); // mPDF 6
-
+			$path = htmlspecialchars_decode($CSSext[$ind]);
 			$this->mpdf->GetFullPath($path);
 
 			// mPDF 5.7.3
@@ -150,19 +143,18 @@ class CssManager
 			}
 
 			$CSSextblock = $this->assetFetcher->fetchDataFromPath($path);
-
 			if (!$CSSextblock) {
 				$path = $this->normalizePath($path);
 				$CSSextblock = $this->assetFetcher->fetchDataFromPath($path);
 			}
 
 			if ($CSSextblock) {
+				$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
+
 				// look for embedded @import stylesheets in other stylesheets
 				// and fix url paths (including background-images) relative to stylesheet
 				$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
-				$xem = preg_match_all($regexpem, $CSSextblock, $cxtem);
-				$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
-				if ($xem) {
+				if (preg_match_all($regexpem, $CSSextblock, $cxtem)) {
 					foreach ($cxtem[1] as $cxtembedded) {
 						// path is relative to original stylesheet!!
 						$this->mpdf->GetFullPath($cxtembedded, $cssBasePath);
@@ -170,33 +162,26 @@ class CssManager
 						$CSSext[] = $cxtembedded;
 					}
 				}
+
 				$CSSstr .= ' ' . $this->resolveBackgroundUrls($CSSextblock, $cssBasePath);
 			}
+
 			$match--;
 			$ind++;
 		}
 
 		// CSS as <style> in HTML document
 		$regexp = '/<style.*?>(.*?)<\/style>/si';
-		$match = preg_match_all($regexp, $html, $CSSblock);
-		if ($match) {
+		if (preg_match_all($regexp, $html, $CSSblock)) {
 			$CSSstr .= ' ' . $this->resolveBackgroundUrls(implode(' ', $CSSblock[1]));
 		}
 
 		// Remove comments
 		$CSSstr = preg_replace('|/\*.*?\*/|s', ' ', $CSSstr);
 		$CSSstr = preg_replace('/[\s\n\r\t\f]/s', ' ', $CSSstr);
-
 		$CSSstr = $this->processMediaQueries($CSSstr);
-
 		$CSSstr = $this->processDataUriImages($CSSstr);
-
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
-
-		// mPDF 5.7.4 URLs
-		// Characters "(", ")", and ";" in url() e.g. background-image, cause problems parsing the CSS string
-		// URLencode ( and ), but change ";" to a code which can be converted back after parsing (so as not to confuse ;
-		// with a segment delimiter in the URI)
 		$CSSstr = $this->processUrlsInCss($CSSstr);
 
 		if ($CSSstr) {
@@ -423,29 +408,25 @@ class CssManager
 
 		// <link rel="stylesheet" href="...">
 		$regexp = '/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
+		if (preg_match_all($regexp, $html, $cxt)) {
 			$cssUrls = $cxt[1];
 		}
 
 		// <link href="..." rel="stylesheet">
 		$regexp = '/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
+		if (preg_match_all($regexp, $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
 		// @import url(...)
 		$regexp = '/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
+		if (preg_match_all($regexp, $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
 		// @import "..."
 		$regexp = '/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
+		if (preg_match_all($regexp, $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
@@ -751,13 +732,37 @@ class CssManager
 		}
 
 		$prop = preg_split('/\s+/', trim($bd));
+		if (count($prop) > 3) {
+			return '';
+		}
+		
+		$parts = $this->parseBorderParts($prop);
+		$w = $parts['w'];
+		$s = $parts['s'];
+		$c = $parts['c'];
+
+		$s = strtolower($s);
+
+		return $w . ' ' . $s . ' ' . $c;
+	}
+
+	/**
+	 * Parse border property parts (width, style, color).
+	 *
+	 * Helper method for _fix_borderStr to determine width, style, and color
+	 * from split border property string.
+	 *
+	 * @param array $prop Split border property string
+	 * @return array Array containing 'w' (width), 's' (style), 'c' (color)
+	 */
+	protected function parseBorderParts($prop)
+	{
 		$w = 'medium';
 		$c = '#000000';
 		$s = 'none';
 
 		$prop_count = count($prop);
 		if ($prop_count === 1) {
-
 			// solid
 			if (in_array($prop[0], $this->mpdf->borderstyles) || $prop[0] === 'none' || $prop[0] === 'hidden') {
 				$s = $prop[0];
@@ -805,14 +810,9 @@ class CssManager
 				$s = $prop[1];
 				$c = $prop[2];
 			}
-
-		} else {
-			return '';
 		}
 
-		$s = strtolower($s);
-
-		return $w . ' ' . $s . ' ' . $c;
+		return ['w' => $w, 's' => $s, 'c' => $c];
 	}
 
 	/**
@@ -1654,6 +1654,57 @@ class CssManager
 	}
 
 	/**
+	 * Merge border properties for a specific side.
+	 *
+	 * Helper method for _mergeBorders to handle merging of individual side properties
+	 * (style, width, color) into the shorthand border property.
+	 *
+	 * @param array $b Target border array (modified by reference)
+	 * @param string $side Side to merge (TOP, RIGHT, BOTTOM, LEFT)
+	 * @param array $a Source border properties
+	 * @return void
+	 */
+	protected function mergeSideBorder(&$b, $side, $a)
+	{
+		$defaults = [
+			'WIDTH' => '0px',
+			'STYLE' => 'none',
+			'COLOR' => '#000000'
+		];
+
+		$borderKey = 'BORDER-' . $side;
+		$currentBorder = isset($b[$borderKey]) ? trim($b[$borderKey]) : '';
+		
+		foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
+			$propertyKey = $borderKey . '-' . $el;
+			
+			if (isset($a[$propertyKey])) {
+				$value = trim($a[$propertyKey]);
+				
+				if ($currentBorder) {
+					// Update existing border value
+					if ($el === 'STYLE') {
+						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
+					} elseif ($el === 'WIDTH') {
+						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
+					} else { // COLOR
+						$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
+					}
+					$currentBorder = $b[$borderKey]; // Update current border for next iteration
+				} else {
+					// Build new border from scratch with defaults
+					if (!isset($borderParts)) {
+						$borderParts = $defaults;
+					}
+					$borderParts[$el] = $value;
+					$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
+					$currentBorder = $b[$borderKey];
+				}
+			}
+		}
+	}
+
+	/**
 	 * Merge individual border properties into shorthand border properties.
 	 *
 	 * Converts individual border properties like BORDER-TOP-STYLE, BORDER-TOP-WIDTH,
@@ -1674,39 +1725,7 @@ class CssManager
 		];
 		
 		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
-			$borderKey = 'BORDER-' . $side;
-			$currentBorder = isset($b[$borderKey]) ? trim($b[$borderKey]) : '';
-			$modified = false;
-			
-			foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
-				$propertyKey = $borderKey . '-' . $el;
-				
-				if (isset($a[$propertyKey])) {
-					$value = trim($a[$propertyKey]);
-					
-					if ($currentBorder) {
-						// Update existing border value
-						if ($el === 'STYLE') {
-							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
-						} elseif ($el === 'WIDTH') {
-							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
-						} else { // COLOR
-							$b[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
-						}
-					} else {
-						// Build new border from scratch with defaults
-						if (!isset($borderParts)) {
-							$borderParts = $defaults;
-						}
-						$borderParts[$el] = $value;
-						$b[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
-					}
-					$modified = true;
-				}
-			}
-			
-			// Reset border parts for next side
-			unset($borderParts);
+			$this->mergeSideBorder($b, $side, $a);
 		}
 	}
 
