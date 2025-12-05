@@ -124,46 +124,10 @@ class CssManager
 
 		$html = $this->removeCommentsFromStyleBlocks($html);
 
-		$html = preg_replace('/<!--mpdf/i', '', $html);
-		$html = preg_replace('/mpdf-->/i', '', $html);
-		$html = preg_replace('/<\!\-\-.*?\-\->/s', ' ', $html);
+		$html = $this->removeHtmlComments($html);
 
-		$match = 0; // no match for instance
-		$CSSext = [];
-
-		// CSS inside external files
-		$regexp = '/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
-			$match += $x;
-			$CSSext = $cxt[1];
-		}
-		$regexp = '/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
-			$match += $x;
-			$CSSext = array_merge($CSSext, $cxt[1]);
-		}
-
-		// look for @import stylesheets
-		// $regexp = '/@import url\([\'\"]{0,1}([^\)]*?\.css)[\'\"]{0,1}\)/si';
-		// $regexp = '/@import url\([\'\"]{0,1}([^\)]*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
-		$regexp = '/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
-			$match += $x;
-			$CSSext = array_merge($CSSext, $cxt[1]);
-		}
-
-		// look for @import without the url()
-		// $regexp = '/@import [\'\"]{0,1}([^;]*?\.css)[\'\"]{0,1}/si';
-		// $regexp = '/@import [\'\"]{0,1}([^;]*?\.css(\?\S+)?)[\'\"]{0,1}/si';
-		$regexp = '/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si';
-		$x = preg_match_all($regexp, $html, $cxt);
-		if ($x) {
-			$match += $x;
-			$CSSext = array_merge($CSSext, $cxt[1]);
-		}
+		$CSSext = $this->extractExternalStylesheetUrls($html);
+		$match = count($CSSext);
 
 		$ind = 0;
 		$CSSstr = '';
@@ -223,17 +187,7 @@ class CssManager
 		$CSSstr = preg_replace('|/\*.*?\*/|s', ' ', $CSSstr);
 		$CSSstr = preg_replace('/[\s\n\r\t\f]/s', ' ', $CSSstr);
 
-		if (preg_match('/@media/', $CSSstr)) {
-			preg_match_all('/@media(.*?)\{(([^\{\}]*\{[^\{\}]*\})+)\s*\}/is', $CSSstr, $m);
-			$count_m = count($m[0]);
-			for ($i = 0; $i < $count_m; $i++) {
-				if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-					$CSSstr = str_replace($m[0][$i], '', $CSSstr);
-				} else {
-					$CSSstr = str_replace($m[0][$i], ' ' . $m[2][$i] . ' ', $CSSstr);
-				}
-			}
-		}
+		$CSSstr = $this->processMediaQueries($CSSstr);
 
 		$CSSstr = $this->processDataUriImages($CSSstr);
 
@@ -448,6 +402,95 @@ class CssManager
 		$regexp = '/<style.*?>(.*?)<\/style>/si'; // it can be <style> or <style type="txt/css">
 		$html = preg_replace($regexp, '', $html);
 
+		return $html;
+	}
+
+	/**
+	 * Extract external stylesheet URLs from HTML.
+	 *
+	 * Finds all external CSS file references including:
+	 * - <link rel="stylesheet" href="...">
+	 * - <link href="..." rel="stylesheet">
+	 * - @import url(...)
+	 * - @import "..."
+	 *
+	 * @param string $html HTML content to scan
+	 * @return array Array of CSS file URLs
+	 */
+	protected function extractExternalStylesheetUrls($html)
+	{
+		$cssUrls = [];
+
+		// <link rel="stylesheet" href="...">
+		$regexp = '/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si';
+		$x = preg_match_all($regexp, $html, $cxt);
+		if ($x) {
+			$cssUrls = $cxt[1];
+		}
+
+		// <link href="..." rel="stylesheet">
+		$regexp = '/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si';
+		$x = preg_match_all($regexp, $html, $cxt);
+		if ($x) {
+			$cssUrls = array_merge($cssUrls, $cxt[1]);
+		}
+
+		// @import url(...)
+		$regexp = '/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si';
+		$x = preg_match_all($regexp, $html, $cxt);
+		if ($x) {
+			$cssUrls = array_merge($cssUrls, $cxt[1]);
+		}
+
+		// @import "..."
+		$regexp = '/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si';
+		$x = preg_match_all($regexp, $html, $cxt);
+		if ($x) {
+			$cssUrls = array_merge($cssUrls, $cxt[1]);
+		}
+
+		return $cssUrls;
+	}
+
+	/**
+	 * Process @media queries in CSS.
+	 *
+	 * Filters or unwraps @media blocks based on configured media type.
+	 * If media doesn't match CSSselectMedia, the entire block is removed.
+	 * If it matches, the contents are unwrapped.
+	 *
+	 * @param string $cssStr CSS string potentially containing @media rules
+	 * @return string CSS string with media queries processed
+	 */
+	protected function processMediaQueries($cssStr)
+	{
+		if (preg_match('/@media/', $cssStr)) {
+			preg_match_all('/@media(.*?)\{(([^\{\}]*\{[^\{\}]*\})+)\s*\}/is', $cssStr, $m);
+			$count_m = count($m[0]);
+			for ($i = 0; $i < $count_m; $i++) {
+				if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
+					$cssStr = str_replace($m[0][$i], '', $cssStr);
+				} else {
+					$cssStr = str_replace($m[0][$i], ' ' . $m[2][$i] . ' ', $cssStr);
+				}
+			}
+		}
+		return $cssStr;
+	}
+
+	/**
+	 * Remove mPDF-specific and general HTML comments from content.
+	 *
+	 * Removes <!--mpdf and mpdf--> markers and all HTML comments.
+	 *
+	 * @param string $html HTML content to clean
+	 * @return string HTML with comments removed
+	 */
+	protected function removeHtmlComments($html)
+	{
+		$html = preg_replace('/<!--mpdf/i', '', $html);
+		$html = preg_replace('/mpdf-->/i', '', $html);
+		$html = preg_replace('/<\!\-\-.*?\-\->/s', ' ', $html);
 		return $html;
 	}
 
