@@ -1967,48 +1967,12 @@ class CssManager
 		$this->mergeTableCascadingCss($inherit, $tag, $attr, $classes);
 		$this->mergeBlockCascadingCss($inherit, $tag, $attr, $classes, $p);
 		$this->mergeInlineAttributes($tag, $attr, $p);
-
-		// DEFAULT for this TAG set in DefaultCSS
-		if (isset($this->mpdf->defaultCSS[$tag])) {
-			$zp = $this->normalizeCssProperties($this->mpdf->defaultCSS[$tag]);
-			if (is_array($zp)) {  // Default overwrites Inherited
-				$p = array_merge($p, $zp);  // !! Note other way round !!
-				$this->mergeBorderProperties($p, $zp);
-			}
-		}
-
-		/* -- TABLES -- */
-		// mPDF 5.7.3
-		// cellSpacing overwrites TABLE default but not specific CSS set on table
-		if ($tag === 'TABLE' && isset($attr['CELLSPACING'])) {
-			$p['BORDER-SPACING-H'] = $p['BORDER-SPACING-V'] = $attr['CELLSPACING'];
-		}
-
-		// cellPadding overwrites TD/TH default but not specific CSS set on cell
-		if (($tag === 'TD' || $tag === 'TH') && isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding']) && ($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] || $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] === '0')) {  // mPDF 5.7.3
-			$p['PADDING-LEFT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-RIGHT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-TOP'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$p['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-		}
-		/* -- END TABLES -- */
-
+		$this->mergeDefaultCss($tag, $p);
+		$this->mergeTableSpecificCss($tag, $attr, $p);
 		$this->mergeStylesheetSelectors($tag, $attr, $classes, $p, $shortlang);
 		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $p, $shortlang);
 		$this->mergeCascadedCss($inherit, $tag, $attr, $classes, $p);
-
-		// INLINE STYLE e.g. style="CSS:property"
-		if (isset($attr['STYLE'])) {
-			$zp = $this->readInlineCSS($attr['STYLE']);
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
-
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->mergeBorderProperties($p, $zp);
-			}
-		}
+		$this->mergeInlineStyle($tag, $attr, $p);
 
 		return $p;
 	}
@@ -3183,4 +3147,73 @@ class CssManager
 		return $path;
 	}
 
+	/**
+	 * Merge table specific CSS (CELLSPACING, CELLPADDING).
+	 *
+	 * @param string $tag HTML tag name
+	 * @param array $attr HTML attributes
+	 * @param array $p CSS properties (passed by reference)
+	 * @return void
+	 */
+	protected function mergeTableSpecificCss($tag, $attr, &$p)
+	{
+		// cellSpacing overwrites TABLE default but not specific CSS set on table
+		if ($tag === 'TABLE' && isset($attr['CELLSPACING'])) {
+			$p['BORDER-SPACING-H'] = $p['BORDER-SPACING-V'] = $attr['CELLSPACING'];
+		}
+
+		// cellPadding overwrites TD/TH default but not specific CSS set on cell
+		if (($tag === 'TD' || $tag === 'TH') && isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding']) && ($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] || $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] === '0')) {
+			$p['PADDING-LEFT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$p['PADDING-RIGHT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$p['PADDING-TOP'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+			$p['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+		}
+	}
+
+	/**
+	 * Merge default CSS for the tag.
+	 *
+	 * @param string $tag HTML tag name
+	 * @param array $p CSS properties (passed by reference)
+	 * @return void
+	 */
+	protected function mergeDefaultCss($tag, &$p)
+	{
+		if (!isset($this->mpdf->defaultCSS[$tag])) {
+			return;
+		}
+
+		$zp = $this->normalizeCssProperties($this->mpdf->defaultCSS[$tag]);
+		if (is_array($zp)) {  // Default overwrites Inherited
+			$p = array_merge($p, $zp);  // !! Note other way round !!
+			$this->mergeBorderProperties($p, $zp);
+		}
+	}
+
+	/**
+	 * Merge inline style attribute CSS.
+	 *
+	 * @param string $tag HTML tag name
+	 * @param array $attr HTML attributes
+	 * @param array $p CSS properties (passed by reference)
+	 * @return void
+	 */
+	protected function mergeInlineStyle($tag, $attr, &$p)
+	{
+		// INLINE STYLE e.g. style="CSS:property"
+		if (!isset($attr['STYLE'])) {
+			return;
+		}
+
+		$zp = $this->readInlineCSS($attr['STYLE']);
+		if ($tag === 'TD' || $tag === 'TH') {
+			$this->setBorderDominance($zp, 9);
+		} // *TABLES*
+
+		if (is_array($zp)) {
+			$p = array_merge($p, $zp);
+			$this->mergeBorderProperties($p, $zp);
+		}
+	}
 }
