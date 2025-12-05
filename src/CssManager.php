@@ -177,17 +177,7 @@ class CssManager
 		$CSSstr = $this->processUrlsInCss($CSSstr);
 
 		if ($CSSstr) {
-			preg_match_all('/(.*?)\{(.*?)\}/', $CSSstr, $styles);
-			$styles_count = count($styles[1]);
-			for ($i = 0; $i < $styles_count; $i++) {
-				$stylestr = trim($styles[2][$i]);
-				$classproperties = $this->parseCssProperties($stylestr);
-				$tagstr = strtoupper(trim($styles[1][$i]));
-				$tagarr = explode(',', $tagstr);
-				foreach ($tagarr as $tg) {
-					$this->processCssSelector($tg, $classproperties);
-				}
-			}
+			$this->processCssString($CSSstr);
 		}
 
 		// Remove CSS (tags and content), if any
@@ -204,7 +194,7 @@ class CssManager
 	 * @param int $match
 	 * @return string
 	 */
-	private function processExternalCssImports($cssContent, $path, &$cssExt, &$match)
+	protected function processExternalCssImports($cssContent, $path, &$cssExt, &$match)
 	{
 		$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
 		$cssStr = '';
@@ -224,6 +214,25 @@ class CssManager
 		$cssStr .= ' ' . $this->resolveBackgroundUrls($cssContent, $cssBasePath);
 
 		return $cssStr;
+	}
+
+	/**
+	 * @param string $cssStr
+	 * @return void
+	 */
+	private function processCssString($cssStr)
+	{
+		preg_match_all('/(.*?)\{(.*?)\}/', $cssStr, $styles);
+		$styles_count = count($styles[1]);
+		for ($i = 0; $i < $styles_count; $i++) {
+			$stylestr = trim($styles[2][$i]);
+			$classproperties = $this->parseCssProperties($stylestr);
+			$tagstr = strtoupper(trim($styles[1][$i]));
+			$tagarr = explode(',', $tagstr);
+			foreach ($tagarr as $tg) {
+				$this->processCssSelector($tg, $classproperties);
+			}
+		}
 	}
 
 	/**
