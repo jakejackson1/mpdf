@@ -712,7 +712,7 @@ class CssManager
 	 * @param string $html CSS string from style attribute
 	 * @return array Parsed CSS properties
 	 */
-	function readInlineCSS($html)
+	public function readInlineCSS($html)
 	{
 		$html = htmlspecialchars_decode($html); // mPDF 5.7.4 URLs
 		// mPDF 5.7.4 URLs
@@ -1660,7 +1660,7 @@ class CssManager
 	 * @param array $array2 Second array
 	 * @return array Merged array
 	 */
-	function array_merge_recursive_unique($array1, $array2)
+	public function array_merge_recursive_unique($array1, $array2)
 	{
 		$arrays = func_get_args();
 		$narrays = count($arrays);
@@ -1930,7 +1930,7 @@ class CssManager
 	 * @param array $attr HTML attributes including CLASS, ID, STYLE
 	 * @return array Merged CSS properties array
 	 */
-	function MergeCSS($inherit, $tag, $attr)
+	public function MergeCSS($inherit, $tag, $attr)
 	{
 		$p = [];
 
