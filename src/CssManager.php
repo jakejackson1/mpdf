@@ -1994,60 +1994,7 @@ class CssManager
 		/* -- END TABLES -- */
 
 		$this->mergeStylesheetSelectors($tag, $attr, $classes, $p, $shortlang);
-
-		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (!empty($this->CSS[$tag . '>>CLASS>>' . $class])) {
-				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
-			}
-
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
-
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
-
-		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
-		if (isset($attr['LANG'])) {
-			if (!empty($this->CSS[$tag . '>>LANG>>' . $attr['LANG']])) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $shortlang])) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $shortlang];
-				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
-				} // *TABLES*
-
-				if (is_array($zp)) {
-					$p = array_merge($p, $zp);
-					$this->_mergeBorders($p, $zp);
-				}
-			}
-		}
-
-		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && !empty($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
-			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
-			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
-
-			if (is_array($zp)) {
-				$p = array_merge($p, $zp);
-				$this->_mergeBorders($p, $zp);
-			}
-		}
+		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $p, $shortlang);
 
 		// Cascaded e.g. div.class p only works for block level
 		if ($inherit === 'BLOCK' && !empty($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
@@ -2133,6 +2080,73 @@ class CssManager
 		}
 
 		return $p;
+	}
+
+	/**
+	 * Merge tag specific selectors (Tag.Class, Tag#ID, etc.).
+	 *
+	 * @param string $tag HTML tag
+	 * @param array $attr HTML attributes
+	 * @param array $classes Array of class names
+	 * @param array $p CSS properties (modified by reference)
+	 * @param string $shortlang Short language code (e.g. 'en')
+	 * @return void
+	 */
+	protected function mergeTagSpecificSelectors($tag, $attr, $classes, &$p, $shortlang)
+	{
+		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
+		foreach ($classes as $class) {
+			$zp = [];
+			if (!empty($this->CSS[$tag . '>>CLASS>>' . $class])) {
+				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
+			}
+
+			if ($tag === 'TD' || $tag === 'TH') {
+				$this->setBorderDominance($zp, 9);
+			} // *TABLES*
+
+			if (is_array($zp)) {
+				$p = array_merge($p, $zp);
+				$this->_mergeBorders($p, $zp);
+			}
+		}
+
+		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
+		if (isset($attr['LANG'])) {
+			if (!empty($this->CSS[$tag . '>>LANG>>' . $attr['LANG']])) {
+				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
+				if ($tag === 'TD' || $tag === 'TH') {
+					$this->setBorderDominance($zp, 9);
+				} // *TABLES*	// *TABLES-ADVANCED-BORDERS*
+				if (is_array($zp)) {
+					$p = array_merge($p, $zp);
+					$this->_mergeBorders($p, $zp);
+				}
+			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $shortlang])) {
+				$zp = $this->CSS[$tag . '>>LANG>>' . $shortlang];
+				if ($tag === 'TD' || $tag === 'TH') {
+					$this->setBorderDominance($zp, 9);
+				} // *TABLES*
+
+				if (is_array($zp)) {
+					$p = array_merge($p, $zp);
+					$this->_mergeBorders($p, $zp);
+				}
+			}
+		}
+
+		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
+		if (isset($attr['ID']) && !empty($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
+			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
+			if ($tag === 'TD' || $tag === 'TH') {
+				$this->setBorderDominance($zp, 9);
+			} // *TABLES*
+
+			if (is_array($zp)) {
+				$p = array_merge($p, $zp);
+				$this->_mergeBorders($p, $zp);
+			}
+		}
 	}
 
 	/**
