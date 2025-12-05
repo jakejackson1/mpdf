@@ -908,6 +908,41 @@ class CssManager
 	}
 
 	/**
+	 * Process FONT-VARIANT property.
+	 *
+	 * @param string $value Property value
+	 * @param array $newprop New properties array (modified by reference)
+	 * @return void
+	 */
+	protected function processFontVariantProperty($value, &$newprop)
+	{
+		if (preg_match('/(normal|none)/', $value, $m)) {
+			$newprop['FONT-VARIANT-LIGATURES'] = $m[1];
+			$newprop['FONT-VARIANT-CAPS'] = $m[1];
+			$newprop['FONT-VARIANT-NUMERIC'] = $m[1];
+			$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
+
+			return;
+		}
+
+		if (preg_match_all('/(no-common-ligatures|\bcommon-ligatures|no-discretionary-ligatures|\bdiscretionary-ligatures|no-historical-ligatures|\bhistorical-ligatures|no-contextual|\bcontextual)/i', $value, $m)) {
+			$newprop['FONT-VARIANT-LIGATURES'] = implode(' ', $m[1]);
+		}
+
+		if (preg_match('/(all-small-caps|\bsmall-caps|all-petite-caps|\bpetite-caps|unicase|titling-caps)/i', $value, $m)) {
+			$newprop['FONT-VARIANT-CAPS'] = $m[1];
+		}
+
+		if (preg_match_all('/(lining-nums|oldstyle-nums|proportional-nums|tabular-nums|diagonal-fractions|stacked-fractions)/i', $value, $m)) {
+			$newprop['FONT-VARIANT-NUMERIC'] = implode(' ', $m[1]);
+		}
+
+		if (preg_match('/(historical-forms)/i', $value, $m)) {
+			$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
+		}
+	}
+
+	/**
 	 * Simplify font names by removing quotes.
 	 *
 	 * Helper method for processFontProperty to remove quotes from font names
@@ -1063,27 +1098,7 @@ class CssManager
 			} elseif ($k === 'FONT-FAMILY') {
 				$this->processFontFamilyProperty($k, $v, $newprop);
 			} elseif ($k === 'FONT-VARIANT') {
-
-				if (preg_match('/(normal|none)/', $v, $m)) {
-					$newprop['FONT-VARIANT-LIGATURES'] = $m[1];
-					$newprop['FONT-VARIANT-CAPS'] = $m[1];
-					$newprop['FONT-VARIANT-NUMERIC'] = $m[1];
-					$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
-				} else {
-					if (preg_match_all('/(no-common-ligatures|\bcommon-ligatures|no-discretionary-ligatures|\bdiscretionary-ligatures|no-historical-ligatures|\bhistorical-ligatures|no-contextual|\bcontextual)/i', $v, $m)) {
-						$newprop['FONT-VARIANT-LIGATURES'] = implode(' ', $m[1]);
-					}
-					if (preg_match('/(all-small-caps|\bsmall-caps|all-petite-caps|\bpetite-caps|unicase|titling-caps)/i', $v, $m)) {
-						$newprop['FONT-VARIANT-CAPS'] = $m[1];
-					}
-					if (preg_match_all('/(lining-nums|oldstyle-nums|proportional-nums|tabular-nums|diagonal-fractions|stacked-fractions)/i', $v, $m)) {
-						$newprop['FONT-VARIANT-NUMERIC'] = implode(' ', $m[1]);
-					}
-					if (preg_match('/(historical-forms)/i', $v, $m)) {
-						$newprop['FONT-VARIANT-ALTERNATES'] = $m[1];
-					}
-				}
-
+				$this->processFontVariantProperty($v, $newprop);
 			} elseif ($k === 'MARGIN') {
 
 				$tmp = $this->expandShorthandProperty($v);
