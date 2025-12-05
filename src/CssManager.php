@@ -155,21 +155,7 @@ class CssManager
 			}
 
 			if ($CSSextblock) {
-				$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
-
-				// look for embedded @import stylesheets in other stylesheets
-				// and fix url paths (including background-images) relative to stylesheet
-				$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
-				if (preg_match_all($regexpem, $CSSextblock, $cxtem)) {
-					foreach ($cxtem[1] as $cxtembedded) {
-						// path is relative to original stylesheet!!
-						$this->mpdf->GetFullPath($cxtembedded, $cssBasePath);
-						$match++;
-						$CSSext[] = $cxtembedded;
-					}
-				}
-
-				$CSSstr .= ' ' . $this->resolveBackgroundUrls($CSSextblock, $cssBasePath);
+				$CSSstr .= $this->processExternalCssImports($CSSextblock, $path, $CSSext, $match);
 			}
 
 			$match--;
@@ -209,6 +195,35 @@ class CssManager
 		$html = preg_replace($regexp, '', $html);
 
 		return $html;
+	}
+
+	/**
+	 * @param string $cssContent
+	 * @param string $path
+	 * @param array $cssExt
+	 * @param int $match
+	 * @return string
+	 */
+	private function processExternalCssImports($cssContent, $path, &$cssExt, &$match)
+	{
+		$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
+		$cssStr = '';
+
+		// look for embedded @import stylesheets in other stylesheets
+		// and fix url paths (including background-images) relative to stylesheet
+		$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
+		if (preg_match_all($regexpem, $cssContent, $cxtem)) {
+			foreach ($cxtem[1] as $cxtembedded) {
+				// path is relative to original stylesheet!!
+				$this->mpdf->GetFullPath($cxtembedded, $cssBasePath);
+				$match++;
+				$cssExt[] = $cxtembedded;
+			}
+		}
+
+		$cssStr .= ' ' . $this->resolveBackgroundUrls($cssContent, $cssBasePath);
+
+		return $cssStr;
 	}
 
 	/**
