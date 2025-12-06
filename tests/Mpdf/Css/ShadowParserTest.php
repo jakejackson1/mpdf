@@ -51,10 +51,12 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 		$this->assertIsArray($res);
 		$this->assertCount(1, $res);
-		$this->assertEquals('10px', $res[0]['x']);
-		$this->assertEquals('10px', $res[0]['y']);
-		$this->assertEquals('5px', $res[0]['blur']);
-		$this->assertEquals('#888888', $res[0]['col']);
+		$this->assertEqualsWithDelta(2.646, $res[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(2.646, $res[0]['y'], 0.001);
+		$this->assertEqualsWithDelta(1.323, $res[0]['blur'], 0.001);
+
+		$warnings = [];
+		$this->assertEquals($this->colorConverter->convert('#888888', $warnings), $res[0]['col']);
 	}
 
 	public function testParseBoxShadowInset()
@@ -63,7 +65,7 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$res = $this->shadowParser->parseBoxShadow($input);
 
 		$this->assertTrue($res[0]['inset']);
-		$this->assertEquals('5px', $res[0]['x']);
+		$this->assertEqualsWithDelta(1.323, $res[0]['x'], 0.001);
 	}
 
 	public function testParseTextShadow()
@@ -72,9 +74,12 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$res = $this->shadowParser->parseTextShadow($input);
 
 		$this->assertIsArray($res);
-		$this->assertEquals('2px', $res[0]['x']);
-		$this->assertEquals('2px', $res[0]['y']);
-		$this->assertEquals('#ff0000', $res[0]['col']);
+		$this->assertEqualsWithDelta(0.529, $res[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(0.529, $res[0]['y'], 0.001);
+		$this->assertEqualsWithDelta(0.529, $res[0]['y'], 0.001);
+		
+		$warnings = [];
+		$this->assertEquals($this->colorConverter->convert('#ff0000', $warnings), $res[0]['col']);
 	}
 
 	public function testParseMultipleShadows()
@@ -89,7 +94,7 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		// process shadow1 -> unshift -> [shadow1]
 		// process shadow2 -> unshift -> [shadow2, shadow1]
 		
-		$this->assertEquals('2px', $res[0]['x']);
-		$this->assertEquals('1px', $res[1]['x']);
+		$this->assertEqualsWithDelta(0.529, $res[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(0.265, $res[1]['x'], 0.001);
 	}
 }

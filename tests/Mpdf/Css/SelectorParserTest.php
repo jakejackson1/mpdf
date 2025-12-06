@@ -4,7 +4,7 @@ namespace Mpdf\Css;
 
 use Mpdf\Mpdf;
 
-class SelectorParserTest  extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+class SelectorParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	private $mpdf;
 	private $parser;
@@ -31,7 +31,7 @@ class SelectorParserTest  extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function tear_down()
 	{
-		unset( $this->parser, $this->mpdf );
+		unset($this->parser, $this->mpdf);
 		parent::tear_down();
 	}
 

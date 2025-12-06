@@ -98,18 +98,26 @@ class ShadowParser
 
 		$p = explode(' ', trim($s));
 		if (isset($p[0])) {
+			$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])
+				? $this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']
+				: (isset($this->mpdf->blk[0]['inner_width']) ? $this->mpdf->blk[0]['inner_width'] : 0);
+
 			$boxShadow['x'] = $this->sizeConverter->convert(
 				trim($p[0]),
-				$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
+				$parentWidth,
 				$this->mpdf->FontSize,
 				false
 			);
 		}
 
 		if (isset($p[1])) {
+			$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])
+				? $this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']
+				: (isset($this->mpdf->blk[0]['inner_width']) ? $this->mpdf->blk[0]['inner_width'] : 0);
+
 			$boxShadow['y'] = $this->sizeConverter->convert(
 				trim($p[1]),
-				$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
+				$parentWidth,
 				$this->mpdf->FontSize,
 				false
 			);
@@ -118,9 +126,13 @@ class ShadowParser
 
 		if (isset($p[2])) {
 			if (preg_match('/^\s*[\.\-0-9]/', $p[2])) {
+				$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])
+					? $this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']
+					: (isset($this->mpdf->blk[0]['inner_width']) ? $this->mpdf->blk[0]['inner_width'] : 0);
+
 				$boxShadow['blur'] = $this->sizeConverter->convert(
 					trim($p[2]),
-					$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
+					$parentWidth,
 					$this->mpdf->FontSize,
 					false
 				);
@@ -134,9 +146,13 @@ class ShadowParser
 
 		if (isset($p[3])) {
 			if (preg_match('/^\s*[\.\-0-9]/', $p[3])) {
+				$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])
+					? $this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']
+					: (isset($this->mpdf->blk[0]['inner_width']) ? $this->mpdf->blk[0]['inner_width'] : 0);
+
 				$boxShadow['spread'] = $this->sizeConverter->convert(
 					trim($p[3]),
-					$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
+					$parentWidth,
 					$this->mpdf->FontSize,
 					false
 				);
