@@ -67,22 +67,22 @@ class CssManager
 	/**
 	 * @var array CSS cascade storage for table elements
 	 */
-	var $tablecascadeCSS;
+	var $tablecascadeCSS = [];
 
 	/**
 	 * @var array Cascading CSS property storage
 	 */
-	var $cascadeCSS;
+	var $cascadeCSS = [];
 
 	/**
 	 * @var array Main CSS property storage array
 	 */
-	var $CSS;
+	var $CSS = [];
 
 	/**
 	 * @var int Table CSS cascade level counter
 	 */
-	var $tbCSSlvl;
+	var $tbCSSlvl = 0;
 
 	/**
 	 * @var int|null Border dominance level for bottom cell borders
@@ -133,11 +133,6 @@ class CssManager
 		$this->selectorParser = new SelectorParser($mpdf);
 		$this->commentParser = new CommentParser();
 		$this->inlineStyleParser = new InlineStyleParser($this->normalizeProperties);
-
-		$this->tablecascadeCSS = [];
-		$this->CSS = [];
-		$this->cascadeCSS = [];
-		$this->tbCSSlvl = 0;
 	}
 
 	/**
@@ -152,82 +147,72 @@ class CssManager
 	 */
 	public function ReadCSS($html)
 	{
-		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
-		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
-		$html = $this->commentParser->removeCommentsFromStyleBlocks($html);
-		$html = $this->commentParser->removeHtmlComments($html);
-
-		$CSSext = $this->cssLoader->extractExternalStylesheetUrls($html);
-		$CSSstr = '';
-
-		$match = count($CSSext);
 		$ind = 0;
+		$css = '';
 
 		if (!is_array($this->cascadeCSS)) {
 			$this->cascadeCSS = [];
 		}
 
-		while ($match) {
-			$path = htmlspecialchars_decode($CSSext[$ind]);
-			$path = Path::relativeToAbsolutePath($path);
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
+		$html = $this->commentParser->removeCommentsFromStyleBlocks($html);
+		$html = $this->commentParser->removeHtmlComments($html);
 
-			// mPDF 5.7.3
-			if (strpos($path, '//') === false) {
+		$externalCss = $this->cssLoader->extractExternalStylesheetUrls($html);
+		$externalCssCount = count($externalCss);
+		while ($externalCssCount) {
+			$path = htmlspecialchars_decode($externalCss[$ind]);
+			$path = Path::relativeToAbsolutePath($path);
+			if (strpos($path, '//') === false) { // mPDF 5.7.3
 				$path = preg_replace('/\.css\?.*$/', '.css', $path);
 			}
 
-			$CSSextblock = $this->cssLoader->loadStylesheet($path);
-
-			if ($CSSextblock) {
-				$CSSstr .= $this->cssLoader->processExternalCssImports($CSSextblock, $path, $CSSext, $match);
+			$stylesheetCss = $this->cssLoader->loadStylesheet($path);
+			if ($stylesheetCss) {
+				$css .= $this->cssLoader->processExternalCssImports($stylesheetCss, $path, $externalCss, $externalCssCount);
 			}
 
-			$match--;
+			$externalCssCount--;
 			$ind++;
 		}
 
 		// CSS as <style> in HTML document
 		$regexp = '/<style.*?>(.*?)<\/style>/si';
-		if (preg_match_all($regexp, $html, $CSSblock)) {
-			$CSSstr .= ' ' . $this->cssLoader->resolveBackgroundUrls(implode(' ', $CSSblock[1]));
+		if (preg_match_all($regexp, $html, $cssBlock)) {
+			$css .= ' ' . $this->cssLoader->resolveBackgroundUrls(implode(' ', $cssBlock[1]));
 		}
 
-		// Remove comments
-		$CSSstr = preg_replace('|/\*.*?\*/|s', ' ', $CSSstr);
-		$CSSstr = preg_replace('/[\s\n\r\t\f]/s', ' ', $CSSstr);
-		$CSSstr = $this->mediaQueryProcessor->processMediaQueries($CSSstr);
-		$CSSstr = $this->cssLoader->processDataUriImages($CSSstr);
-		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
-		$CSSstr = $this->inlineStyleParser->processUrlsInCss($CSSstr);
+		$css = preg_replace('|/\*.*?\*/|s', ' ', $css);
+		$css = preg_replace('/[\s\n\r\t\f]/s', ' ', $css);
+		$css = $this->mediaQueryProcessor->processMediaQueries($css);
+		$css = $this->cssLoader->processDataUriImages($css);
+		$css = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $css);
+		$css = $this->inlineStyleParser->processUrlsInCss($css);
 
-		if ($CSSstr) {
-			$this->processCssString($CSSstr);
-		}
+		$this->processCssString($css);
 
-		// Remove CSS (tags and content), if any
-		$regexp = '/<style.*?>(.*?)<\/style>/si'; // it can be <style> or <style type="txt/css">
-		$html = preg_replace($regexp, '', $html);
+		// Remove CSS (tags and content), if any (it can be <style> or <style type="txt/css">)
+		$html = preg_replace('/<style.*?>(.*?)<\/style>/si', '', $html);
 
 		return $html;
 	}
 
-
-
 	/**
-	 * @param string $cssStr
+	 * @param string $css
 	 * @return void
 	 */
-	protected function processCssString($cssStr)
+	protected function processCssString($css)
 	{
-		preg_match_all('/(.*?)\{(.*?)\}/', $cssStr, $styles);
-		$styles_count = count($styles[1]);
-		for ($i = 0; $i < $styles_count; $i++) {
-			$stylestr = trim($styles[2][$i]);
-			$classproperties = $this->parseCssProperties($stylestr);
-			$tagstr = strtoupper(trim($styles[1][$i]));
-			$tagarr = explode(',', $tagstr);
-			foreach ($tagarr as $tg) {
-				$this->processCssSelector($tg, $classproperties);
+		preg_match_all('/(.*?)\{(.*?)\}/', $css, $styles);
+		$count = count($styles[1]);
+		for ($i = 0; $i < $count; $i++) {
+			$classProperties = $this->parseCssProperties($styles[2][$i]);
+			$tagName = strtoupper(trim($styles[1][$i]));
+
+			$tags = explode(',', $tagName);
+			foreach ($tags as $tag) {
+				$this->processCssSelector($tag, $classProperties);
 			}
 		}
 	}
@@ -238,105 +223,94 @@ class CssManager
 	 * Delegates processing to specific methods based on the selector type
 	 * (@page, simple, or cascaded).
 	 *
-	 * @param string $tg Selector string
-	 * @param array $classproperties CSS properties
+	 * @param string $selector Selector string
+	 * @param array $classProperties CSS properties
 	 * @return void
 	 */
-	protected function processCssSelector($tg, $classproperties)
+	protected function processCssSelector($selector, $classProperties)
 	{
-		if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $tg, $m)) {
-			$tg = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $tg);
+		if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $selector, $m)) {
+			$selector = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $selector);
 		}
 
-		$tags = preg_split('/\s+/', trim($tg));
+		$tags = preg_split('/\s+/', trim($selector));
 		$level = count($tags);
 		if (trim($tags[0]) === '@PAGE') {
 			$tag = $this->selectorParser->parsePageSelector($tags);
 			if ($tag && isset($this->CSS[$tag])) {
-				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classProperties);
 			} elseif ($tag) {
-				$this->CSS[$tag] = $classproperties;
+				$this->CSS[$tag] = $classProperties;
 			}
-		} elseif ($level === 1) {
+
+			return;
+		}
+
+		if ($level === 1) {
 			$tag = $this->selectorParser->parseSimpleSelector($tags);
 			if ($tag && isset($this->CSS[$tag])) {
-				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classProperties);
 			} elseif ($tag) {
-				$this->CSS[$tag] = $classproperties;
+				$this->CSS[$tag] = $classProperties;
 			}
-		} else {
-			$tmp = $this->selectorParser->parseCascadedSelector($tags);
-			if (empty($tmp)) {
-				return;
-			}
-
-			$cascadeCSS = &$this->cascadeCSS;
-			foreach ($tmp as $tp) {
-				$cascadeCSS = &$cascadeCSS[$tp];
-			}
-
-			$cascadeCSS = $this->array_merge_recursive_unique($cascadeCSS, $classproperties);
-			$cascadeCSS['depth'] = $level;
+			return;
 		}
+
+		$cascade = $this->selectorParser->parseCascadedSelector($tags);
+		if (empty($cascade)) {
+			return;
+		}
+
+		$cascadeCSS = &$this->cascadeCSS;
+		foreach ($cascade as $tag) {
+			$cascadeCSS = &$cascadeCSS[$tag];
+		}
+
+		$cascadeCSS = $this->array_merge_recursive_unique($cascadeCSS, $classProperties);
+		$cascadeCSS['depth'] = $level;
 	}
 
 	/**
 	 * Parse CSS property string into an array.
 	 *
-	 * @param string $stylestr CSS style string (e.g. "color: red; font-size: 12px")
+	 * @param string $rawStyles CSS style string (e.g. "color: red; font-size: 12px")
 	 * @return array Associative array of CSS properties
 	 */
-	protected function parseCssProperties($stylestr)
+	protected function parseCssProperties($rawStyles)
 	{
-		$classproperties = [];
-		$stylearr = explode(';', $stylestr);
+		$classProperties = [];
+		$styles = explode(';', trim($rawStyles));
 
-		foreach ($stylearr as $sta) {
-			if (trim($sta)) {
-				// Changed to allow style="background: url('http://www.bpm1.com/bg.jpg')"
-				$tmp = explode(':', $sta, 2);
-				$property = $tmp[0];
-				if (isset($tmp[1])) {
-					$value = $tmp[1];
-				} else {
-					$value = '';
-				}
-				$value = str_replace('%ZZ', ';', $value); // mPDF 5.7.4 URLs
-				$property = trim($property);
-				$value = preg_replace('/\s*!important/i', '', $value);
-				$value = trim($value);
-				if ($property && ($value || $value === '0')) {
-					// Ignores -webkit-gradient so doesn't override -moz-
-					if ((strtoupper($property) === 'BACKGROUND-IMAGE' || strtoupper($property) === 'BACKGROUND') && false !== stripos($value, '-webkit-gradient')) {
-						continue;
-					}
-					$classproperties[strtoupper($property)] = $value;
-				}
+		foreach ($styles as $style) {
+			if (empty(trim($style))) {
+				continue;
 			}
+
+			// Changed to allow style="background: url('http://www.bpm1.com/bg.jpg')"
+			$tmp = explode(':', $style, 2);
+			$property = strtoupper(trim($tmp[0]));
+			$value = isset($tmp[1]) ? $tmp[1] : '';
+
+			$value = str_replace('%ZZ', ';', $value); // restore URL placeholder
+			$value = preg_replace('/\s*!important/i', '', $value);
+			$value = trim($value);
+
+			if (empty($property) || strlen($value) === 0) {
+				continue;
+			}
+
+			// Ignores -webkit-gradient so doesn't override -moz-
+			if (($property === 'BACKGROUND-IMAGE' || $property === 'BACKGROUND') &&
+				stripos($value, '-webkit-gradient') !== false
+			) {
+				continue;
+			}
+
+			$classProperties[$property] = $value;
 		}
 
-		return $this->normalizeProperties->normalize($classproperties);
+		return $this->normalizeProperties->normalize($classProperties);
 	}
-
-
-
-
-
-
-
-
-
-
-
-	/**
-	 * Normalize background position values.
-	 *
-	 * Converts background position keywords (top, bottom, left, right, center)
-	 * to percentage values and validates the format.
-	 *
-	 * @param array $bits Position components (1 or 2 values)
-	 * @return string|false Normalized position string or false if invalid
-	 */
 
 	/**
 	 * Parse inline CSS style attribute.
@@ -408,23 +382,28 @@ class CssManager
 	 */
 	public function array_merge_recursive_unique($array1, $array2)
 	{
-		$arrays = func_get_args();
-		$narrays = count($arrays);
-		$ret = $arrays[0];
-		for ($i = 1; $i < $narrays; $i ++) {
-			foreach ($arrays[$i] as $key => $value) {
-				if (((string) $key) === ((string) ((int) $key))) { // integer or string as integer key - append
-					$ret[] = $value;
-				} else { // string key - merge
-					if (is_array($value) && isset($ret[$key])) {
-						$ret[$key] = $this->array_merge_recursive_unique($ret[$key], $value);
+		//@TODO - move to helper
+		$funcArguments = func_get_args();
+		$numOfArrays = count($funcArguments);
+		$output = $funcArguments[0];
+
+		for ($i = 1; $i < $numOfArrays; $i ++) {
+			foreach ($funcArguments[$i] as $key => $value) {
+				if (((string) $key) === ((string) ((int) $key))) {
+					// integer or string as integer key - append
+					$output[] = $value;
+				} else {
+					// string key - merge
+					if (is_array($value) && isset($output[$key])) {
+						$output[$key] = $this->array_merge_recursive_unique($output[$key], $value);
 					} else {
-						$ret[$key] = $value;
+						$output[$key] = $value;
 					}
 				}
 			}
 		}
-		return $ret;
+
+		return $output;
 	}
 
 	/**
@@ -432,21 +411,25 @@ class CssManager
 	 *
 	 * Handles :nth-child() pseudo-class logic for TR, TD, and TH tags.
 	 *
-	 * @param array $p Source CSS selector array
-	 * @param array $t Target CSS properties (passed by reference)
+	 * @param array $sourceSelectors Source CSS selector array
+	 * @param array $targetProperties Target CSS properties (passed by reference)
 	 * @param string $tag HTML tag name
 	 * @return void
 	 */
-	protected function mergeNthChildCss($p, &$t, $tag)
+	protected function mergeNthChildCss($sourceSelectors, &$targetProperties, $tag)
 	{
-		if ($tag !== 'TR' || empty($p)) {
+		if (!in_array($tag, ['TR', 'TH', 'TD'], true) || empty($sourceSelectors)) {
 			return;
 		}
 
-		foreach ($p as $k => $val) {
-			if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-				$select = false;
-				if ($tag === 'TR') {
+		foreach ($sourceSelectors as $key => $selector) {
+			if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $key, $m)) {
+				continue;
+			}
+
+			$select = false;
+			switch ($tag) {
+				case 'TR':
 					$row = $this->mpdf->row;
 					$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
 					$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
@@ -460,15 +443,18 @@ class CssManager
 					if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
 						$select = $this->matchesNthChild($a, $row);
 					}
-				} elseif ($tag === 'TD' || $tag === 'TH') {
+					break;
+
+				case 'TH':
+				case 'TD':
 					if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
 						$select = $this->matchesNthChild($a, $this->mpdf->col);
 					}
-				}
+					break;
+			}
 
-				if ($select) {
-					$this->mergeCssProperties($p[$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $t);
-				}
+			if ($select) {
+				$this->mergeCssProperties($sourceSelectors[$tag . '>>SELECTORNTHCHILD>>' . $m[1]], $targetProperties);
 			}
 		}
 	}
@@ -564,26 +550,45 @@ class CssManager
 	/**
 	 * Merge CSS properties with existing properties.
 	 *
-	 * @param array $m Source CSS properties
-	 * @param bool $d Use default strict mode
-	 * @param bool|int $bd Border dominance level (or false)
+	 * @param array $property Source CSS properties
+	 * @param bool $bypassDepthCheck Use default strict mode
+	 * @param bool|int $borderDominanceLevel Border dominance level (or false)
 	 * @return void
 	 */
-	protected function setMergedCss(&$m, $d = true, $bd = false)
+	protected function setMergedCss(&$property, $bypassDepthCheck = false, $borderDominanceLevel = false)
 	{
-		if (!isset($m)) {
+		if (!isset($property)) {
 			return;
 		}
 
-		if ((isset($m['depth']) && $m['depth'] > 1) || $d == false) {  // include check for 'depth'
-			if ($bd) {
-				$this->setBorderDominance($m, $bd);
-			} // *TABLES*
+		if ($bypassDepthCheck) {
+			return;
+		}
 
-			if (is_array($m)) {
-				$this->cssProperties = array_merge($this->cssProperties, $m);
-				$this->mergeBorderProperties($m);
-			}
+		if (!isset($property['depth']) || $property['depth'] < 2) {
+			return;
+		}
+
+		if ($borderDominanceLevel) {
+			$this->setBorderDominance($property, $borderDominanceLevel);
+		}
+
+		if (is_array($property)) {
+			$this->cssProperties = array_merge($this->cssProperties, $property);
+			$this->mergeBorderProperties($property);
+		}
+	}
+
+	/**
+	 * Merge borders into CSS properties.
+	 *
+	 * @param array $a properties to merge
+	 * @return void
+	 */
+	protected function mergeBorderProperties(&$a)
+	{
+		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
+			$this->mergeSideBorder($side, $a);
 		}
 	}
 
@@ -641,19 +646,6 @@ class CssManager
 	}
 
 	/**
-	 * Merge borders into CSS properties.
-	 *
-	 * @param array $a properties to merge
-	 * @return void
-	 */
-	protected function mergeBorderProperties(&$a)
-	{
-		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
-			$this->mergeSideBorder($side, $a);
-		}
-	}
-
-	/**
 	 * Merge CSS properties for an HTML element.
 	 *
 	 * Main method for applying CSS to an element. Combines CSS from multiple sources
@@ -683,14 +675,13 @@ class CssManager
 			$attr['ID'] = '';
 		}
 
-		// mPDF 6
-		$shortlang = '';
+		$languageCode = '';
 		if (!isset($attr['LANG'])) {
 			$attr['LANG'] = '';
 		} else {
 			$attr['LANG'] = strtolower($attr['LANG']);
 			if (strlen($attr['LANG']) == 5) {
-				$shortlang = substr($attr['LANG'], 0, 2);
+				$languageCode = substr($attr['LANG'], 0, 2);
 			}
 		}
 
@@ -699,8 +690,8 @@ class CssManager
 		$this->mergeInlineAttributes($tag, $attr);
 		$this->mergeDefaultCss($tag);
 		$this->mergeTableSpecificCss($tag, $attr);
-		$this->mergeStylesheetSelectors($tag, $attr, $classes, $shortlang);
-		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $shortlang);
+		$this->mergeStylesheetSelectors($tag, $attr, $classes, $languageCode);
+		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $languageCode);
 		$this->mergeCascadedCss($inherit, $tag, $attr, $classes);
 		$this->mergeInlineStyle($tag, $attr);
 
@@ -713,10 +704,10 @@ class CssManager
 	 * @param string $tag HTML tag
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param string $shortlang Short language code (e.g. 'en')
+	 * @param string $languageCode Short language code (e.g. 'en')
 	 * @return void
 	 */
-	protected function mergeTagSpecificSelectors($tag, $attr, $classes, $shortlang)
+	protected function mergeTagSpecificSelectors($tag, $attr, $classes, $languageCode)
 	{
 		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
 		foreach ($classes as $class) {
@@ -747,8 +738,8 @@ class CssManager
 					$this->cssProperties = array_merge($this->cssProperties, $zp);
 					$this->mergeBorderProperties($zp);
 				}
-			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $shortlang])) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $shortlang];
+			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $languageCode])) {
+				$zp = $this->CSS[$tag . '>>LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setBorderDominance($zp, 9);
 				}
@@ -814,9 +805,9 @@ class CssManager
 			// NB looks at $this->tablecascadeCSS-1 for cascading CSS
 
 			// false, 9 = don't check for 'depth' and do set border dominance
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], true, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], false, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], true, 9);
 			}
 
 			// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
@@ -848,17 +839,17 @@ class CssManager
 					}
 
 					if ($select) {
-						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], false, 9);
+						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], true, 9);
 					}
 				}
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], true, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], false, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], true, 9);
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], false, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], true, 9);
 		}
 	}
 
@@ -869,7 +860,6 @@ class CssManager
 	 * CSS property array. Used for property inheritance and cascading.
 	 *
 	 * @param array $bilp Inline properties array
-	 * @param array $p CSS properties array (modified by reference)
 	 * @return void
 	 */
 	protected function convertInlinePropertiesToCss($bilp)
@@ -1434,17 +1424,17 @@ class CssManager
 				$this->cssProperties['FONT-SIZE'] = '86%';
 			} elseif ($size === '1') {
 				$this->cssProperties['FONT-SIZE'] = 'XX-SMALL';
-			} elseif ($size == '2') {
+			} elseif ($size === '2') {
 				$this->cssProperties['FONT-SIZE'] = 'X-SMALL';
-			} elseif ($size == '3') {
+			} elseif ($size === '3') {
 				$this->cssProperties['FONT-SIZE'] = 'SMALL';
-			} elseif ($size == '4') {
+			} elseif ($size === '4') {
 				$this->cssProperties['FONT-SIZE'] = 'MEDIUM';
-			} elseif ($size == '5') {
+			} elseif ($size === '5') {
 				$this->cssProperties['FONT-SIZE'] = 'LARGE';
-			} elseif ($size == '6') {
+			} elseif ($size === '6') {
 				$this->cssProperties['FONT-SIZE'] = 'X-LARGE';
-			} elseif ($size == '7') {
+			} elseif ($size === '7') {
 				$this->cssProperties['FONT-SIZE'] = 'XX-LARGE';
 			}
 
@@ -1473,17 +1463,18 @@ class CssManager
 	 * @param string $tag HTML tag
 	 * @param array $attr HTML attributes
 	 * @param array $classes Array of class names
-	 * @param string $shortlang Short language code (e.g. 'en')
+	 * @param string $languageCode Short language code (e.g. 'en')
 	 * @return void
 	 */
-	protected function mergeStylesheetSelectors($tag, $attr, $classes, $shortlang)
+	protected function mergeStylesheetSelectors($tag, $attr, $classes, $languageCode)
 	{
 		// STYLESHEET TAG e.g. h1  p  div  table
 		if (isset($this->CSS[$tag])) {
 			$zp = $this->CSS[$tag];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
+			}
+
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
 				$this->mergeBorderProperties($zp);
@@ -1552,17 +1543,17 @@ class CssManager
 				$zp = $this->CSS['LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setBorderDominance($zp, 9);
-				} // *TABLES*
+				}
 
 				if (is_array($zp)) {
 					$this->cssProperties = array_merge($this->cssProperties, $zp);
 					$this->mergeBorderProperties($zp);
 				}
-			} elseif (!empty($this->CSS['LANG>>' . $shortlang])) {
-				$zp = $this->CSS['LANG>>' . $shortlang];
+			} elseif (!empty($this->CSS['LANG>>' . $languageCode])) {
+				$zp = $this->CSS['LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setBorderDominance($zp, 9);
-				} // *TABLES*
+				}
 
 				if (is_array($zp)) {
 					$this->cssProperties = array_merge($this->cssProperties, $zp);
@@ -1576,7 +1567,7 @@ class CssManager
 			$zp = $this->CSS['ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setBorderDominance($zp, 9);
-			} // *TABLES*
+			}
 
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
@@ -1584,8 +1575,6 @@ class CssManager
 			}
 		}
 	}
-
-
 
 	/**
 	 * Merge table specific CSS (CELLSPACING, CELLPADDING).
@@ -1596,17 +1585,28 @@ class CssManager
 	 */
 	protected function mergeTableSpecificCss($tag, $attr)
 	{
-		// cellSpacing overwrites TABLE default but not specific CSS set on table
-		if ($tag === 'TABLE' && isset($attr['CELLSPACING'])) {
-			$this->cssProperties['BORDER-SPACING-H'] = $this->cssProperties['BORDER-SPACING-V'] = $attr['CELLSPACING'];
+		if (!in_array($tag, ['TABLE', 'TD', 'TH'], true)) {
+			return;
 		}
 
+		// cellSpacing overwrites TABLE default but not specific CSS set on table
+		if ($tag === 'TABLE') {
+			$cellSpacing = isset($attr['CELLSPACING']) ? $attr['CELLSPACING'] : '';
+			if ($cellSpacing !== '') {
+				$this->cssProperties['BORDER-SPACING-H'] = $this->cssProperties['BORDER-SPACING-V'] = $cellSpacing;
+			}
+			return;
+		}
+
+		$tableCell = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
+
 		// cellPadding overwrites TD/TH default but not specific CSS set on cell
-		if (($tag === 'TD' || $tag === 'TH') && isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding']) && ($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] || $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'] === '0')) {
-			$this->cssProperties['PADDING-LEFT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$this->cssProperties['PADDING-RIGHT'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$this->cssProperties['PADDING-TOP'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
-			$this->cssProperties['PADDING-BOTTOM'] = $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['cell_padding'];
+		$cellPadding = isset($tableCell['cell_padding']) ? $tableCell['cell_padding'] : '';
+		if ($cellPadding !== '') {
+			$this->cssProperties['PADDING-LEFT'] = $cellPadding;
+			$this->cssProperties['PADDING-RIGHT'] = $cellPadding;
+			$this->cssProperties['PADDING-TOP'] = $cellPadding;
+			$this->cssProperties['PADDING-BOTTOM'] = $cellPadding;
 		}
 	}
 
@@ -1646,7 +1646,7 @@ class CssManager
 		$zp = $this->inlineStyleParser->parse($attr['STYLE']);
 		if ($tag === 'TD' || $tag === 'TH') {
 			$this->setBorderDominance($zp, 9);
-		} // *TABLES*
+		}
 
 		if (is_array($zp)) {
 			$this->cssProperties = array_merge($this->cssProperties, $zp);

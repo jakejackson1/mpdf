@@ -82,30 +82,31 @@ class CssLoader
 	}
 
 	/**
-	 * @param string $cssContent
+	 * Locate embedded @import stylesheets in other stylesheets and fix url paths
+	 * (including background-images) relative to stylesheet
+	 *
+	 * @param string $stylesheetCss
 	 * @param string $path
-	 * @param array $cssExt
-	 * @param int $match
+	 * @param array $externalCss
+	 * @param int $externalCssCount
 	 * @return string
 	 */
-	public function processExternalCssImports($cssContent, $path, &$cssExt, &$match)
+	public function processExternalCssImports($stylesheetCss, $path, &$externalCss, &$externalCssCount)
 	{
-		$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
-		$cssStr = '';
+		$css = '';
 
-		// look for embedded @import stylesheets in other stylesheets
-		// and fix url paths (including background-images) relative to stylesheet
-		if (preg_match_all('/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si', $cssContent, $cxtem)) {
+		$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
+		if (preg_match_all('/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si', $stylesheetCss, $cxtem)) {
 			foreach ($cxtem[1] as $cxtembedded) {
 				// path is relative to original stylesheet!!
-				$cssExt[] = Path::relativeToAbsolutePath($cxtembedded, $cssBasePath);
-				$match++;
+				$externalCss[] = Path::relativeToAbsolutePath($cxtembedded, $cssBasePath);
+				$externalCssCount++;
 			}
 		}
 
-		$cssStr .= ' ' . $this->resolveBackgroundUrls($cssContent, $cssBasePath);
+		$css .= ' ' . $this->resolveBackgroundUrls($stylesheetCss, $cssBasePath);
 
-		return $cssStr;
+		return $css;
 	}
 
 	/**
