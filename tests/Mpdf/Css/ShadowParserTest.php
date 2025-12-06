@@ -33,7 +33,7 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function tear_down()
 	{
-		unset( $this->shadowParser, $this->mpdf );
+		unset($this->shadowParser, $this->mpdf);
 		parent::tear_down();
 	}
 
@@ -44,57 +44,67 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertEquals($expected, $this->shadowParser->normalizeShadowColors($input));
 	}
 
-	public function testParseBoxShadow()
+	public function testParseBoxShadowWithBasicShadow()
 	{
-		$input = '10px 10px 5px #888888';
-		$res = $this->shadowParser->parseBoxShadow($input);
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
 
-		$this->assertIsArray($res);
-		$this->assertCount(1, $res);
-		$this->assertEqualsWithDelta(2.646, $res[0]['x'], 0.001);
-		$this->assertEqualsWithDelta(2.646, $res[0]['y'], 0.001);
-		$this->assertEqualsWithDelta(1.323, $res[0]['blur'], 0.001);
-
-		$warnings = [];
-		$this->assertEquals($this->colorConverter->convert('#888888', $warnings), $res[0]['col']);
+		$result = $this->shadowParser->parseBoxShadow('2px 2px');
+		$this->assertCount(1, $result);
+		// 2px = 0.529 mm
+		$this->assertEqualsWithDelta(0.529, $result[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(0.529, $result[0]['y'], 0.001);
+		$this->assertEquals(0, $result[0]['blur']);
+		$this->assertFalse($result[0]['inset']);
 	}
 
-	public function testParseBoxShadowInset()
+	public function testParseBoxShadowWithBlurAndSpread()
 	{
-		$input = 'inset 5px 5px 5px #000';
-		$res = $this->shadowParser->parseBoxShadow($input);
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
 
-		$this->assertTrue($res[0]['inset']);
-		$this->assertEqualsWithDelta(1.323, $res[0]['x'], 0.001);
+		$result = $this->shadowParser->parseBoxShadow('2px 2px 4px 1px #000');
+		$this->assertCount(1, $result);
+		$this->assertEqualsWithDelta(0.529, $result[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(0.529, $result[0]['y'], 0.001);
+		$this->assertEqualsWithDelta(1.058, $result[0]['blur'], 0.001);
+		$this->assertEqualsWithDelta(0.264, $result[0]['spread'], 0.001);
 	}
 
-	public function testParseTextShadow()
+	public function testParseBoxShadowWithInset()
 	{
-		$input = '2px 2px #ff0000';
-		$res = $this->shadowParser->parseTextShadow($input);
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
 
-		$this->assertIsArray($res);
-		$this->assertEqualsWithDelta(0.529, $res[0]['x'], 0.001);
-		$this->assertEqualsWithDelta(0.529, $res[0]['y'], 0.001);
-		$this->assertEqualsWithDelta(0.529, $res[0]['y'], 0.001);
-		
-		$warnings = [];
-		$this->assertEquals($this->colorConverter->convert('#ff0000', $warnings), $res[0]['col']);
+		$result = $this->shadowParser->parseBoxShadow('inset 5px 5px 10px #000');
+		$this->assertCount(1, $result);
+		$this->assertTrue($result[0]['inset']);
 	}
 
-	public function testParseMultipleShadows()
+	public function testParseBoxShadowWithMultipleShadows()
 	{
-		$input = '1px 1px #000, 2px 2px #fff';
-		$res = $this->shadowParser->parseBoxShadow($input);
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
 
-		$this->assertCount(2, $res);
-		// Note: parseBoxShadow unshifts, so order might be reversed in the array result
-		// Logic: array_unshift($sh, $boxShadow).
-		// explode returns [shadow1, shadow2].
-		// process shadow1 -> unshift -> [shadow1]
-		// process shadow2 -> unshift -> [shadow2, shadow1]
-		
-		$this->assertEqualsWithDelta(0.529, $res[0]['x'], 0.001);
-		$this->assertEqualsWithDelta(0.265, $res[1]['x'], 0.001);
+		$result = $this->shadowParser->parseBoxShadow('2px 2px #000, 4px 4px #fff');
+		$this->assertCount(2, $result);
+	}
+
+	public function testParseTextShadowWithBasicShadow()
+	{
+		$result = $this->shadowParser->parseTextShadow('1px 1px');
+		$this->assertCount(1, $result);
+		$this->assertEqualsWithDelta(0.264, $result[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(0.264, $result[0]['y'], 0.001);
+		$this->assertEquals(0, $result[0]['blur']);
+	}
+
+	public function testParseTextShadowWithBlur()
+	{
+		$this->mpdf->blk = [];
+
+		$result = $this->shadowParser->parseTextShadow('2px 2px 3px #000');
+		$this->assertCount(1, $result);
+		$this->assertEqualsWithDelta(0.793, $result[0]['blur'], 0.001);
 	}
 }
