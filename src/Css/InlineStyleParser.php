@@ -5,18 +5,12 @@ namespace Mpdf\Css;
 class InlineStyleParser
 {
 	/**
-	 * @var \Mpdf\Css\CssSanitizer
-	 */
-	private $cssSanitizer;
-
-	/**
 	 * @var \Mpdf\Css\NormalizeProperties
 	 */
 	private $normalizeProperties;
 
-	public function __construct(CssSanitizer $cssSanitizer, NormalizeProperties $normalizeProperties)
+	public function __construct(NormalizeProperties $normalizeProperties)
 	{
-		$this->cssSanitizer = $cssSanitizer;
 		$this->normalizeProperties = $normalizeProperties;
 	}
 
@@ -36,7 +30,7 @@ class InlineStyleParser
 		// Characters "(", ")", and ";" in url() e.g. background-image, cause problems parsing the CSS string
 		// URLencode ( and ), but change ";" to a code which can be converted back after parsing (so as not to confuse ;
 		// with a segment delimiter in the URI)
-		$html = $this->cssSanitizer->processUrlsInCss($html);
+		$html = $this->processUrlsInCss($html);
 
 		// Fix incomplete CSS code
 		$size = strlen($html) - 1;
@@ -65,5 +59,48 @@ class InlineStyleParser
 		}
 
 		return $this->normalizeProperties->normalize($classproperties);
+	}
+
+	/**
+	 * Process URLs in CSS strings by encoding special characters.
+	 *
+	 * Characters "(", ")", and ";" in url() can cause problems parsing CSS.
+	 * This method URLencodes ( and ), and temporarily encodes ";" to prevent
+	 * confusion with CSS segment delimiters.
+	 *
+	 * @param string $css CSS string containing url() references
+	 * @return string CSS string with processed URLs
+	 */
+	public function processUrlsInCss($css)
+	{
+		if (strpos($css, 'url(') === false) {
+			return $css;
+		}
+
+		// Process urls with double quotes
+		preg_match_all('/url\(\"(.*?)\"\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		// Process urls with single quotes
+		preg_match_all('/url\(\'(.*?)\'\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		// Process urls without quotes
+		preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $css, $m);
+		$count_m = count($m[1]);
+		for ($i = 0; $i < $count_m; $i++) {
+			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
+			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
+		}
+
+		return $css;
 	}
 }

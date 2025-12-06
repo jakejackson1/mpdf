@@ -9,10 +9,16 @@ class CssLoaderTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	private $assetFetcher;
 	private $cache;
+
+	/**
+	 * @var CssLoader
+	 */
 	private $cssLoader;
 
-	protected function setUp(): void
+	protected function set_up()
 	{
+		parent::set_up();
+
 		$this->assetFetcher = $this->getMockBuilder(AssetFetcher::class)
 			->disableOriginalConstructor()
 			->getMock();
@@ -37,15 +43,12 @@ class CssLoaderTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testLoadStylesheetRetry()
 	{
-		// Test retry with basepathIsLocal = true
-		$loader = new CssLoader($this->assetFetcher, $this->cache);
-
 		$this->assetFetcher->expects($this->exactly(2))
 			->method('fetchDataFromPath')
 			->withConsecutive(['style.css'], [$this->anything()]) // 2nd call uses normalized path
 			->willReturnOnConsecutiveCalls(false, 'body { color: blue; }');
 
-		$css = $loader->loadStylesheet('style.css');
+		$css = $this->cssLoader->loadStylesheet('style.css');
 		$this->assertEquals('body { color: blue; }', $css);
 	}
 
@@ -69,17 +72,10 @@ class CssLoaderTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testResolveBackgroundUrls()
 	{
-		// We rely on Path::relativeToAbsolute logic which handles absolute paths correctly
-		// and simple relative paths if wrappers allow.
-		
 		$css = 'body { background: url(images/bg.jpg); }';
-		// With empty basepath, it might resolve to relative or absolute depending on Path implementation
-		
 		$basePath = 'http://example.com/assets/';
 		$resolved = $this->cssLoader->resolveBackgroundUrls($css, $basePath);
-		
-		// Path::relativeToAbsolute should resolving implementation
-		// verify expected behaviour roughly
+
 		$this->assertStringContainsString('url(http://example.com/assets/images/bg.jpg)', $resolved);
 	}
 
@@ -92,7 +88,7 @@ class CssLoaderTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 			->willReturn('temp/file.png');
 
 		$processed = $this->cssLoader->processDataUriImages($css);
-		
+
 		$this->assertEquals('div { background-image: url("temp/file.png"); }', $processed);
 	}
 }

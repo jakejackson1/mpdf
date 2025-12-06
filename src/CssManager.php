@@ -9,7 +9,7 @@ use Mpdf\Css\ShadowParser;
 use Mpdf\Css\CssLoader;
 use Mpdf\Css\MediaQueryProcessor;
 use Mpdf\Css\SelectorParser;
-use Mpdf\Css\CssSanitizer;
+use Mpdf\Css\CommentParser;
 use Mpdf\Css\InlineStyleParser;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\Path;
@@ -55,9 +55,9 @@ class CssManager
 	private $selectorParser;
 
 	/**
-	 * @var \Mpdf\Css\CssSanitizer
+	 * @var \Mpdf\Css\CommentParser
 	 */
-	private $cssSanitizer;
+	private $commentParser;
 
 	/**
 	 * @var \Mpdf\Css\InlineStyleParser
@@ -131,8 +131,8 @@ class CssManager
 		$this->cssLoader = new CssLoader($assetFetcher, $cache);
 		$this->mediaQueryProcessor = new MediaQueryProcessor($mpdf);
 		$this->selectorParser = new SelectorParser($mpdf);
-		$this->cssSanitizer = new CssSanitizer();
-		$this->inlineStyleParser = new InlineStyleParser($this->cssSanitizer, $this->normalizeProperties);
+		$this->commentParser = new CommentParser();
+		$this->inlineStyleParser = new InlineStyleParser($this->normalizeProperties);
 
 		$this->tablecascadeCSS = [];
 		$this->CSS = [];
@@ -154,8 +154,8 @@ class CssManager
 	{
 		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
 		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
-		$html = $this->cssSanitizer->removeCommentsFromStyleBlocks($html);
-		$html = $this->cssSanitizer->removeHtmlComments($html);
+		$html = $this->commentParser->removeCommentsFromStyleBlocks($html);
+		$html = $this->commentParser->removeHtmlComments($html);
 
 		$CSSext = $this->cssLoader->extractExternalStylesheetUrls($html);
 		$CSSstr = '';
@@ -198,7 +198,7 @@ class CssManager
 		$CSSstr = $this->mediaQueryProcessor->processMediaQueries($CSSstr);
 		$CSSstr = $this->cssLoader->processDataUriImages($CSSstr);
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
-		$CSSstr = $this->cssSanitizer->processUrlsInCss($CSSstr);
+		$CSSstr = $this->inlineStyleParser->processUrlsInCss($CSSstr);
 
 		if ($CSSstr) {
 			$this->processCssString($CSSstr);
