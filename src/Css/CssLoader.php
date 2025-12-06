@@ -59,26 +59,22 @@ class CssLoader
 		$cssUrls = [];
 
 		// <link rel="stylesheet" href="...">
-		$regexp = '/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
+		if (preg_match_all('/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si', $html, $cxt)) {
 			$cssUrls = $cxt[1];
 		}
 
 		// <link href="..." rel="stylesheet">
-		$regexp = '/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
+		if (preg_match_all('/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si', $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
 		// @import url(...)
-		$regexp = '/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
+		if (preg_match_all('/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si', $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
 		// @import "..."
-		$regexp = '/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
+		if (preg_match_all('/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si', $html, $cxt)) {
 			$cssUrls = array_merge($cssUrls, $cxt[1]);
 		}
 
@@ -99,13 +95,11 @@ class CssLoader
 
 		// look for embedded @import stylesheets in other stylesheets
 		// and fix url paths (including background-images) relative to stylesheet
-		$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
-		if (preg_match_all($regexpem, $cssContent, $cxtem)) {
+		if (preg_match_all('/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si', $cssContent, $cxtem)) {
 			foreach ($cxtem[1] as $cxtembedded) {
 				// path is relative to original stylesheet!!
-				$cxtembedded = Path::relativeToAbsolutePath($cxtembedded, $cssBasePath);
+				$cssExt[] = Path::relativeToAbsolutePath($cxtembedded, $cssBasePath);
 				$match++;
-				$cssExt[] = $cxtembedded;
 			}
 		}
 
@@ -126,23 +120,19 @@ class CssLoader
 	 */
 	public function resolveBackgroundUrls($cssStr, $basePath = null)
 	{
-		$regexpem = '/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si';
-		$xem = preg_match_all($regexpem, $cssStr, $cxtem);
-		if ($xem) {
-			$count_cxtem = count($cxtem[0]);
-			for ($i = 0; $i < $count_cxtem; $i++) {
-				$embedded = $cxtem[2][$i];
-				if (!preg_match('/^data:image/i', $embedded)) {
-					if ($basePath !== null) {
-						$newPath = Path::relativeToAbsolutePath($embedded, $basePath);
-					} else {
-						$newPath = Path::relativeToAbsolutePath($embedded);
-					}
-					
-					$cssStr = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $newPath . $cxtem[3][$i]), $cssStr);
-				}
+		if (!preg_match_all('/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si', $cssStr, $cxtem)) {
+			return $cssStr;
+		}
+
+		$count_cxtem = count($cxtem[0]);
+		for ($i = 0; $i < $count_cxtem; $i++) {
+			$embedded = $cxtem[2][$i];
+			if (!preg_match('/^data:image/i', $embedded)) {
+				$newPath = Path::relativeToAbsolutePath($embedded, $basePath);
+				$cssStr = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $newPath . $cxtem[3][$i]), $cssStr);
 			}
 		}
+
 		return $cssStr;
 	}
 
@@ -154,6 +144,7 @@ class CssLoader
 	 *
 	 * @param string $cssStr CSS string potentially containing data URIs
 	 * @return string CSS string with data URIs replaced by temp file references
+	 * @throws \Random\RandomException
 	 */
 	public function processDataUriImages($cssStr)
 	{

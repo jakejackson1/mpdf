@@ -7,6 +7,8 @@ use Mpdf\Css\NormalizeProperties;
 use Mpdf\Css\TextVars;
 use Mpdf\Css\ShadowParser;
 use Mpdf\Css\CssLoader;
+use Mpdf\Css\MediaQueryProcessor;
+use Mpdf\Css\SelectorParser;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\Path;
 
@@ -40,7 +42,30 @@ class CssManager
 	/**
 	 * @var \Mpdf\Css\NormalizeProperties
 	 */
+	/**
+	 * @var \Mpdf\Css\NormalizeProperties
+	 */
 	private $normalizeProperties;
+
+	/**
+	 * @var \Mpdf\Css\ShadowParser
+	 */
+	private $shadowParser;
+
+	/**
+	 * @var \Mpdf\Css\CssLoader
+	 */
+	private $cssLoader;
+
+	/**
+	 * @var \Mpdf\Css\MediaQueryProcessor
+	 */
+	private $mediaQueryProcessor;
+
+	/**
+	 * @var \Mpdf\Css\SelectorParser
+	 */
+	private $selectorParser;
 
 	/**
 	 * @var array CSS cascade storage for table elements
@@ -100,7 +125,7 @@ class CssManager
 	 * @param AssetFetcher $assetFetcher Asset fetching utility for external resources
 	 * @param NormalizeProperties $normalizeProperties CSS property normalizer
 	 */
-	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, NormalizeProperties $normalizeProperties, ShadowParser $shadowParser, CssLoader $cssLoader)
+	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, NormalizeProperties $normalizeProperties, ShadowParser $shadowParser, CssLoader $cssLoader, MediaQueryProcessor $mediaQueryProcessor, SelectorParser $selectorParser)
 	{
 		$this->mpdf = $mpdf;
 		$this->cache = $cache;
@@ -110,6 +135,8 @@ class CssManager
 		$this->normalizeProperties = $normalizeProperties;
 		$this->shadowParser = $shadowParser;
 		$this->cssLoader = $cssLoader;
+		$this->mediaQueryProcessor = $mediaQueryProcessor;
+		$this->selectorParser = $selectorParser;
 
 		$this->tablecascadeCSS = [];
 		$this->CSS = [];
@@ -129,8 +156,8 @@ class CssManager
 	 */
 	public function ReadCSS($html)
 	{
-		$html = $this->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
-		$html = $this->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
 		$html = $this->removeCommentsFromStyleBlocks($html);
 		$html = $this->removeHtmlComments($html);
 
@@ -172,7 +199,7 @@ class CssManager
 		// Remove comments
 		$CSSstr = preg_replace('|/\*.*?\*/|s', ' ', $CSSstr);
 		$CSSstr = preg_replace('/[\s\n\r\t\f]/s', ' ', $CSSstr);
-		$CSSstr = $this->processMediaQueries($CSSstr);
+		$CSSstr = $this->mediaQueryProcessor->processMediaQueries($CSSstr);
 		$CSSstr = $this->cssLoader->processDataUriImages($CSSstr);
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 		$CSSstr = $this->processUrlsInCss($CSSstr);
@@ -228,172 +255,32 @@ class CssManager
 		$tags = preg_split('/\s+/', trim($tg));
 		$level = count($tags);
 		if (trim($tags[0]) === '@PAGE') {
-			$this->processPageSelector($tags, $classproperties);
-		} elseif ($level === 1) {  // e.g. p or .class or #id or p.class or p#id
-			$this->processSimpleSelector($tags, $classproperties);
+			$tag = $this->selectorParser->parsePageSelector($tags);
+			if ($tag && isset($this->CSS[$tag])) {
+				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+			} elseif ($tag) {
+				$this->CSS[$tag] = $classproperties;
+			}
+		} elseif ($level === 1) {
+			$tag = $this->selectorParser->parseSimpleSelector($tags);
+			if ($tag && isset($this->CSS[$tag])) {
+				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
+			} elseif ($tag) {
+				$this->CSS[$tag] = $classproperties;
+			}
 		} else {
-			$this->processCascadedSelector($tags, $classproperties);
-		}
-	}
-
-	/**
-	 * Process @PAGE selector.
-	 *
-	 * @param array $tags Selector tags array
-	 * @param array $classproperties CSS properties
-	 * @return void
-	 */
-	protected function processPageSelector($tags, $classproperties)
-	{
-		$level = count($tags);
-		$t = '';
-		$t2 = '';
-		$t3 = '';
-
-		if (isset($tags[0])) {
-			$t = trim($tags[0]);
-		}
-
-		if (isset($tags[1])) {
-			$t2 = trim($tags[1]);
-		}
-
-		if (isset($tags[2])) {
-			$t3 = trim($tags[2]);
-		}
-
-		$tag = '';
-		if ($level === 1) {
-			$tag = $t;
-		} elseif ($level === 2 && preg_match('/^[:](.*)$/', $t2, $m)) {
-			$tag = $t . '>>PSEUDO>>' . $m[1];
-			if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
-				$this->mpdf->mirrorMargins = true;
-			}
-		} elseif ($level === 2) {
-			$tag = $t . '>>NAMED>>' . $t2;
-		} elseif ($level === 3 && preg_match('/^[:](.*)$/', $t3, $m)) {
-			$tag = $t . '>>NAMED>>' . $t2 . '>>PSEUDO>>' . $m[1];
-			if ($m[1] === 'LEFT' || $m[1] === 'RIGHT') {
-				$this->mpdf->mirrorMargins = true;
-			}
-		}
-
-		if (isset($this->CSS[$tag]) && $tag) {
-			$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
-		} elseif ($tag) {
-			$this->CSS[$tag] = $classproperties;
-		}
-	}
-
-	/**
-	 * Process simple selector (depth 1).
-	 *
-	 * @param array $tags Selector tags array
-	 * @param array $classproperties CSS properties
-	 * @return void
-	 */
-	protected function processSimpleSelector($tags, $classproperties)
-	{
-		$t = isset($tags[0]) ? trim($tags[0]) : '';
-		if (empty($t)) {
-			return;
-		}
-
-		$tag = '';
-		if (preg_match('/^[.](.*)$/', $t, $m)) {
-			$classes = explode('.', $m[1]);
-			sort($classes);
-			$tag = 'CLASS>>' . implode('.', $classes);
-		} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
-			$tag = 'ID>>' . $m[1];
-		} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-			$tag = 'LANG>>' . strtolower($m[1]);
-		} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-			$tag = 'LANG>>' . strtolower($m[1]);
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-			$classes = explode('.', $m[2]);
-			sort($classes);
-			$tag = $m[1] . '>>CLASS>>' . implode('.', $classes);
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
-			$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
-			$tag = $m[1] . '>>ID>>' . $m[2];
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-			$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) {  // mPDF 6  Special case for lang as attribute selector
-			$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-		} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
-			$tag = $t;
-		}
-
-		if (isset($this->CSS[$tag]) && $tag) {
-			$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classproperties);
-		} elseif ($tag) {
-			$this->CSS[$tag] = $classproperties;
-		}
-	}
-
-	/**
-	 * Process cascaded selector (depth > 1).
-	 *
-	 * @param array $tags Selector tags array
-	 * @param array $classproperties CSS properties
-	 * @return void
-	 */
-	protected function processCascadedSelector($tags, $classproperties)
-	{
-		$tmp = [];
-		$level = count($tags);
-
-		for ($n = 0; $n < $level; $n++) {
-			$tag = '';
-			$t = isset($tags[$n]) ? trim($tags[$n]) : '';
-			if (empty($t)) {
-				continue;
+			$tmp = $this->selectorParser->parseCascadedSelector($tags);
+			if (empty($tmp)) {
+				return;
 			}
 
-			if (preg_match('/^[.](.*)$/', $t, $m)) {
-				$classes = explode('.', $m[1]);
-				sort($classes);
-				$tag = 'CLASS>>' . join('.', $classes);
-			} elseif (preg_match('/^[#](.*)$/', $t, $m)) {
-				$tag = 'ID>>' . $m[1];
-			} elseif (preg_match('/^\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-				$tag = 'LANG>>' . strtolower($m[1]);
-			} elseif (preg_match('/^:LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-				$tag = 'LANG>>' . strtolower($m[1]);
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[.](.*)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-				$classes = explode('.', $m[2]);
-				sort($classes);
-				$tag = $m[1] . '>>CLASS>>' . join('.', $classes);
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\s*:NTH-CHILD\((.*)\)$/', $t, $m)) {
-				$tag = $m[1] . '>>SELECTORNTHCHILD>>' . $m[2];
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')[#](.*)$/', $t, $m)) {
-				$tag = $m[1] . '>>ID>>' . $m[2];
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')\[LANG=[\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\]$/', $t, $m)) {
-				$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . '):LANG\([\'\"]{0,1}([A-Z\-]{2,11})[\'\"]{0,1}\)$/', $t, $m)) { // mPDF 6  Special case for lang as attribute selector
-				$tag = $m[1] . '>>LANG>>' . strtolower($m[2]);
-			} elseif (preg_match('/^(' . $this->mpdf->allowedCSStags . ')$/', $t)) { // mPDF 6  Special case for lang as attribute selector
-				$tag = $t;
-			}
-
-			if (!$tag) {
-				break;
-			}
-
-			$tmp[] = $tag;
-		}
-
-		if (!empty($tag)) {
-			$x = &$this->cascadeCSS;
+			$cascadeCSS = &$this->cascadeCSS;
 			foreach ($tmp as $tp) {
-				$x = &$x[$tp];
+				$cascadeCSS = &$cascadeCSS[$tp];
 			}
 
-			$x = $this->array_merge_recursive_unique($x, $classproperties);
-			$x['depth'] = $level;
+			$cascadeCSS = $this->array_merge_recursive_unique($cascadeCSS, $classproperties);
+			$cascadeCSS['depth'] = $level;
 		}
 	}
 
@@ -437,34 +324,7 @@ class CssManager
 
 
 
-	/**
-	 * Process @media queries in CSS.
-	 *
-	 * Filters or unwraps @media blocks based on configured media type.
-	 * If media doesn't match CSSselectMedia, the entire block is removed.
-	 * If it matches, the contents are unwrapped.
-	 *
-	 * @param string $cssStr CSS string potentially containing @media rules
-	 * @return string CSS string with media queries processed
-	 */
-	protected function processMediaQueries($cssStr)
-	{
-		if (!preg_match('/@media/', $cssStr)) {
-			return $cssStr;
-		}
 
-		preg_match_all('/@media(.*?)\{(([^\{\}]*\{[^\{\}]*\})+)\s*\}/is', $cssStr, $m);
-		$count_m = count($m[0]);
-		for ($i = 0; $i < $count_m; $i++) {
-			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-				$cssStr = str_replace($m[0][$i], '', $cssStr);
-			} else {
-				$cssStr = str_replace($m[0][$i], ' ' . $m[2][$i] . ' ', $cssStr);
-			}
-		}
-
-		return $cssStr;
-	}
 
 	/**
 	 * Remove mPDF-specific and general HTML comments from content.
@@ -508,26 +368,7 @@ class CssManager
 		return $html;
 	}
 
-	/**
-	 * Filter HTML elements by media query.
-	 *
-	 * Removes elements (style or link tags) that don't match the configured media type.
-	 *
-	 * @param string $html HTML content to filter
-	 * @param string $pattern Regex pattern to match elements
-	 * @return string Filtered HTML
-	 */
-	protected function filterByMediaQuery($html, $pattern)
-	{
-		preg_match_all($pattern, $html, $m);
-		$count_m = count($m[0]);
-		for ($i = 0; $i < $count_m; $i++) {
-			if ($this->mpdf->CSSselectMedia && !preg_match('/(' . trim($this->mpdf->CSSselectMedia) . '|all)/i', $m[1][$i])) {
-				$html = str_replace($m[0][$i], '', $html);
-			}
-		}
-		return $html;
-	}
+
 
 	/**
 	 * Process URLs in CSS strings by encoding special characters.
@@ -629,15 +470,7 @@ class CssManager
 		return $this->normalizeProperties->normalize($classproperties);
 	}
 
-	/**
-	 * @var \Mpdf\Css\ShadowParser
-	 */
-	private $shadowParser;
 
-	/**
-	 * @var \Mpdf\Css\CssLoader
-	 */
-	private $cssLoader;
 
 	/**
 	 * @param array $prop
