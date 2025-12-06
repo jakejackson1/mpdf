@@ -5,7 +5,10 @@ namespace Mpdf;
 use Mpdf\Color\ColorConverter;
 use Mpdf\Css\NormalizeProperties;
 use Mpdf\Css\TextVars;
+use Mpdf\Css\ShadowParser;
+use Mpdf\Css\CssLoader;
 use Mpdf\Utils\Arrays;
+use Mpdf\Utils\Path;
 
 class CssManager
 {
@@ -97,7 +100,7 @@ class CssManager
 	 * @param AssetFetcher $assetFetcher Asset fetching utility for external resources
 	 * @param NormalizeProperties $normalizeProperties CSS property normalizer
 	 */
-	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, NormalizeProperties $normalizeProperties)
+	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, NormalizeProperties $normalizeProperties, ShadowParser $shadowParser, CssLoader $cssLoader)
 	{
 		$this->mpdf = $mpdf;
 		$this->cache = $cache;
@@ -105,6 +108,8 @@ class CssManager
 		$this->assetFetcher = $assetFetcher;
 		$this->colorConverter = $colorConverter;
 		$this->normalizeProperties = $normalizeProperties;
+		$this->shadowParser = $shadowParser;
+		$this->cssLoader = $cssLoader;
 
 		$this->tablecascadeCSS = [];
 		$this->CSS = [];
@@ -129,7 +134,7 @@ class CssManager
 		$html = $this->removeCommentsFromStyleBlocks($html);
 		$html = $this->removeHtmlComments($html);
 
-		$CSSext = $this->extractExternalStylesheetUrls($html);
+		$CSSext = $this->cssLoader->extractExternalStylesheetUrls($html);
 		$CSSstr = '';
 
 		$match = count($CSSext);
@@ -148,14 +153,10 @@ class CssManager
 				$path = preg_replace('/\.css\?.*$/', '.css', $path);
 			}
 
-			$CSSextblock = $this->assetFetcher->fetchDataFromPath($path);
-			if (!$CSSextblock) {
-				$path = $this->normalizePath($path);
-				$CSSextblock = $this->assetFetcher->fetchDataFromPath($path);
-			}
+			$CSSextblock = $this->cssLoader->loadStylesheet($path);
 
 			if ($CSSextblock) {
-				$CSSstr .= $this->processExternalCssImports($CSSextblock, $path, $CSSext, $match);
+				$CSSstr .= $this->cssLoader->processExternalCssImports($CSSextblock, $path, $CSSext, $match);
 			}
 
 			$match--;
@@ -165,14 +166,14 @@ class CssManager
 		// CSS as <style> in HTML document
 		$regexp = '/<style.*?>(.*?)<\/style>/si';
 		if (preg_match_all($regexp, $html, $CSSblock)) {
-			$CSSstr .= ' ' . $this->resolveBackgroundUrls(implode(' ', $CSSblock[1]));
+			$CSSstr .= ' ' . $this->cssLoader->resolveBackgroundUrls(implode(' ', $CSSblock[1]));
 		}
 
 		// Remove comments
 		$CSSstr = preg_replace('|/\*.*?\*/|s', ' ', $CSSstr);
 		$CSSstr = preg_replace('/[\s\n\r\t\f]/s', ' ', $CSSstr);
 		$CSSstr = $this->processMediaQueries($CSSstr);
-		$CSSstr = $this->processDataUriImages($CSSstr);
+		$CSSstr = $this->cssLoader->processDataUriImages($CSSstr);
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
 		$CSSstr = $this->processUrlsInCss($CSSstr);
 
@@ -187,34 +188,7 @@ class CssManager
 		return $html;
 	}
 
-	/**
-	 * @param string $cssContent
-	 * @param string $path
-	 * @param array $cssExt
-	 * @param int $match
-	 * @return string
-	 */
-	protected function processExternalCssImports($cssContent, $path, &$cssExt, &$match)
-	{
-		$cssBasePath = preg_replace('/\/[^\/]*$/', '', $path) . '/';
-		$cssStr = '';
 
-		// look for embedded @import stylesheets in other stylesheets
-		// and fix url paths (including background-images) relative to stylesheet
-		$regexpem = '/@import url\([\'\"]{0,1}(.*?\.css(\?\S+)?)[\'\"]{0,1}\)/si';
-		if (preg_match_all($regexpem, $cssContent, $cxtem)) {
-			foreach ($cxtem[1] as $cxtembedded) {
-				// path is relative to original stylesheet!!
-				$this->mpdf->GetFullPath($cxtembedded, $cssBasePath);
-				$match++;
-				$cssExt[] = $cxtembedded;
-			}
-		}
-
-		$cssStr .= ' ' . $this->resolveBackgroundUrls($cssContent, $cssBasePath);
-
-		return $cssStr;
-	}
 
 	/**
 	 * @param string $cssStr
@@ -461,48 +435,7 @@ class CssManager
 		return $this->normalizeProperties->normalize($classproperties);
 	}
 
-	/**
-	 * Extract external stylesheet URLs from HTML.
-	 *
-	 * Finds all external CSS file references including:
-	 * - <link rel="stylesheet" href="...">
-	 * - <link href="..." rel="stylesheet">
-	 * - @import url(...)
-	 * - @import "..."
-	 *
-	 * @param string $html HTML content to scan
-	 * @return array Array of CSS file URLs
-	 */
-	protected function extractExternalStylesheetUrls($html)
-	{
-		$cssUrls = [];
 
-		// <link rel="stylesheet" href="...">
-		$regexp = '/<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^>"\']*)["\'].*?>/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
-			$cssUrls = $cxt[1];
-		}
-
-		// <link href="..." rel="stylesheet">
-		$regexp = '/<link[^>]*href=["\']([^>"\']*)["\'][^>]*?rel=["\']stylesheet["\'].*?>/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
-			$cssUrls = array_merge($cssUrls, $cxt[1]);
-		}
-
-		// @import url(...)
-		$regexp = '/@import url\([\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\)\;?/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
-			$cssUrls = array_merge($cssUrls, $cxt[1]);
-		}
-
-		// @import "..."
-		$regexp = '/@import (?!url)[\'\"]{0,1}(\S*?\.css(\?[^\s\'\"]+)?)[\'\"]{0,1}\;?/si';
-		if (preg_match_all($regexp, $html, $cxt)) {
-			$cssUrls = array_merge($cssUrls, $cxt[1]);
-		}
-
-		return $cssUrls;
-	}
 
 	/**
 	 * Process @media queries in CSS.
@@ -549,58 +482,7 @@ class CssManager
 		return $html;
 	}
 
-	/**
-	 * Resolve background image URLs in CSS.
-	 *
-	 * Converts relative URLs to absolute paths using GetFullPath.
-	 * Skips data URIs which are already absolute.
-	 *
-	 * @param string $cssStr CSS string potentially containing background URLs
-	 * @param string|null $basePath Optional base path for resolving relative URLs
-	 * @return string CSS string with resolved URLs
-	 */
-	protected function resolveBackgroundUrls($cssStr, $basePath = null)
-	{
-		$regexpem = '/(background[^;]*url\s*\(\s*[\'\"]{0,1})([^\)\'\"]*)([\'\"]{0,1}\s*\))/si';
-		$xem = preg_match_all($regexpem, $cssStr, $cxtem);
-		if ($xem) {
-			$count_cxtem = count($cxtem[0]);
-			for ($i = 0; $i < $count_cxtem; $i++) {
-				$embedded = $cxtem[2][$i];
-				if (!preg_match('/^data:image/i', $embedded)) {
-					if ($basePath !== null) {
-						$this->mpdf->GetFullPath($embedded, $basePath);
-					} else {
-						$this->mpdf->GetFullPath($embedded);
-					}
-					$cssStr = str_replace($cxtem[0][$i], ($cxtem[1][$i] . $embedded . $cxtem[3][$i]), $cssStr);
-				}
-			}
-		}
-		return $cssStr;
-	}
 
-	/**
-	 * Process data URI images in CSS.
-	 *
-	 * Converts data URI images to temporary files for processing.
-	 * Example: url(data:image/png;base64,...) becomes url("tempfile.png")
-	 *
-	 * @param string $cssStr CSS string potentially containing data URIs
-	 * @return string CSS string with data URIs replaced by temp file references
-	 */
-	protected function processDataUriImages($cssStr)
-	{
-		preg_match_all("/(url\(data:image\/(jpeg|gif|png);base64,(.*?)\))/si", $cssStr, $idata);
-		$count_idata = count($idata[0]);
-		if ($count_idata) {
-			for ($i = 0; $i < $count_idata; $i++) {
-				$file = $this->cache->write('_tempCSSidata' . random_int(1, 10000) . '_' . $i . '.' . $idata[2][$i], base64_decode($idata[3][$i]));
-				$cssStr = str_replace($idata[0][$i], 'url("' . $file . '")', $cssStr);
-			}
-		}
-		return $cssStr;
-	}
 
 	/**
 	 * Remove HTML and CSS comments from style blocks.
@@ -748,24 +630,14 @@ class CssManager
 	}
 
 	/**
-	 * Normalize shadow colors.
-	 *
-	 * Replaces commas in color functions (rgb, hsl, etc.) with placeholders
-	 * to prevent splitting multiple shadows on those commas.
-	 *
-	 * @param string $value Shadow property value
-	 * @return string Normalized shadow property value
+	 * @var \Mpdf\Css\ShadowParser
 	 */
-	protected function normalizeShadowColors($value)
-	{
-		$c = preg_match_all('/(rgba|rgb|device-cmyka|cmyka|device-cmyk|cmyk|hsla|hsl)\(.*?\)/', $value, $x); // mPDF 5.6.05
-		for ($i = 0; $i < $c; $i++) {
-			$col = preg_replace('/,\s/', '*', $x[0][$i]);
-			$value = str_replace($x[0][$i], $col, $value);
-		}
+	private $shadowParser;
 
-		return $value;
-	}
+	/**
+	 * @var \Mpdf\Css\CssLoader
+	 */
+	private $cssLoader;
 
 	/**
 	 * @param array $prop
@@ -774,94 +646,6 @@ class CssManager
 	protected function normalizeCssProperties($prop)
 	{
 		return $this->normalizeProperties->normalize($prop);
-	}
-
-	/**
-	 * Parse a single box-shadow definition.
-	 *
-	 * Helper method for setCSSboxshadow to parse individual shadow components
-	 * (inset, x, y, blur, spread, color).
-	 *
-	 * @param string $s Shadow definition string
-	 * @return array|null Parsed shadow array or null if invalid
-	 */
-	protected function parseSingleBoxShadow($s)
-	{
-		$boxShadow = [
-			'inset' => false,
-			'blur' => 0,
-			'spread' => 0
-		];
-
-		if (stripos($s, 'inset') !== false) {
-			$boxShadow['inset'] = true;
-			$s = preg_replace('/\s*inset\s*/', '', $s);
-		}
-
-		$p = explode(' ', trim($s));
-		if (isset($p[0])) {
-			$boxShadow['x'] = $this->sizeConverter->convert(
-				trim($p[0]),
-				$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
-				$this->mpdf->FontSize,
-				false
-			);
-		}
-
-		if (isset($p[1])) {
-			$boxShadow['y'] = $this->sizeConverter->convert(
-				trim($p[1]),
-				$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
-				$this->mpdf->FontSize,
-				false
-			);
-
-		}
-
-		if (isset($p[2])) {
-			if (preg_match('/^\s*[\.\-0-9]/', $p[2])) {
-				$boxShadow['blur'] = $this->sizeConverter->convert(
-					trim($p[2]),
-					$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
-					$this->mpdf->FontSize,
-					false
-				);
-			} else {
-				$boxShadow['col'] = $this->colorConverter->convert(
-					preg_replace('/\*/', ',', $p[2]),
-					$this->mpdf->PDFAXwarnings
-				);
-			}
-		}
-
-		if (isset($p[3])) {
-			if (preg_match('/^\s*[\.\-0-9]/', $p[3])) {
-				$boxShadow['spread'] = $this->sizeConverter->convert(
-					trim($p[3]),
-					$this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'],
-					$this->mpdf->FontSize,
-					false
-				);
-			} else {
-				$boxShadow['col'] = $this->colorConverter->convert(
-					preg_replace('/\*/', ',', $p[3]),
-					$this->mpdf->PDFAXwarnings
-				);
-			}
-		}
-
-		if (isset($p[4])) {
-			$boxShadow['col'] = $this->colorConverter->convert(
-				preg_replace('/\*/', ',', $p[4]),
-				$this->mpdf->PDFAXwarnings
-			);
-		}
-
-		if (empty($boxShadow['col'])) {
-			$boxShadow['col'] = $this->colorConverter->convert('#888888', $this->mpdf->PDFAXwarnings);
-		}
-		
-		return isset($boxShadow['y']) ? $boxShadow : null;
 	}
 
 	/**
@@ -875,81 +659,7 @@ class CssManager
 	 */
 	public function setCSSboxshadow($value)
 	{
-		$sh = [];
-		$ss = explode(',', $this->normalizeShadowColors($value));
-		foreach ($ss as $s) {
-			$boxShadow = $this->parseSingleBoxShadow($s);
-			if ($boxShadow) {
-				array_unshift($sh, $boxShadow);
-			}
-		}
-
-		return $sh;
-	}
-
-	/**
-	 * Parse a single text-shadow definition.
-	 *
-	 * Helper method for setCSStextshadow to parse individual shadow components
-	 * (x, y, blur, color).
-	 *
-	 * @param string $s Shadow definition string
-	 * @return array|null Parsed shadow array or null if invalid
-	 */
-	protected function parseSingleTextShadow($s)
-	{
-		$textShadow = ['blur' => 0];
-		$p = explode(' ', trim($s));
-
-		if (isset($p[0])) {
-			$textShadow['x'] = $this->sizeConverter->convert(
-				trim($p[0]),
-				$this->mpdf->FontSize,
-				$this->mpdf->FontSize,
-				false
-			);
-		}
-
-		if (isset($p[1])) {
-			$textShadow['y'] = $this->sizeConverter->convert(
-				trim($p[1]),
-				$this->mpdf->FontSize,
-				$this->mpdf->FontSize,
-				false
-			);
-		}
-
-		if (isset($p[2])) {
-			if (preg_match('/^\s*[\.\-0-9]/', $p[2])) {
-				$textShadow['blur'] = $this->sizeConverter->convert(
-					trim($p[2]),
-					isset($this->mpdf->blk[$this->mpdf->blklvl]['inner_width']) ? $this->mpdf->blk[$this->mpdf->blklvl]['inner_width'] : 0,
-					$this->mpdf->FontSize,
-					false
-				);
-			} else {
-				$textShadow['col'] = $this->colorConverter->convert(
-					preg_replace('/\*/', ',', $p[2]),
-					$this->mpdf->PDFAXwarnings
-				);
-			}
-		}
-
-		if (isset($p[3])) {
-			$textShadow['col'] = $this->colorConverter->convert(
-				preg_replace('/\*/', ',', $p[3]),
-				$this->mpdf->PDFAXwarnings
-			);
-		}
-
-		if (empty($textShadow['col'])) {
-			$textShadow['col'] = $this->colorConverter->convert(
-				'#888888',
-				$this->mpdf->PDFAXwarnings
-			);
-		}
-		
-		return isset($textShadow['y']) ? $textShadow : null;
+		return $this->shadowParser->parseBoxShadow($value);
 	}
 
 	/**
@@ -963,17 +673,7 @@ class CssManager
 	 */
 	public function setCSStextshadow($value)
 	{
-		$sh = [];
-		$ss = explode(',', $this->normalizeShadowColors($value));
-
-		foreach ($ss as $s) {
-			$textShadow = $this->parseSingleTextShadow($s);
-			if ($textShadow) {
-				array_unshift($sh, $textShadow);
-			}
-		}
-
-		return $sh;
+		return $this->shadowParser->parseTextShadow($value);
 	}
 
 	/**

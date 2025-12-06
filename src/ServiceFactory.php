@@ -25,7 +25,9 @@ use Mpdf\Writer\MetadataWriter;
 use Mpdf\Writer\OptionalContentWriter;
 use Mpdf\Writer\PageWriter;
 use Mpdf\Writer\ResourceWriter;
+use Mpdf\Css\CssLoader;
 use Mpdf\Css\NormalizeProperties;
+use Mpdf\Css\ShadowParser;
 use Psr\Log\LoggerInterface;
 
 class ServiceFactory
@@ -86,7 +88,11 @@ class ServiceFactory
 		
 		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
 
-		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher, $normalizeProperties);
+		$shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
+
+		$cssLoader = new CssLoader($assetFetcher, $cache);
+
+		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher, $normalizeProperties, $shadowParser, $cssLoader);
 
 		$otl = new Otl($mpdf, $fontCache);
 
