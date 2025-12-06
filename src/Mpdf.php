@@ -15,6 +15,7 @@ use Mpdf\QrCode;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\NumericString;
 use Mpdf\Utils\UtfString;
+use Mpdf\Utils\Path;
 use Psr\Log\NullLogger;
 
 /**
@@ -11531,84 +11532,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	public function GetFullPath(&$path, $basepath = '')
 	{
-		// @todo make return, remove reference
-
 		// When parsing CSS need to pass temporary basepath - so links are relative to current stylesheet
-		if (!$basepath) {
-			$basepath = $this->basepath;
-		}
-
-		// Fix path value
-		$path = str_replace("\\", '/', $path); // If on Windows
-
-		// mPDF 5.7.2
-		if (strpos($path, '//') === 0) {
-			$scheme = parse_url($basepath, PHP_URL_SCHEME);
-			$scheme = $scheme ?: 'http';
-			$path = $scheme . ':' . $path;
-		}
-
-		$path = preg_replace('|^./|', '', $path); // Inadvertently corrects "./path/etc" and "//www.domain.com/etc"
-
-		if (strpos($path, '#') === 0) {
-			return;
-		}
-
-		// Skip schemes not supported by installed stream wrappers
-		$wrappers = stream_get_wrappers();
-		$pattern = sprintf('@^(?!%s)[a-z0-9\.\-+]+:.*@i', implode('|', $wrappers));
-		if (preg_match($pattern, $path)) {
-			return;
-		}
-
-		if (strpos($path, '../') === 0) { // It is a relative link
-
-			$backtrackamount = substr_count($path, '../');
-			$maxbacktrack = substr_count($basepath, '/') - 3;
-			$filepath = str_replace('../', '', $path);
-			$path = $basepath;
-
-			// If it is an invalid relative link, then make it go to directory root
-			if ($backtrackamount > $maxbacktrack) {
-				$backtrackamount = $maxbacktrack;
-			}
-
-			// Backtrack some directories
-			for ($i = 0; $i < $backtrackamount + 1; $i++) {
-				$path = substr($path, 0, strrpos($path, "/"));
-			}
-
-			$path .= '/' . $filepath; // Make it an absolute path
-
-			return;
-
-		}
-
-		if ((strpos($path, ":/") === false || strpos($path, ":/") > 10) && !@is_file($path)) { // It is a local link. Ignore potential file errors
-
-			if (strpos($path, '/') === 0) {
-
-				$tr = parse_url($basepath);
-
-				// mPDF 5.7.2
-				$root = '';
-				if (!empty($tr['scheme'])) {
-					$root .= $tr['scheme'] . '://';
-				}
-
-				$root .= isset($tr['host']) ? $tr['host'] : '';
-				$root .= ((isset($tr['port']) && $tr['port']) ? (':' . $tr['port']) : ''); // mPDF 5.7.3
-
-				$path = $root . $path;
-
-				return;
-
-			}
-
-			$path = $basepath . $path;
-		}
-
-		// Do nothing if it is an Absolute Link
+		$basepath = !empty($basepath) ? $basepath : $this->basepath;
+		$path = Path::relativeToAbsolute($path, $basepath);
 	}
 
 	function docPageNum($num = 0, $extras = false)
