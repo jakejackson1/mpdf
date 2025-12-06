@@ -12,6 +12,7 @@ use Mpdf\Otl;
 use Mpdf\SizeConverter;
 use Mpdf\Ucdn;
 use Mpdf\Utils\Arrays;
+use Mpdf\Utils\Path;
 use Mpdf\Utils\UtfString;
 
 /**
@@ -278,7 +279,7 @@ class Svg
 		$orig_srcpath = '';
 		if (trim($srcpath) != '' && substr($srcpath, 0, 4) == 'var:') {
 			$orig_srcpath = $srcpath;
-			$srcpath = $this->mpdf->GetFullPath($srcpath);
+			$srcpath = Path::relativeToAbsolutePath($srcpath);
 		}
 
 		// Image file (does not allow vector images i.e. WMF/SVG)

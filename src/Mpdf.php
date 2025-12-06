@@ -8865,7 +8865,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	function Image($file, $x, $y, $w = 0, $h = 0, $type = '', $link = '', $paint = true, $constrain = true, $watermark = false, $shownoimg = true, $allowvector = true)
 	{
 		$orig_srcpath = $file;
-		$this->GetFullPath($file);
+		$file = Path::relativeToAbsolutePath($file);
 
 		$info = $this->imageProcessor->getImage($file, true, $allowvector, $orig_srcpath);
 		if (!$info && $paint) {
@@ -11509,7 +11509,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 
 			$this->basepath = $currpath;
+			Path::$basepath = $this->basepath;
+
 			$this->basepathIsLocal = true;
+			Path::$basepathIsLocal = $this->basepathIsLocal;
 
 			return;
 		}
@@ -11524,17 +11527,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->basepath = dirname($str) . "/"; // returns e.g. e.g. http://www.google.com/dir1/dir2/dir3/
 		$this->basepath = str_replace("\\", "/", $this->basepath); // If on Windows
+		Path::$basepath = $this->basepath;
 
 		$tr = parse_url($this->basepath);
 
 		$this->basepathIsLocal = (isset($tr['host']) && ($tr['host'] == $host));
+		Path::$basepathIsLocal = $this->basepathIsLocal;
 	}
 
 	public function GetFullPath(&$path, $basepath = '')
 	{
-		// When parsing CSS need to pass temporary basepath - so links are relative to current stylesheet
-		$basepath = !empty($basepath) ? $basepath : $this->basepath;
-		$path = Path::relativeToAbsolute($path, $basepath);
+		$path = Path::relativeToAbsolutePath($path, $basepath);
 	}
 
 	function docPageNum($num = 0, $extras = false)
@@ -13811,7 +13814,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						if (trim($path) != '' && !(stristr($e, "src=") !== false && substr($path, 0, 4) == 'var:') && substr($path, 0, 1) != '@') {
 							$path = htmlspecialchars_decode($path); // mPDF 5.7.4 URLs
 							$orig_srcpath = $path;
-							$this->GetFullPath($path);
+							$path = Path::relativeToAbsolutePath($path);
 							$regexp = '/ (href|src)="(.*?)"/i';
 							$e = preg_replace($regexp, ' \\1="' . $path . '"', $e);
 						}

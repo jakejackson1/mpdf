@@ -3,6 +3,7 @@
 namespace Mpdf\Tag;
 
 use Mpdf\Mpdf;
+use Mpdf\Utils\Path;
 
 class Meter extends InlineTag
 {
@@ -227,7 +228,7 @@ class Meter extends InlineTag
 		//Save to local file
 		$srcpath = $this->cache->write('/_tempSVG' . uniqid(random_int(1, 100000), true) . '_' . strtolower($tag) . '.svg', $svg);
 		$orig_srcpath = $srcpath;
-		$this->mpdf->GetFullPath($srcpath);
+		$srcpath = Path::relativeToAbsolutePath($srcpath);
 
 		$info = $this->imageProcessor->getImage($srcpath, true, true, $orig_srcpath);
 		if (!$info) {

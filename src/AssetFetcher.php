@@ -8,6 +8,7 @@ use Mpdf\Http\ClientInterface;
 use Mpdf\Log\Context as LogContext;
 use Mpdf\PsrHttpMessageShim\Request;
 use Mpdf\PsrLogAwareTrait\PsrLogAwareTrait;
+use Mpdf\Utils\Path;
 use Psr\Log\LoggerInterface;
 
 class AssetFetcher implements \Psr\Log\LoggerAwareInterface
@@ -46,7 +47,7 @@ class AssetFetcher implements \Psr\Log\LoggerAwareInterface
 			throw new \Mpdf\Exception\AssetFetchingException('File contains an invalid stream. Only ' . implode(', ', $wrapperChecker->getWhitelistedStreamWrappers()) . ' streams are allowed.');
 		}
 
-		$this->mpdf->GetFullPath($path);
+		$path = Path::relativeToAbsolutePath($path);
 
 		return $this->isPathLocal($path) || ($originalSrc !== null && $this->isPathLocal($originalSrc))
 			? $this->fetchLocalContent($path, $originalSrc)
@@ -114,7 +115,7 @@ class AssetFetcher implements \Psr\Log\LoggerAwareInterface
 
 	public function isPathLocal($path)
 	{
-		return str_starts_with($path, 'file://') || strpos($path, '://') === false; // @todo More robust implementation
+		return Path::isPathLocal($path);
 	}
 
 }

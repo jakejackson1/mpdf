@@ -4,8 +4,13 @@ namespace Mpdf\Utils;
 
 class Path
 {
-	public static function relativeToAbsolute($relPath, $basePath)
+	public static $basepathIsLocal = false;
+	public static $basepath = '';
+
+	public static function relativeToAbsolutePath($relPath, $basePath = '')
 	{
+		$basePath = !empty($basePath) ? $basePath : self::$basepath;
+
 		 // Fix Windows paths
 		$relPath = str_replace("\\", '/', $relPath);
 
@@ -76,5 +81,44 @@ class Path
 		}
 
 		return $relPath;
+	}
+
+	public static function isPathLocal($path)
+	{
+		return str_starts_with($path, 'file://') || strpos($path, '://') === false; // @todo More robust implementation
+	}
+
+	/**
+	 * Normalize file path for local file system access.
+	 *
+	 * Converts URLs to local file paths when the base path is local.
+	 * Handles DOCUMENT_ROOT and relative paths.
+	 *
+	 * @param string $path File path or URL
+	 * @return string Normalized path
+	 */
+	public static function normalizeLocalFilePath($path)
+	{
+		if (!self::$basepathIsLocal) {
+			return $path;
+		}
+
+		$tr = parse_url($path);
+		$lp = __FILE__;
+		$ap = realpath($lp);
+		$ap = str_replace("\\", '/', $ap);
+		$docroot = substr($ap, 0, strpos($ap, $lp));
+
+		// WriteHTML parses all paths to full URLs; may be local file name
+		// DOCUMENT_ROOT is not returned on IIS
+		if (!empty($tr['scheme']) && !empty($tr['host']) && !empty($_SERVER['DOCUMENT_ROOT'])) {
+			return $_SERVER['DOCUMENT_ROOT'] . $tr['path'];
+		}
+
+		if ($docroot) {
+			return $docroot . $tr['path'];
+		}
+
+		return $path;
 	}
 }

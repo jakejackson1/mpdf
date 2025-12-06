@@ -141,7 +141,7 @@ class CssManager
 
 		while ($match) {
 			$path = htmlspecialchars_decode($CSSext[$ind]);
-			$this->mpdf->GetFullPath($path);
+			$path = Path::relativeToAbsolutePath($path);
 
 			// mPDF 5.7.3
 			if (strpos($path, '//') === false) {
@@ -2184,39 +2184,7 @@ class CssManager
 		}
 	}
 
-	/**
-	 * Normalize file path for local file system access.
-	 *
-	 * Converts URLs to local file paths when the base path is local.
-	 * Handles DOCUMENT_ROOT and relative paths.
-	 *
-	 * @param string $path File path or URL
-	 * @return string Normalized path
-	 */
-	protected function normalizePath($path)
-	{
-		if (!$this->mpdf->basepathIsLocal) {
-			return $path;
-		}
 
-		$tr = parse_url($path);
-		$lp = __FILE__;
-		$ap = realpath($lp);
-		$ap = str_replace("\\", '/', $ap);
-		$docroot = substr($ap, 0, strpos($ap, $lp));
-
-		// WriteHTML parses all paths to full URLs; may be local file name
-		// DOCUMENT_ROOT is not returned on IIS
-		if (!empty($tr['scheme']) && $tr['host'] && !empty($_SERVER['DOCUMENT_ROOT'])) {
-			return $_SERVER['DOCUMENT_ROOT'] . $tr['path'];
-		}
-
-		if ($docroot) {
-			return $docroot . $tr['path'];
-		}
-
-		return $path;
-	}
 
 	/**
 	 * Merge table specific CSS (CELLSPACING, CELLPADDING).

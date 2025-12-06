@@ -1349,62 +1349,7 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertArrayHasKey('existing', $t);
 	}
 
-	public function testNormalizePath_WhenBasepathNotLocal()
-	{
-		$this->mpdf->basepathIsLocal = false;
 
-		// Use reflection to access protected method
-		$reflection = new \ReflectionClass($this->cssManager);
-		$method     = $reflection->getMethod('normalizePath');
-		$method->setAccessible(true);
-
-		$result = $method->invokeArgs($this->cssManager, ['/some/path/file.css']);
-
-		$this->assertEquals('/some/path/file.css', $result);
-	}
-
-	public function testNormalizePath_WithBasepathLocal_AndDocumentRoot()
-	{
-		$this->mpdf->basepathIsLocal = true;
-
-		// Save original values
-		$originalDocRoot = isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : null;
-
-		// Set up test environment
-		$_SERVER['DOCUMENT_ROOT'] = '/var/www/html';
-
-		// Use reflection to access protected method
-		$reflection = new \ReflectionClass($this->cssManager);
-		$method     = $reflection->getMethod('normalizePath');
-		$method->setAccessible(true);
-
-		$result = $method->invokeArgs($this->cssManager, ['http://example.com/path/to/file.css']);
-
-		// Should return document root + path
-		$this->assertStringContainsString('/path/to/file.css', $result);
-
-		// Restore original value
-		if ($originalDocRoot === null) {
-			unset($_SERVER['DOCUMENT_ROOT']);
-		} else {
-			$_SERVER['DOCUMENT_ROOT'] = $originalDocRoot;
-		}
-	}
-
-	public function testNormalizePath_WithBasepathLocal_NoScheme()
-	{
-		$this->mpdf->basepathIsLocal = true;
-
-		// Use reflection to access protected method
-		$reflection = new \ReflectionClass($this->cssManager);
-		$method     = $reflection->getMethod('normalizePath');
-		$method->setAccessible(true);
-
-		$result = $method->invokeArgs($this->cssManager, ['relative/path/file.css']);
-
-		// Should return original path when no scheme
-		$this->assertEquals('relative/path/file.css', $result);
-	}
 
 	public function testInlinePropsToCSS_WithFontFamily()
 	{
