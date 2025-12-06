@@ -3,50 +3,38 @@
 namespace Mpdf\Css;
 
 use Mpdf\Color\ColorConverter;
+use Mpdf\Color\ColorModeConverter;
+use Mpdf\Color\ColorSpaceRestrictor;
 use Mpdf\Mpdf;
 use Mpdf\SizeConverter;
+use Psr\Log\NullLogger;
 
-class ShadowParserTest extends \PHPUnit\Framework\TestCase
+class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	/**
 	 * @var \Mpdf\Css\ShadowParser
 	 */
 	private $shadowParser;
-
 	private $mpdf;
-	private $sizeConverter;
-	private $colorConverter;
 
-	protected function setUp(): void
+	public function set_up()
 	{
-		$this->mpdf = $this->getMockBuilder(Mpdf::class)
-			->disableOriginalConstructor()
-			->getMock();
+		parent::set_up();
 
-		$this->mpdf->FontSize = 12;
-		$this->mpdf->PDFAXwarnings = [];
-		$this->mpdf->blklvl = 1;
-		$this->mpdf->blk = [['inner_width' => 500]];
+		$this->mpdf = new Mpdf();
+		$logger = new NullLogger();
+		$sizeConverter = new SizeConverter(96, 11, $this->mpdf, $logger);
+		$colorModeConverter = new ColorModeConverter();
+		$colorSpaceRestrictor = new ColorSpaceRestrictor($this->mpdf, $colorModeConverter);
+		$colorConverter = new ColorConverter($this->mpdf, $colorModeConverter, $colorSpaceRestrictor);
 
-		$this->sizeConverter = $this->getMockBuilder(SizeConverter::class)
-			->disableOriginalConstructor()
-			->getMock();
+		$this->shadowParser = new ShadowParser($this->mpdf, $sizeConverter, $colorConverter);
+	}
 
-		$this->sizeConverter->method('convert')
-			->willReturnCallback(function ($val) {
-				return $val;
-			});
-
-		$this->colorConverter = $this->getMockBuilder(ColorConverter::class)
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->colorConverter->method('convert')
-			->willReturnCallback(function ($val) {
-				return $val;
-			});
-
-		$this->shadowParser = new ShadowParser($this->mpdf, $this->sizeConverter, $this->colorConverter);
+	public function tear_down()
+	{
+		unset( $this->shadowParser, $this->mpdf );
+		parent::tear_down();
 	}
 
 	public function testNormalizeShadowColors()

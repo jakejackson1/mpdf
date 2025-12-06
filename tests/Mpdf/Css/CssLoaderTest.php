@@ -4,9 +4,8 @@ namespace Mpdf\Css;
 
 use Mpdf\AssetFetcher;
 use Mpdf\Cache;
-use org\bovigo\vfs\vfsStream;
 
-class CssLoaderTest extends \PHPUnit\Framework\TestCase
+class CssLoaderTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	private $assetFetcher;
 	private $cache;

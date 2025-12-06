@@ -29,6 +29,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$colorModeConverter = new ColorModeConverter();
 		$colorSpaceRestrictor = new ColorSpaceRestrictor($this->mpdf, $colorModeConverter);
 		$colorConverter = new ColorConverter($this->mpdf, $colorModeConverter, $colorSpaceRestrictor);
+
 		$this->properties = new NormalizeProperties($this->mpdf, $sizeConverter, $colorConverter);
 	}
 

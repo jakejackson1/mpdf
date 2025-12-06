@@ -4,7 +4,7 @@ namespace Mpdf\Css;
 
 use Mpdf\Mpdf;
 
-class SelectorParserTest extends \PHPUnit\Framework\TestCase
+class SelectorParserTest  extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	private $mpdf;
 	private $parser;
@@ -16,6 +16,23 @@ class SelectorParserTest extends \PHPUnit\Framework\TestCase
 		$this->mpdf->allowedCSStags = 'DIV|P|SPAN|H1|H2|H3|H4|H5|H6|A';
 
 		$this->parser = new SelectorParser($this->mpdf);
+	}
+
+	public function set_up()
+	{
+		parent::set_up();
+
+		$this->mpdf = new Mpdf();
+
+		$this->mpdf->allowedCSStags = 'DIV|P|SPAN|H1|H2|H3|H4|H5|H6|A';
+
+		$this->parser = new SelectorParser($this->mpdf);
+	}
+
+	public function tear_down()
+	{
+		unset( $this->parser, $this->mpdf );
+		parent::tear_down();
 	}
 
 	public function testParsePageSelector()

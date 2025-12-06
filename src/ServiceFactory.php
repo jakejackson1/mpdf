@@ -25,11 +25,6 @@ use Mpdf\Writer\MetadataWriter;
 use Mpdf\Writer\OptionalContentWriter;
 use Mpdf\Writer\PageWriter;
 use Mpdf\Writer\ResourceWriter;
-use Mpdf\Css\CssLoader;
-use Mpdf\Css\MediaQueryProcessor;
-use Mpdf\Css\SelectorParser;
-use Mpdf\Css\NormalizeProperties;
-use Mpdf\Css\ShadowParser;
 use Psr\Log\LoggerInterface;
 
 class ServiceFactory
@@ -87,18 +82,8 @@ class ServiceFactory
 			: new LocalContentLoader();
 
 		$assetFetcher = new AssetFetcher($mpdf, $localContentLoader, $httpClient, $logger);
-		
-		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
 
-		$shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
-
-		$cssLoader = new CssLoader($assetFetcher, $cache);
-
-		$mediaQueryProcessor = new MediaQueryProcessor($mpdf);
-
-		$selectorParser = new SelectorParser($mpdf);
-
-		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher, $normalizeProperties, $shadowParser, $cssLoader, $mediaQueryProcessor, $selectorParser);
+		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher);
 
 		$otl = new Otl($mpdf, $fontCache);
 

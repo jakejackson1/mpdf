@@ -4,18 +4,24 @@ namespace Mpdf\Css;
 
 use Mpdf\Mpdf;
 
-class MediaQueryProcessorTest extends \PHPUnit\Framework\TestCase
+class MediaQueryProcessorTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	private $mpdf;
 	private $processor;
 
-	protected function setUp(): void
+	public function set_up()
 	{
-		$this->mpdf = $this->getMockBuilder(Mpdf::class)
-			->disableOriginalConstructor()
-			->getMock();
+		parent::set_up();
+
+		$this->mpdf = new Mpdf();
 
 		$this->processor = new MediaQueryProcessor($this->mpdf);
+	}
+
+	public function tear_down()
+	{
+		unset($this->mpdf, $this->processor);
+		parent::tear_down();
 	}
 
 	public function testFilterByMediaQueryMatches()

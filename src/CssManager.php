@@ -9,6 +9,8 @@ use Mpdf\Css\ShadowParser;
 use Mpdf\Css\CssLoader;
 use Mpdf\Css\MediaQueryProcessor;
 use Mpdf\Css\SelectorParser;
+use Mpdf\Css\CssSanitizer;
+use Mpdf\Css\InlineStyleParser;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\Path;
 
@@ -20,24 +22,9 @@ class CssManager
 	private $mpdf;
 
 	/**
-	 * @var \Mpdf\Cache
-	 */
-	private $cache;
-
-	/**
-	 * @var \Mpdf\SizeConverter
-	 */
-	private $sizeConverter;
-
-	/**
 	 * @var \Mpdf\Color\ColorConverter
 	 */
 	private $colorConverter;
-
-	/**
-	 * @var \Mpdf\AssetFetcher
-	 */
-	private $assetFetcher;
 
 	/**
 	 * @var \Mpdf\Css\NormalizeProperties
@@ -66,6 +53,16 @@ class CssManager
 	 * @var \Mpdf\Css\SelectorParser
 	 */
 	private $selectorParser;
+
+	/**
+	 * @var \Mpdf\Css\CssSanitizer
+	 */
+	private $cssSanitizer;
+
+	/**
+	 * @var \Mpdf\Css\InlineStyleParser
+	 */
+	private $inlineStyleParser;
 
 	/**
 	 * @var array CSS cascade storage for table elements
@@ -123,20 +120,19 @@ class CssManager
 	 * @param SizeConverter $sizeConverter Size conversion utility
 	 * @param ColorConverter $colorConverter Color conversion utility
 	 * @param AssetFetcher $assetFetcher Asset fetching utility for external resources
-	 * @param NormalizeProperties $normalizeProperties CSS property normalizer
 	 */
-	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher, NormalizeProperties $normalizeProperties, ShadowParser $shadowParser, CssLoader $cssLoader, MediaQueryProcessor $mediaQueryProcessor, SelectorParser $selectorParser)
+	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
 	{
 		$this->mpdf = $mpdf;
-		$this->cache = $cache;
-		$this->sizeConverter = $sizeConverter;
-		$this->assetFetcher = $assetFetcher;
 		$this->colorConverter = $colorConverter;
-		$this->normalizeProperties = $normalizeProperties;
-		$this->shadowParser = $shadowParser;
-		$this->cssLoader = $cssLoader;
-		$this->mediaQueryProcessor = $mediaQueryProcessor;
-		$this->selectorParser = $selectorParser;
+
+		$this->normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
+		$this->shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
+		$this->cssLoader = new CssLoader($assetFetcher, $cache);
+		$this->mediaQueryProcessor = new MediaQueryProcessor($mpdf);
+		$this->selectorParser = new SelectorParser($mpdf);
+		$this->cssSanitizer = new CssSanitizer();
+		$this->inlineStyleParser = new InlineStyleParser($this->cssSanitizer, $this->normalizeProperties);
 
 		$this->tablecascadeCSS = [];
 		$this->CSS = [];
@@ -158,8 +154,8 @@ class CssManager
 	{
 		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
 		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
-		$html = $this->removeCommentsFromStyleBlocks($html);
-		$html = $this->removeHtmlComments($html);
+		$html = $this->cssSanitizer->removeCommentsFromStyleBlocks($html);
+		$html = $this->cssSanitizer->removeHtmlComments($html);
 
 		$CSSext = $this->cssLoader->extractExternalStylesheetUrls($html);
 		$CSSstr = '';
@@ -202,7 +198,7 @@ class CssManager
 		$CSSstr = $this->mediaQueryProcessor->processMediaQueries($CSSstr);
 		$CSSstr = $this->cssLoader->processDataUriImages($CSSstr);
 		$CSSstr = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $CSSstr);
-		$CSSstr = $this->processUrlsInCss($CSSstr);
+		$CSSstr = $this->cssSanitizer->processUrlsInCss($CSSstr);
 
 		if ($CSSstr) {
 			$this->processCssString($CSSstr);
@@ -326,92 +322,11 @@ class CssManager
 
 
 
-	/**
-	 * Remove mPDF-specific and general HTML comments from content.
-	 *
-	 * Removes <!--mpdf and mpdf--> markers and all HTML comments.
-	 *
-	 * @param string $html HTML content to clean
-	 * @return string HTML with comments removed
-	 */
-	protected function removeHtmlComments($html)
-	{
-		$html = preg_replace('/<!--mpdf/i', '', $html);
-		$html = preg_replace('/mpdf-->/i', '', $html);
-		$html = preg_replace('/<\!\-\-.*?\-\->/s', ' ', $html);
-		return $html;
-	}
 
 
 
-	/**
-	 * Remove HTML and CSS comments from style blocks.
-	 *
-	 * Removes both HTML comments (<!-- -->) and CSS comments from
-	 * <style> tag contents while preserving the structure.
-	 *
-	 * @param string $html HTML content with style tags
-	 * @return string HTML with cleaned style blocks
-	 */
-	protected function removeCommentsFromStyleBlocks($html)
-	{
-		preg_match_all('/<style.*?>(.*?)<\/style>/si', $html, $m);
-		$count_m = count($m[1]);
-		if ($count_m) {
-			for ($i = 0; $i < $count_m; $i++) {
-				// Remove comment tags
-				$sub = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $m[1][$i]);
-				$sub = '>'.preg_replace('|/\*.*?\*/|s', ' ', $sub).'</style>';
-				$html = str_replace('>'.$m[1][$i].'</style>', $sub, $html);
-			}
-		}
-		return $html;
-	}
 
 
-
-	/**
-	 * Process URLs in CSS strings by encoding special characters.
-	 *
-	 * Characters "(", ")", and ";" in url() can cause problems parsing CSS.
-	 * This method URLencodes ( and ), and temporarily encodes ";" to prevent
-	 * confusion with CSS segment delimiters.
-	 *
-	 * @param string $css CSS string containing url() references
-	 * @return string CSS string with processed URLs
-	 */
-	protected function processUrlsInCss($css)
-	{
-		if (strpos($css, 'url(') === false) {
-			return $css;
-		}
-
-		// Process urls with double quotes
-		preg_match_all('/url\(\"(.*?)\"\)/', $css, $m);
-		$count_m = count($m[1]);
-		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
-			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
-		}
-
-		// Process urls with single quotes
-		preg_match_all('/url\(\'(.*?)\'\)/', $css, $m);
-		$count_m = count($m[1]);
-		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
-			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
-		}
-
-		// Process urls without quotes
-		preg_match_all('/url\(([^\'\"].*?[^\'\"])\)/', $css, $m);
-		$count_m = count($m[1]);
-		for ($i = 0; $i < $count_m; $i++) {
-			$tmp = str_replace(['(', ')', ';'], ['%28', '%29', '%ZZ'], $m[1][$i]);
-			$css = str_replace($m[0][$i], 'url(\'' . $tmp . '\')', $css);
-		}
-
-		return $css;
-	}
 
 	/**
 	 * Normalize background position values.
@@ -426,59 +341,12 @@ class CssManager
 	/**
 	 * Parse inline CSS style attribute.
 	 *
-	 * Parses a CSS string from an HTML style attribute and returns
-	 * an array of CSS properties.
-	 *
 	 * @param string $html CSS string from style attribute
 	 * @return array Parsed CSS properties
 	 */
 	public function readInlineCSS($html)
 	{
-		$html = htmlspecialchars_decode($html); // mPDF 5.7.4 URLs
-		// mPDF 5.7.4 URLs
-		// Characters "(", ")", and ";" in url() e.g. background-image, cause problems parsing the CSS string
-		// URLencode ( and ), but change ";" to a code which can be converted back after parsing (so as not to confuse ;
-		// with a segment delimiter in the URI)
-		$html = $this->processUrlsInCss($html);
-
-		// Fix incomplete CSS code
-		$size = strlen($html) - 1;
-		if (substr($html, $size, 1) !== ';') {
-			$html .= ';';
-		}
-
-		// Make CSS[Name-of-the-class] = array(key => value)
-		$regexp = '|\\s*?(\\S+?):(.+?);|i';
-		preg_match_all($regexp, $html, $styleinfo);
-		$properties = $styleinfo[1];
-		$values = $styleinfo[2];
-
-		// Array-properties and Array-values must have the SAME SIZE!
-		$classproperties = [];
-		$properties_count = count($properties);
-		for ($i = 0; $i < $properties_count; $i++) {
-
-			// Ignores -webkit-gradient so doesn't override -moz-
-			if ((strtoupper($properties[$i]) === 'BACKGROUND-IMAGE' || strtoupper($properties[$i]) === 'BACKGROUND') && false !== stripos($values[$i], '-webkit-gradient')) {
-				continue;
-			}
-
-			$values[$i] = str_replace('%ZZ', ';', $values[$i]); // mPDF 5.7.4 URLs
-			$classproperties[strtoupper($properties[$i])] = trim($values[$i]);
-		}
-
-		return $this->normalizeProperties->normalize($classproperties);
-	}
-
-
-
-	/**
-	 * @param array $prop
-	 * @return array
-	 */
-	protected function normalizeCssProperties($prop)
-	{
-		return $this->normalizeProperties->normalize($prop);
+		return $this->inlineStyleParser->parse($html);
 	}
 
 	/**
@@ -1265,7 +1133,7 @@ class CssManager
 
 		// INLINE STYLE e.g. style="CSS:property"
 		if (isset($attr['STYLE'])) {
-			$zp = $this->readInlineCSS($attr['STYLE']);
+			$zp = $this->inlineStyleParser->parse($attr['STYLE']);
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
@@ -1775,7 +1643,7 @@ class CssManager
 			return;
 		}
 
-		$zp = $this->readInlineCSS($attr['STYLE']);
+		$zp = $this->inlineStyleParser->parse($attr['STYLE']);
 		if ($tag === 'TD' || $tag === 'TH') {
 			$this->setBorderDominance($zp, 9);
 		} // *TABLES*
