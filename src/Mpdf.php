@@ -13272,7 +13272,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		$properties = $this->cssManager->MergeCSS('BLOCK', 'BODY', '');
 		if ($zproperties) {
-			$properties = $this->cssManager->array_merge_recursive_unique($properties, $zproperties);
+			$properties = Arrays::uniqueRecursiveMerge($properties, $zproperties);
 		}
 
 		if (isset($properties['DIRECTION']) && $properties['DIRECTION']) {

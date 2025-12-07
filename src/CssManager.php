@@ -11,6 +11,7 @@ use Mpdf\Css\MediaQueryProcessor;
 use Mpdf\Css\SelectorParser;
 use Mpdf\Css\CommentParser;
 use Mpdf\Css\InlineStyleParser;
+use Mpdf\Css\InlinePropertyConverter;
 use Mpdf\Utils\Arrays;
 use Mpdf\Utils\Path;
 
@@ -50,7 +51,12 @@ class CssManager
 	private $mediaQueryProcessor;
 
 	/**
-	 * @var \Mpdf\Css\SelectorParser
+	 * @var \Mpdf\Css\InlinePropertyConverter
+	 */
+	private $inlinePropertyConverter;
+
+	/**
+	 * @var \Mpdf\Css\TableBorderCalculator
 	 */
 	private $selectorParser;
 
@@ -133,6 +139,7 @@ class CssManager
 		$this->selectorParser = new SelectorParser($mpdf);
 		$this->commentParser = new CommentParser();
 		$this->inlineStyleParser = new InlineStyleParser($this->normalizeProperties);
+		$this->inlinePropertyConverter = new InlinePropertyConverter($this->colorConverter);
 	}
 
 	/**
@@ -238,7 +245,7 @@ class CssManager
 		if (trim($tags[0]) === '@PAGE') {
 			$tag = $this->selectorParser->parsePageSelector($tags);
 			if ($tag && isset($this->CSS[$tag])) {
-				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classProperties);
+				$this->CSS[$tag] = Arrays::uniqueRecursiveMerge($this->CSS[$tag], $classProperties);
 			} elseif ($tag) {
 				$this->CSS[$tag] = $classProperties;
 			}
@@ -249,7 +256,7 @@ class CssManager
 		if ($level === 1) {
 			$tag = $this->selectorParser->parseSimpleSelector($tags);
 			if ($tag && isset($this->CSS[$tag])) {
-				$this->CSS[$tag] = $this->array_merge_recursive_unique($this->CSS[$tag], $classProperties);
+				$this->CSS[$tag] = Arrays::uniqueRecursiveMerge($this->CSS[$tag], $classProperties);
 			} elseif ($tag) {
 				$this->CSS[$tag] = $classProperties;
 			}
@@ -266,7 +273,7 @@ class CssManager
 			$cascadeCSS = &$cascadeCSS[$tag];
 		}
 
-		$cascadeCSS = $this->array_merge_recursive_unique($cascadeCSS, $classProperties);
+		$cascadeCSS = Arrays::uniqueRecursiveMerge($cascadeCSS, $classProperties);
 		$cascadeCSS['depth'] = $level;
 	}
 
@@ -367,7 +374,7 @@ class CssManager
 			return;
 		}
 
-		$target = $target ? $this->array_merge_recursive_unique($target, $property) : $property;
+		$target = $target ? Arrays::uniqueRecursiveMerge($target, $property) : $property;
 	}
 
 	/**
@@ -380,31 +387,7 @@ class CssManager
 	 * @param array $array2 Second array
 	 * @return array Merged array
 	 */
-	public function array_merge_recursive_unique($array1, $array2)
-	{
-		//@TODO - move to helper
-		$funcArguments = func_get_args();
-		$numOfArrays = count($funcArguments);
-		$output = $funcArguments[0];
 
-		for ($i = 1; $i < $numOfArrays; $i ++) {
-			foreach ($funcArguments[$i] as $key => $value) {
-				if (((string) $key) === ((string) ((int) $key))) {
-					// integer or string as integer key - append
-					$output[] = $value;
-				} else {
-					// string key - merge
-					if (is_array($value) && isset($output[$key])) {
-						$output[$key] = $this->array_merge_recursive_unique($output[$key], $value);
-					} else {
-						$output[$key] = $value;
-					}
-				}
-			}
-		}
-
-		return $output;
-	}
 
 	/**
 	 * Merge Nth-child CSS selectors.
@@ -693,7 +676,7 @@ class CssManager
 		$this->mergeTableSpecificCss($tag, $attr);
 		$this->mergeStylesheetSelectors($tag, $attr, $classes, $languageCode);
 		$this->mergeTagSpecificSelectors($tag, $attr, $classes, $languageCode);
-		$this->mergeCascadedCss($inherit, $tag, $attr, $classes);
+		$this->mergeDescendantSelectors($inherit, $tag, $attr, $classes);
 		$this->mergeInlineStyle($tag, $attr);
 
 		return $this->cssProperties;
@@ -775,15 +758,14 @@ class CssManager
 	 * @param array $classes Array of class names
 	 * @return void
 	 */
-	protected function mergeCascadedCss($inherit, $tag, $attr, $classes)
+	protected function mergeDescendantSelectors($inherit, $tag, $attr, $classes)
 	{
-		// Cascaded e.g. div.class p only works for block level
 		if ($inherit === 'BLOCK') {
-			$this->mergeBlockCascadedCss($tag, $attr, $classes);
+			$this->mergeBlockDescendantSelectors($tag, $attr, $classes);
 		} elseif ($inherit === 'INLINE') {
-			$this->mergeInlineCascadedCss($tag, $attr, $classes);
+			$this->mergeInlineDescendantSelectors($tag, $attr, $classes);
 		} elseif ($inherit === 'TOPTABLE' || $inherit === 'TABLE') {
-			$this->mergeTableCascadedCss($tag, $attr, $classes);
+			$this->mergeTableDescendantSelectors($tag, $attr, $classes);
 		}
 	}
 
@@ -795,26 +777,13 @@ class CssManager
 	 * @param array $classes Array of class names
 	 * @return void
 	 */
-	protected function mergeBlockCascadedCss($tag, $attr, $classes)
+	protected function mergeBlockDescendantSelectors($tag, $attr, $classes)
 	{
-		$node = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]) ? $this->mpdf->blk[$this->mpdf->blklvl - 1] : [];
-		if (empty($node['cascadeCSS'])) {
+		if (!isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
 			return;
 		}
 
-		$this->setMergedCss($node['cascadeCSS'][$tag]);
-		foreach ($classes as $class) {
-			$this->setMergedCss($node['cascadeCSS']['CLASS>>' . $class]);
-		}
-
-		$this->setMergedCss($node['cascadeCSS']['ID>>' . $attr['ID']]);
-		foreach ($classes as $class) {
-			$this->setMergedCss($node['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
-		}
-
-		$this->setMergedCss($node['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
-
-		$this->mpdf->blk[$this->mpdf->blklvl - 1] = $node;
+		$this->mergeDescendantCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'], $tag, $attr, $classes);
 	}
 
 	/**
@@ -825,26 +794,13 @@ class CssManager
 	 * @param array $classes Array of class names
 	 * @return void
 	 */
-	protected function mergeInlineCascadedCss($tag, $attr, $classes)
+	protected function mergeInlineDescendantSelectors($tag, $attr, $classes)
 	{
-		$node = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
-		if (empty($node['cascadeCSS'])) {
+		if (!isset($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'])) {
 			return;
 		}
-		
-		$this->setMergedCss($node['cascadeCSS'][$tag]);
-		foreach ($classes as $class) {
-			$this->setMergedCss($node['cascadeCSS']['CLASS>>' . $class]);
-		}
 
-		$this->setMergedCss($node['cascadeCSS']['ID>>' . $attr['ID']]);
-		foreach ($classes as $class) {
-			$this->setMergedCss($node['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
-		}
-
-		$this->setMergedCss($node['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
-
-		$this->mpdf->blk[$this->mpdf->blklvl] = $node;
+		$this->mergeDescendantCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'], $tag, $attr, $classes);
 	}
 
 	/**
@@ -855,7 +811,7 @@ class CssManager
 	 * @param array $classes Array of class names
 	 * @return void
 	 */
-	protected function mergeTableCascadedCss($tag, $attr, $classes)
+	protected function mergeTableDescendantSelectors($tag, $attr, $classes)
 	{
 		$node = isset($this->tablecascadeCSS[$this->tbCSSlvl - 1]) ? $this->tablecascadeCSS[$this->tbCSSlvl - 1] : [];
 		if (empty($node)) {
@@ -893,7 +849,7 @@ class CssManager
 						$select = $this->selectorParser->matchesNthChild($a, $row);
 					}
 				} elseif (($tag === 'TD' || $tag === 'TH') && preg_match($regex, $m[1], $a)) {
-						$select = $this->selectorParser->matchesNthChild($a, $this->mpdf->col);
+					$select = $this->selectorParser->matchesNthChild($a, $this->mpdf->col);
 				}
 
 				if ($select) {
@@ -910,173 +866,6 @@ class CssManager
 		$this->setMergedCss($node[$tag . '>>ID>>' . $attr['ID']], false, 9);
 
 		$this->tablecascadeCSS[$this->tbCSSlvl - 1] = $node;
-	}
-
-	/**
-	 * Convert inline properties back to CSS.
-	 *
-	 * Transforms internal inline property format (used in TextVars) back into
-	 * CSS property array. Used for property inheritance and cascading.
-	 *
-	 * @param array $properties Inline properties array
-	 * @return void
-	 */
-	protected function convertInlinePropertiesToCss($properties)
-	{
-		if (!empty($properties['family'])) {
-			$this->cssProperties['FONT-FAMILY'] = $properties['family'];
-		}
-
-		if (!empty($properties['I'])) {
-			$this->cssProperties['FONT-STYLE'] = 'italic';
-		}
-
-		if (!empty($properties['sizePt'])) {
-			$this->cssProperties['FONT-SIZE'] = $properties['sizePt'] . 'pt';
-		}
-
-		if (!empty($properties['B'])) {
-			$this->cssProperties['FONT-WEIGHT'] = 'bold';
-		}
-
-		if (!empty($properties['colorarray'])) {
-			$this->cssProperties['COLOR'] = $this->colorConverter->colAtoString($properties['colorarray']);
-		}
-
-		if (!empty($properties['lSpacingCSS'])) {
-			$this->cssProperties['LETTER-SPACING'] = $properties['lSpacingCSS'];
-		}
-
-		if (!empty($properties['wSpacingCSS'])) {
-			$this->cssProperties['WORD-SPACING'] = $properties['wSpacingCSS'];
-		}
-
-		if (!empty($properties['textparam'])) {
-			if (isset($properties['textparam']['hyphens'])) {
-				$hyphens = (int) $properties['textparam']['hyphens'];
-				switch ($hyphens) {
-					case 1:
-						$this->cssProperties['HYPHENS'] = 'auto';
-						break;
-
-					case 2:
-						$this->cssProperties['HYPHENS'] = 'none';
-						break;
-
-					default:
-						$this->cssProperties['HYPHENS'] = 'manual';
-				}
-			}
-
-			if (isset($properties['textparam']['outline-s']) && !$properties['textparam']['outline-s']) {
-				$this->cssProperties['TEXT-OUTLINE'] = 'none';
-			}
-
-			if (!empty($properties['textparam']['outline-COLOR'])) {
-				$this->cssProperties['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($properties['textparam']['outline-COLOR']);
-			}
-
-			if (!empty($properties['textparam']['outline-WIDTH'])) {
-				$this->cssProperties['TEXT-OUTLINE-WIDTH'] = $properties['textparam']['outline-WIDTH'] . 'mm';
-			}
-		}
-
-		if (!empty($properties['textvar'])) {
-			// CSS says text-decoration is not inherited, but IE7 does??
-			if ($properties['textvar'] & TextVars::FD_LINETHROUGH) {
-				if ($properties['textvar'] & TextVars::FD_UNDERLINE) {
-					$this->cssProperties['TEXT-DECORATION'] = 'underline line-through';
-				} else {
-					$this->cssProperties['TEXT-DECORATION'] = 'line-through';
-				}
-			} elseif ($properties['textvar'] & TextVars::FD_UNDERLINE) {
-				$this->cssProperties['TEXT-DECORATION'] = 'underline';
-			} else {
-				$this->cssProperties['TEXT-DECORATION'] = 'none';
-			}
-
-			if ($properties['textvar'] & TextVars::FA_SUPERSCRIPT) {
-				$this->cssProperties['VERTICAL-ALIGN'] = 'super';
-			} elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
-				$this->cssProperties['VERTICAL-ALIGN'] = 'sub';
-			} else {
-				$this->cssProperties['VERTICAL-ALIGN'] = 'baseline';
-			}
-
-			if ($properties['textvar'] & TextVars::FT_CAPITALIZE) {
-				$this->cssProperties['TEXT-TRANSFORM'] = 'capitalize';
-			} elseif ($properties['textvar'] & TextVars::FT_UPPERCASE) {
-				$this->cssProperties['TEXT-TRANSFORM'] = 'uppercase';
-			} elseif ($properties['textvar'] & TextVars::FT_LOWERCASE) {
-				$this->cssProperties['TEXT-TRANSFORM'] = 'lowercase';
-			} else {
-				$this->cssProperties['TEXT-TRANSFORM'] = 'none';
-			}
-
-			if ($properties['textvar'] & TextVars::FC_KERNING) {
-				$this->cssProperties['FONT-KERNING'] = 'normal';
-			} else {
-				$this->cssProperties['FONT-KERNING'] = 'none';
-			} // ignore 'auto' as default already applied
-
-			if ($properties['textvar'] & TextVars::FA_SUPERSCRIPT) {
-				$this->cssProperties['FONT-VARIANT-POSITION'] = 'super';
-			} elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
-				$this->cssProperties['FONT-VARIANT-POSITION'] = 'sub';
-			} else {
-				$this->cssProperties['FONT-VARIANT-POSITION'] = 'normal';
-			}
-
-			if ($properties['textvar'] & TextVars::FC_SMALLCAPS) {
-				$this->cssProperties['FONT-VARIANT-CAPS'] = 'small-caps';
-			}
-		}
-
-		if (isset($properties['fontLanguageOverride'])) {
-			if ($properties['fontLanguageOverride']) {
-				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = $properties['fontLanguageOverride'];
-			} else {
-				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = 'normal';
-			}
-		}
-
-		// All the variations of font-variant-* we are going to set as font-feature-settings...
-		if (!empty($properties['OTLtags'])) {
-			$fontFeature = [];
-			if (!empty($properties['OTLtags']['Minus'])) {
-				$f = preg_split('/\s+/', trim($properties['OTLtags']['Minus']));
-				foreach ($f as $ff) {
-					$fontFeature[] = "'" . $ff . "' 0";
-				}
-			}
-
-			if (!empty($properties['OTLtags']['FFMinus'])) {
-				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFMinus']));
-				foreach ($f as $ff) {
-					$fontFeature[] = "'" . $ff . "' 0";
-				}
-			}
-
-			if (!empty($properties['OTLtags']['Plus'])) {
-				$f = preg_split('/\s+/', trim($properties['OTLtags']['Plus']));
-				foreach ($f as $ff) {
-					$fontFeature[] = "'" . $ff . "' 1";
-				}
-			}
-
-			if (!empty($properties['OTLtags']['FFPlus'])) { // May contain numeric value e.g. salt4
-				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFPlus']));
-				foreach ($f as $ff) {
-					if (strlen($ff) > 4) {
-						$fontFeature[] = "'" . substr($ff, 0, 4) . "' " . substr($ff, 4);
-					} else {
-						$fontFeature[] = "'" . $ff . "' 1";
-					}
-				}
-			}
-
-			$this->cssProperties['FONT-FEATURE-SETTINGS'] = implode(', ', $fontFeature);
-		}
 	}
 
 	/**
@@ -1372,7 +1161,8 @@ class CssManager
 		}
 
 		if (isset($previousBlock['InlineProperties'])) {
-			$this->convertInlinePropertiesToCss($previousBlock['InlineProperties'], $this->cssProperties); // mPDF 5.7.1
+			$converted = $this->inlinePropertyConverter->convert($previousBlock['InlineProperties']);
+			$this->cssProperties = array_merge($this->cssProperties, $converted); // mPDF 5.7.1
 		}
 	}
 
@@ -1637,6 +1427,33 @@ class CssManager
 			$this->cssProperties = array_merge($this->cssProperties, $zp);  // !! Note other way round !!
 			$this->mergeBorderProperties($zp);
 		}
+	}
+
+	/**
+	 * Apply descendant CSS rules.
+	 *
+	 * @param array $cascadeCSS
+	 * @param string $tag
+	 * @param array $attr
+	 * @param array $classes
+	 */
+	protected function mergeDescendantCss($cascadeCSS, $tag, $attr, $classes)
+	{
+		if (empty($cascadeCSS)) {
+			return;
+		}
+
+		$this->setMergedCss($cascadeCSS[$tag]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($cascadeCSS['CLASS>>' . $class]);
+		}
+
+		$this->setMergedCss($cascadeCSS['ID>>' . $attr['ID']]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($cascadeCSS[$tag . '>>CLASS>>' . $class]);
+		}
+
+		$this->setMergedCss($cascadeCSS[$tag . '>>ID>>' . $attr['ID']]);
 	}
 
 	/**

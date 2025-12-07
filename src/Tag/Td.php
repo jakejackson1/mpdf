@@ -4,6 +4,7 @@ namespace Mpdf\Tag;
 
 use Mpdf\Css\Border;
 use Mpdf\Css\TextVars;
+use Mpdf\Utils\Arrays;
 use Mpdf\Utils\UtfString;
 
 class Td extends Tag
@@ -174,7 +175,7 @@ class Td extends Tag
 
 		$properties = $this->cssManager->MergeCSS('TABLE', $tag, $attr);
 
-		$properties = $this->cssManager->array_merge_recursive_unique($this->mpdf->base_table_properties, $properties);
+		$properties = Arrays::uniqueRecursiveMerge($this->mpdf->base_table_properties, $properties);
 
 		$this->mpdf->Reset(); // mPDF 6   ?????????????????????
 
