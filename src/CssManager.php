@@ -8,6 +8,7 @@ use Mpdf\Css\ShadowParser;
 use Mpdf\Css\SelectorParser;
 use Mpdf\Css\InlineStyleParser;
 use Mpdf\Css\InlinePropertyConverter;
+use Mpdf\Exception\InvalidArgumentException;
 use Mpdf\Utils\Arrays;
 use Mpdf\Css\CssParser;
 
@@ -124,24 +125,14 @@ class CssManager
 	public $tbCSSlvl = 0;
 
 	/**
-	 * @var int|null Border dominance level for bottom cell borders
+	 * @var array<int> Border dominance levels for cell borders (top/right/bottom/left)
 	 */
-	public $cell_border_dominance_B;
-
-	/**
-	 * @var int|null Border dominance level for left cell borders
-	 */
-	public $cell_border_dominance_L;
-
-	/**
-	 * @var int|null Border dominance level for right cell borders
-	 */
-	public $cell_border_dominance_R;
-
-	/**
-	 * @var int|null Border dominance level for top cell borders
-	 */
-	public $cell_border_dominance_T;
+	private $borderDominance = [
+		'T' => 0,
+		'R' => 0,
+		'B' => 0,
+		'L' => 0,
+	];
 
 	/**
 	 * @var array
@@ -387,22 +378,22 @@ class CssManager
 	 * @param int $val Dominance level value
 	 * @return void
 	 */
-	protected function setBorderDominance($prop, $val)
+	public function setDominanceFromProperties($prop, $val)
 	{
-		if (!empty($prop['BORDER-LEFT'])) {
-			$this->cell_border_dominance_L = $val;
+		if (!empty($prop['BORDER-TOP'])) {
+			$this->setBorderDominance('T', $val);
 		}
 
 		if (!empty($prop['BORDER-RIGHT'])) {
-			$this->cell_border_dominance_R = $val;
-		}
-
-		if (!empty($prop['BORDER-TOP'])) {
-			$this->cell_border_dominance_T = $val;
+			$this->setBorderDominance('R', $val);
 		}
 
 		if (!empty($prop['BORDER-BOTTOM'])) {
-			$this->cell_border_dominance_B = $val;
+			$this->setBorderDominance('B', $val);
+		}
+
+		if (!empty($prop['BORDER-LEFT'])) {
+			$this->setBorderDominance('L', $val);
 		}
 	}
 
@@ -426,7 +417,7 @@ class CssManager
 		}
 
 		if ($borderDominanceLevel) {
-			$this->setBorderDominance($property, $borderDominanceLevel);
+			$this->setDominanceFromProperties($property, $borderDominanceLevel);
 		}
 
 		if (is_array($property)) {
@@ -573,7 +564,7 @@ class CssManager
 			}
 
 			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
+				$this->setDominanceFromProperties($zp, 9);
 			}
 
 			if (is_array($zp)) {
@@ -587,7 +578,7 @@ class CssManager
 			if (!empty($this->CSS[$tag . '>>LANG>>' . $attr['LANG']])) {
 				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
+					$this->setDominanceFromProperties($zp, 9);
 				}
 
 				if (is_array($zp)) {
@@ -597,7 +588,7 @@ class CssManager
 			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $languageCode])) {
 				$zp = $this->CSS[$tag . '>>LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
+					$this->setDominanceFromProperties($zp, 9);
 				}
 
 				if (is_array($zp)) {
@@ -611,7 +602,7 @@ class CssManager
 		if (isset($attr['ID']) && !empty($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
 			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
+				$this->setDominanceFromProperties($zp, 9);
 			}
 
 			if (is_array($zp)) {
@@ -1129,7 +1120,7 @@ class CssManager
 		if (isset($this->CSS[$tag])) {
 			$zp = $this->CSS[$tag];
 			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
+				$this->setDominanceFromProperties($zp, 9);
 			}
 
 			if (is_array($zp)) {
@@ -1146,7 +1137,7 @@ class CssManager
 			}
 
 			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
+				$this->setDominanceFromProperties($zp, 9);
 			}
 
 			if (is_array($zp)) {
@@ -1195,7 +1186,7 @@ class CssManager
 				if ($select) {
 					$zp = $this->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
 					if ($tag === 'TD' || $tag === 'TH') {
-						$this->setBorderDominance($zp, 9);
+						$this->setDominanceFromProperties($zp, 9);
 					}
 
 					if (is_array($zp)) {
@@ -1212,7 +1203,7 @@ class CssManager
 			if (!empty($this->CSS['LANG>>' . $attr['LANG']])) {
 				$zp = $this->CSS['LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
+					$this->setDominanceFromProperties($zp, 9);
 				}
 
 				if (is_array($zp)) {
@@ -1222,7 +1213,7 @@ class CssManager
 			} elseif (!empty($this->CSS['LANG>>' . $languageCode])) {
 				$zp = $this->CSS['LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
-					$this->setBorderDominance($zp, 9);
+					$this->setDominanceFromProperties($zp, 9);
 				}
 
 				if (is_array($zp)) {
@@ -1236,7 +1227,7 @@ class CssManager
 		if (!empty($attr['ID']) && !empty($this->CSS['ID>>' . $attr['ID']])) {
 			$zp = $this->CSS['ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
-				$this->setBorderDominance($zp, 9);
+				$this->setDominanceFromProperties($zp, 9);
 			}
 
 			if (is_array($zp)) {
@@ -1342,12 +1333,39 @@ class CssManager
 
 		$zp = $this->inlineStyleParser->parse($attr['STYLE']);
 		if ($tag === 'TD' || $tag === 'TH') {
-			$this->setBorderDominance($zp, 9);
+			$this->setDominanceFromProperties($zp, 9);
 		}
 
 		if (is_array($zp)) {
 			$this->cssProperties = array_merge($this->cssProperties, $zp);
 			$this->mergeBorderProperties($zp);
 		}
+	}
+
+	/**
+	 * Set border dominance level for a specific side.
+	 *
+	 * @param string $side T|R|B|L
+	 * @param int $val Dominance value
+	 * @throws InvalidArgumentException
+	 */
+	public function setBorderDominance($side, $val)
+	{
+		if (!isset($this->borderDominance[$side])) {
+			throw new InvalidArgumentException('Invalid border dominance value:' . $side);
+		}
+
+		$this->borderDominance[$side] = (int) $val;
+	}
+
+	/**
+	 * Get border dominance level for a specific side.
+	 *
+	 * @param string $side T|R|B|L
+	 * @return int Dominance value
+	 */
+	public function getBorderDominance($side)
+	{
+		return isset($this->borderDominance[$side]) ? $this->borderDominance[$side] : 0;
 	}
 }
