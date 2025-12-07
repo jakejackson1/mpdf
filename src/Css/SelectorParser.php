@@ -157,4 +157,69 @@ class SelectorParser
 
 		return $tmp;
 	}
+
+	/**
+	 * Evaluate nth-child CSS selector.
+	 *
+	 * Determines if a given element index matches an nth-child selector formula.
+	 * Supports formulas like "2n+1", "odd", "even", or specific numbers.
+	 *
+	 * @param array $nthComponents Formula components from preg_match (e.g. 2N+1 split into a preg_match array))
+	 * @param int $index Current element index (e.g row or column number)
+	 * @return bool True if element matches the nth-child selector
+	 */
+	public function matchesNthChild($nthComponents, $index)
+	{
+		++$index;
+		$select = false;
+
+		$numOfComponents = count($nthComponents);
+		if ($nthComponents[0] === 'ODD') {
+			$a = 2;
+			$b = 1;
+		} elseif ($nthComponents[0] === 'EVEN') {
+			$a = 2;
+			$b = 0;
+		} elseif ($numOfComponents === 2) {
+			$a = 0;
+			$b = $nthComponents[1] + 0;
+		} // e.g. (+6)
+		elseif ($numOfComponents === 3) {  // e.g. (2N)
+			if ($nthComponents[2] === '') {
+				$a = 1;
+			} elseif ($nthComponents[2] === '-') {
+				$a = -1;
+			} else {
+				$a = $nthComponents[2] + 0;
+			}
+			$b = 0;
+		} elseif ($numOfComponents === 4) {  // e.g. (2N+6)
+			if ($nthComponents[2] === '') {
+				$a = 1;
+			} elseif ($nthComponents[2] === '-') {
+				$a = -1;
+			} else {
+				$a = $nthComponents[2] + 0;
+			}
+			$b = $nthComponents[3] + 0;
+		} else {
+			return false;
+		}
+
+		if ($a > 0) {
+			if (((($index % $a) - $b) % $a) === 0 && $index >= $b) {
+				$select = true;
+			}
+		} elseif ($a === 0) {
+			if ($index === $b) {
+				$select = true;
+			}
+		} else {  // if ($a<0)
+			if (((($index % $a) - $b) % $a) === 0 && $index <= $b) {
+				$select = true;
+			}
+		}
+
+		return $select;
+	}
 }

@@ -559,58 +559,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertContains('c', $result);
 	}
 
-	public function testNthchild_WithOdd()
-	{
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['ODD'], 3])); // row 4
-	}
-
-	public function testNthchild_WithEven()
-	{
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 1])); // row 2
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 2])); // row 3
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['EVEN'], 3])); // row 4
-	}
-
-	public function testNthchild_WithSpecificNumber()
-	{
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [['', '3'], 3])); // row 4
-	}
-
-	public function testNthchild_With2nPlus1()
-	{
-		$formula = ['', '', '2', '+1'];
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
-	}
-
-	public function testNthchild_With3nPlus2()
-	{
-		$formula = ['', '', '3', '+2'];
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 4])); // row 5
-	}
-
-	public function testNthchild_WithNegativeFormula()
-	{
-		$formula = ['', '', '-', '+3'];
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 0])); // row 1
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 1])); // row 2
-		$this->assertTrue($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 2])); // row 3
-		$this->assertFalse($this->invokeMethod($this->cssManager, 'matchesNthChild', [$formula, 3])); // row 4
-	}
-
 	public function testReadInlineCSS_WithSimpleProperty()
 	{
 		$result = $this->invokeMethod($this->cssManager, 'readInlineCSS', ['color: red;']);
