@@ -57,24 +57,71 @@ class CssManager
 	private $cssParser;
 
 	/**
-	 * @var array CSS cascade storage for table elements
+	 * Main CSS property storage array.
+	 *
+	 * Stores CSS properties for simple selectors (depth 1).
+	 * Format:
+	 * [
+	 *   'P' => [
+	 *     'COLOR' => '#FF0000',
+	 *     'FONT-SIZE' => '12pt',
+	 *   ],
+	 *   'CLASS>>MYCLASS' => [
+	 *     'BORDER' => '1px solid black',
+	 *   ],
+	 *   ...
+	 * ]
+	 *
+	 * @var array
 	 */
-	var $tablecascadeCSS = [];
+	public $CSS = [];
 
 	/**
-	 * @var array Cascading CSS property storage
+	 * CSS cascade storage for table elements.
+	 *
+	 * Stores cascaded CSS properties specifically for table elements (TABLE, THEAD, TBODY, TFOOT, TR, TH, TD).
+	 * Format is a nested array mirroring the selector hierarchy.
+	 * Example for "DIV TABLE TD":
+	 * [
+	 *   'DIV' => [
+	 *     'TABLE' => [
+	 *       'TD' => [
+	 *         'BORDER' => '1px solid green',
+	 *         'depth' => 3
+	 *       ]
+	 *     ]
+	 *   ]
+	 * ]
+	 *
+	 * @var array
 	 */
-	var $cascadeCSS = [];
+	public $tablecascadeCSS = [];
 
 	/**
-	 * @var array Main CSS property storage array
+	 * Cascading CSS property storage.
+	 *
+	 * Stores CSS properties for nested/cascaded selectors (depth > 1).
+	 * Format is a nested array mirroring the selector hierarchy.
+	 * Example for "DIV.myclass P":
+	 * [
+	 *   'DIV' => [
+	 *     'CLASS>>MYCLASS' => [
+	 *       'P' => [
+	 *         'COLOR' => '#0000FF',
+	 *         'depth' => 3
+	 *       ]
+	 *     ]
+	 *   ]
+	 * ]
+	 *
+	 * @var array
 	 */
-	var $CSS = [];
+	public $cascadeCSS = [];
 
 	/**
 	 * @var int Table CSS cascade level counter
 	 */
-	var $tbCSSlvl = 0;
+	public $tbCSSlvl = 0;
 
 	/**
 	 * @var int|null Border dominance level for bottom cell borders

@@ -49,9 +49,12 @@ class CssParser
 	 * Stores CSS properties for simple selectors (depth 1).
 	 * Format:
 	 * [
-	 *   'TAGNAME' => [
-	 *     'PROPERTY' => 'VALUE',
-	 *     ...
+	 *   'P' => [
+	 *     'COLOR' => '#FF0000',
+	 *     'FONT-SIZE' => '12pt',
+	 *   ],
+	 *   'CLASS>>MYCLASS' => [
+	 *     'BORDER' => '1px solid black',
 	 *   ],
 	 *   ...
 	 * ]
@@ -65,12 +68,14 @@ class CssParser
 	 *
 	 * Stores CSS properties for nested/cascaded selectors (depth > 1).
 	 * Format is a nested array mirroring the selector hierarchy.
-	 * Example for "DIV P":
+	 * Example for "DIV.myclass P":
 	 * [
 	 *   'DIV' => [
-	 *     'P' => [
-	 *       'PROPERTY' => 'VALUE',
-	 *       'depth' => 2
+	 *     'CLASS>>MYCLASS' => [
+	 *       'P' => [
+	 *         'COLOR' => '#0000FF',
+	 *         'depth' => 3
+	 *       ]
 	 *     ]
 	 *   ]
 	 * ]
