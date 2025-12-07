@@ -1560,40 +1560,53 @@ class CssManager
 
 		// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
 		if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-			foreach ($this->CSS as $k => $val) {
-				if (preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-					$select = false;
-					if ($tag === 'TR') {
+			$regex = '/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/';
+
+			foreach ($this->CSS as $key => $selector) {
+				if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $key, $m)) {
+					continue;
+				}
+
+				$select = false;
+				switch ($tag) {
+					case 'TR':
 						$row = $this->mpdf->row;
-						$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-						$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
+						$tableCell = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
+
+						$theadCount = !empty($tableCell['is_thead']) ? count($tableCell['is_thead']) : 0;
+						$tfootCount = !empty($tableCell['is_tfoot']) ? count($tableCell['is_tfoot']) : 0;
+
 						if ($this->mpdf->tabletfoot) {
-							$row -= $thnr;
+							$row -= $theadCount;
 						} elseif (!$this->mpdf->tablethead) {
-							$row -= ($thnr + $tfnr);
+							$row -= ($theadCount + $tfootCount);
 						}
 
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+						if (preg_match($regex, $m[1], $a)) { // mPDF 5.7.4
 							$select = $this->matchesNthChild($a, $row);
 						}
-					} elseif ($tag === 'TD' || $tag === 'TH') {
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+						break;
+
+					case 'TH':
+					case 'TD':
+						if (preg_match($regex, $m[1], $a)) { // mPDF 5.7.4
 							$select = $this->matchesNthChild($a, $this->mpdf->col);
 						}
+						break;
+				}
+
+				if ($select) {
+					$zp = $this->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
+					if ($tag === 'TD' || $tag === 'TH') {
+						$this->setBorderDominance($zp, 9);
 					}
 
-					if ($select) {
-						$zp = $this->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
-						if ($tag === 'TD' || $tag === 'TH') {
-							$this->setBorderDominance($zp, 9);
-						}
-
-						if (is_array($zp)) {
-							$this->cssProperties = array_merge($this->cssProperties, $zp);
-							$this->mergeBorderProperties($zp);
-						}
+					if (is_array($zp)) {
+						$this->cssProperties = array_merge($this->cssProperties, $zp);
+						$this->mergeBorderProperties($zp);
 					}
 				}
+
 			}
 		}
 
