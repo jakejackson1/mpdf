@@ -923,45 +923,48 @@ class CssManager
 	 */
 	protected function convertInlinePropertiesToCss($properties)
 	{
-		if (isset($properties['family']) && $properties['family']) {
+		if (!empty($properties['family'])) {
 			$this->cssProperties['FONT-FAMILY'] = $properties['family'];
 		}
 
-		if (isset($properties['I']) && $properties['I']) {
+		if (!empty($properties['I'])) {
 			$this->cssProperties['FONT-STYLE'] = 'italic';
 		}
 
-		if (isset($properties['sizePt']) && $properties['sizePt']) {
+		if (!empty($properties['sizePt'])) {
 			$this->cssProperties['FONT-SIZE'] = $properties['sizePt'] . 'pt';
 		}
 
-		if (isset($properties['B']) && $properties['B']) {
+		if (!empty($properties['B'])) {
 			$this->cssProperties['FONT-WEIGHT'] = 'bold';
 		}
 
-		if (isset($properties['colorarray']) && $properties['colorarray']) {
-			$cor = $properties['colorarray'];
-			$this->cssProperties['COLOR'] = $this->colorConverter->colAtoString($cor);
+		if (!empty($properties['colorarray'])) {
+			$this->cssProperties['COLOR'] = $this->colorConverter->colAtoString($properties['colorarray']);
 		}
 
-		if (isset($properties['lSpacingCSS']) && $properties['lSpacingCSS']) {
+		if (!empty($properties['lSpacingCSS'])) {
 			$this->cssProperties['LETTER-SPACING'] = $properties['lSpacingCSS'];
 		}
 
-		if (isset($properties['wSpacingCSS']) && $properties['wSpacingCSS']) {
+		if (!empty($properties['wSpacingCSS'])) {
 			$this->cssProperties['WORD-SPACING'] = $properties['wSpacingCSS'];
 		}
 
-		if (isset($properties['textparam']) && $properties['textparam']) {
+		if (!empty($properties['textparam'])) {
 			if (isset($properties['textparam']['hyphens'])) {
-				if ($properties['textparam']['hyphens'] == 2) {
-					$this->cssProperties['HYPHENS'] = 'none';
-				}
-				if ($properties['textparam']['hyphens'] == 1) {
-					$this->cssProperties['HYPHENS'] = 'auto';
-				}
-				if ($properties['textparam']['hyphens'] == 0) {
-					$this->cssProperties['HYPHENS'] = 'manual';
+				$hyphens = (int) $properties['textparam']['hyphens'];
+				switch ($hyphens) {
+					case 1:
+						$this->cssProperties['HYPHENS'] = 'auto';
+						break;
+
+					case 2:
+						$this->cssProperties['HYPHENS'] = 'none';
+						break;
+
+					default:
+						$this->cssProperties['HYPHENS'] = 'manual';
 				}
 			}
 
@@ -969,16 +972,16 @@ class CssManager
 				$this->cssProperties['TEXT-OUTLINE'] = 'none';
 			}
 
-			if (isset($properties['textparam']['outline-COLOR']) && $properties['textparam']['outline-COLOR']) {
+			if (!empty($properties['textparam']['outline-COLOR'])) {
 				$this->cssProperties['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($properties['textparam']['outline-COLOR']);
 			}
 
-			if (isset($properties['textparam']['outline-WIDTH']) && $properties['textparam']['outline-WIDTH']) {
+			if (!empty($properties['textparam']['outline-WIDTH'])) {
 				$this->cssProperties['TEXT-OUTLINE-WIDTH'] = $properties['textparam']['outline-WIDTH'] . 'mm';
 			}
 		}
 
-		if (isset($properties['textvar']) && $properties['textvar']) {
+		if (!empty($properties['textvar'])) {
 			// CSS says text-decoration is not inherited, but IE7 does??
 			if ($properties['textvar'] & TextVars::FD_LINETHROUGH) {
 				if ($properties['textvar'] & TextVars::FD_UNDERLINE) {
@@ -1012,15 +1015,13 @@ class CssManager
 
 			if ($properties['textvar'] & TextVars::FC_KERNING) {
 				$this->cssProperties['FONT-KERNING'] = 'normal';
-			} // ignore 'auto' as default already applied
-			else {
+			} else {
 				$this->cssProperties['FONT-KERNING'] = 'none';
-			}
+			} // ignore 'auto' as default already applied
 
 			if ($properties['textvar'] & TextVars::FA_SUPERSCRIPT) {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'super';
-			}
-			elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
+			} elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'sub';
 			} else {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'normal';
@@ -1038,42 +1039,43 @@ class CssManager
 				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = 'normal';
 			}
 		}
+
 		// All the variations of font-variant-* we are going to set as font-feature-settings...
-		if (isset($properties['OTLtags']) && $properties['OTLtags']) {
-			$ffs = [];
-			if (isset($properties['OTLtags']['Minus']) && $properties['OTLtags']['Minus']) {
+		if (!empty($properties['OTLtags'])) {
+			$fontFeature = [];
+			if (!empty($properties['OTLtags']['Minus'])) {
 				$f = preg_split('/\s+/', trim($properties['OTLtags']['Minus']));
 				foreach ($f as $ff) {
-					$ffs[] = "'" . $ff . "' 0";
+					$fontFeature[] = "'" . $ff . "' 0";
 				}
 			}
 
-			if (isset($properties['OTLtags']['FFMinus']) && $properties['OTLtags']['FFMinus']) {
+			if (!empty($properties['OTLtags']['FFMinus'])) {
 				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFMinus']));
 				foreach ($f as $ff) {
-					$ffs[] = "'" . $ff . "' 0";
+					$fontFeature[] = "'" . $ff . "' 0";
 				}
 			}
 
-			if (isset($properties['OTLtags']['Plus']) && $properties['OTLtags']['Plus']) {
+			if (!empty($properties['OTLtags']['Plus'])) {
 				$f = preg_split('/\s+/', trim($properties['OTLtags']['Plus']));
 				foreach ($f as $ff) {
-					$ffs[] = "'" . $ff . "' 1";
+					$fontFeature[] = "'" . $ff . "' 1";
 				}
 			}
 
-			if (isset($properties['OTLtags']['FFPlus']) && $properties['OTLtags']['FFPlus']) { // May contain numeric value e.g. salt4
+			if (!empty($properties['OTLtags']['FFPlus'])) { // May contain numeric value e.g. salt4
 				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFPlus']));
 				foreach ($f as $ff) {
 					if (strlen($ff) > 4) {
-						$ffs[] = "'" . substr($ff, 0, 4) . "' " . substr($ff, 4);
+						$fontFeature[] = "'" . substr($ff, 0, 4) . "' " . substr($ff, 4);
 					} else {
-						$ffs[] = "'" . $ff . "' 1";
+						$fontFeature[] = "'" . $ff . "' 1";
 					}
 				}
 			}
 
-			$this->cssProperties['FONT-FEATURE-SETTINGS'] = implode(', ', $ffs);
+			$this->cssProperties['FONT-FEATURE-SETTINGS'] = implode(', ', $fontFeature);
 		}
 	}
 
