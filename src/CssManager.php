@@ -1202,59 +1202,58 @@ class CssManager
 	 * Determines if a given element index matches an nth-child selector formula.
 	 * Supports formulas like "2n+1", "odd", "even", or specific numbers.
 	 *
-	 * @param array $f Formula components from preg_match
-	 * @param int $c Current element index (0-based)
+	 * @param array $nthComponents Formula components from preg_match (e.g. 2N+1 split into a preg_match array))
+	 * @param int $index Current element index (e.g row or column number)
 	 * @return bool True if element matches the nth-child selector
 	 */
-	protected function matchesNthChild($f, $c)
+	protected function matchesNthChild($nthComponents, $index)
 	{
-		// $f is formula e.g. 2N+1 split into a preg_match array
-		// $c is the comparator value e.g row or column number
-		++$c;
+		++$index;
 		$select = false;
 
-		$f_count = count($f);
-		if ($f[0] === 'ODD') {
+		$numOfComponents = count($nthComponents);
+		if ($nthComponents[0] === 'ODD') {
 			$a = 2;
 			$b = 1;
-		} elseif ($f[0] === 'EVEN') {
+		} elseif ($nthComponents[0] === 'EVEN') {
 			$a = 2;
 			$b = 0;
-		} elseif ($f_count === 2) {
+		} elseif ($numOfComponents === 2) {
 			$a = 0;
-			$b = $f[1] + 0;
+			$b = $nthComponents[1] + 0;
 		} // e.g. (+6)
-		elseif ($f_count === 3) {  // e.g. (2N)
-			if ($f[2] === '') {
+		elseif ($numOfComponents === 3) {  // e.g. (2N)
+			if ($nthComponents[2] === '') {
 				$a = 1;
-			} elseif ($f[2] === '-') {
+			} elseif ($nthComponents[2] === '-') {
 				$a = -1;
 			} else {
-				$a = $f[2] + 0;
+				$a = $nthComponents[2] + 0;
 			}
 			$b = 0;
-		} elseif ($f_count === 4) {  // e.g. (2N+6)
-			if ($f[2] === '') {
+		} elseif ($numOfComponents === 4) {  // e.g. (2N+6)
+			if ($nthComponents[2] === '') {
 				$a = 1;
-			} elseif ($f[2] === '-') {
+			} elseif ($nthComponents[2] === '-') {
 				$a = -1;
 			} else {
-				$a = $f[2] + 0;
+				$a = $nthComponents[2] + 0;
 			}
-			$b = $f[3] + 0;
+			$b = $nthComponents[3] + 0;
 		} else {
 			return false;
 		}
+
 		if ($a > 0) {
-			if (((($c % $a) - $b) % $a) === 0 && $c >= $b) {
+			if (((($index % $a) - $b) % $a) === 0 && $index >= $b) {
 				$select = true;
 			}
 		} elseif ($a === 0) {
-			if ($c === $b) {
+			if ($index === $b) {
 				$select = true;
 			}
 		} else {  // if ($a<0)
-			if (((($c % $a) - $b) % $a) === 0 && $c <= $b) {
+			if (((($index % $a) - $b) % $a) === 0 && $index <= $b) {
 				$select = true;
 			}
 		}
