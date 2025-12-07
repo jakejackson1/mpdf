@@ -778,80 +778,138 @@ class CssManager
 	protected function mergeCascadedCss($inherit, $tag, $attr, $classes)
 	{
 		// Cascaded e.g. div.class p only works for block level
-		if ($inherit === 'BLOCK' && !empty($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag]);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['CLASS>>' . $class]);
-			}
-
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS']['ID>>' . $attr['ID']]);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
-			}
-
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
+		if ($inherit === 'BLOCK') {
+			$this->mergeBlockCascadedCss($tag, $attr, $classes);
 		} elseif ($inherit === 'INLINE') {
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag]);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['CLASS>>' . $class]);
-			}
+			$this->mergeInlineCascadedCss($tag, $attr, $classes);
+		} elseif ($inherit === 'TOPTABLE' || $inherit === 'TABLE') {
+			$this->mergeTableCascadedCss($tag, $attr, $classes);
+		}
+	}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS']['ID>>' . $attr['ID']]);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
-			}
+	/**
+	 * Merge block cascaded CSS.
+	 *
+	 * @param string $tag HTML tag
+	 * @param array $attr HTML attributes
+	 * @param array $classes Array of class names
+	 * @return void
+	 */
+	protected function mergeBlockCascadedCss($tag, $attr, $classes)
+	{
+		$node = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]) ? $this->mpdf->blk[$this->mpdf->blklvl - 1] : [];
+		if (empty($node['cascadeCSS'])) {
+			return;
+		}
 
-			$this->setMergedCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
-		} elseif (!empty($this->tablecascadeCSS[$this->tbCSSlvl - 1]) && ($inherit === 'TOPTABLE' || $inherit === 'TABLE')) {
-			// NB looks at $this->tablecascadeCSS-1 for cascading CSS
+		$this->setMergedCss($node['cascadeCSS'][$tag]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node['cascadeCSS']['CLASS>>' . $class]);
+		}
 
-			// false, 9 = don't check for 'depth' and do set border dominance
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], false, 9);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], false, 9);
-			}
+		$this->setMergedCss($node['cascadeCSS']['ID>>' . $attr['ID']]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
+		}
 
-			// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
-			if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
-				foreach ($this->tablecascadeCSS[$this->tbCSSlvl - 1] as $k => $val) {
-					if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
-						continue;
+		$this->setMergedCss($node['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
+
+		$this->mpdf->blk[$this->mpdf->blklvl - 1] = $node;
+	}
+
+	/**
+	 * Merge inline cascaded CSS.
+	 *
+	 * @param string $tag HTML tag
+	 * @param array $attr HTML attributes
+	 * @param array $classes Array of class names
+	 * @return void
+	 */
+	protected function mergeInlineCascadedCss($tag, $attr, $classes)
+	{
+		$node = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
+		if (empty($node['cascadeCSS'])) {
+			return;
+		}
+		
+		$this->setMergedCss($node['cascadeCSS'][$tag]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node['cascadeCSS']['CLASS>>' . $class]);
+		}
+
+		$this->setMergedCss($node['cascadeCSS']['ID>>' . $attr['ID']]);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node['cascadeCSS'][$tag . '>>CLASS>>' . $class]);
+		}
+
+		$this->setMergedCss($node['cascadeCSS'][$tag . '>>ID>>' . $attr['ID']]);
+
+		$this->mpdf->blk[$this->mpdf->blklvl] = $node;
+	}
+
+	/**
+	 * Merge table cascaded CSS.
+	 *
+	 * @param string $tag HTML tag
+	 * @param array $attr HTML attributes
+	 * @param array $classes Array of class names
+	 * @return void
+	 */
+	protected function mergeTableCascadedCss($tag, $attr, $classes)
+	{
+		$node = isset($this->tablecascadeCSS[$this->tbCSSlvl - 1]) ? $this->tablecascadeCSS[$this->tbCSSlvl - 1] : [];
+		if (empty($node)) {
+			return;
+		}
+
+		// don't check for 'depth' and do set border dominance
+		$this->setMergedCss($node[$tag], false, 9);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node['CLASS>>' . $class], false, 9);
+		}
+
+		// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
+		if ($tag === 'TR' || $tag === 'TD' || $tag === 'TH') {
+			foreach ($node as $k => $val) {
+				if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $k, $m)) {
+					continue;
+				}
+
+				$select = false;
+				$regex = '/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/';
+				if ($tag === 'TR') {
+					$row = $this->mpdf->row;
+					$table = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
+					$tableHeadCount = isset($table['is_thead']) ? count($table['is_thead']) : 0;
+					$tableFootCount = isset($table['is_tfoot']) ? count($table['is_tfoot']) : 0;
+
+					if ($this->mpdf->tabletfoot) {
+						$row -= $tableHeadCount;
+					} elseif (!$this->mpdf->tablethead) {
+						$row -= ($tableHeadCount + $tableFootCount);
 					}
-					$select = false;
-					if ($tag === 'TR') {
-						$row = $this->mpdf->row;
-						$table = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
-						$tableHeadCount = isset($table['is_thead']) ? count($table['is_thead']) : 0;
-						$tableFootCount = isset($table['is_tfoot']) ? count($table['is_tfoot']) : 0;
 
-						if ($this->mpdf->tabletfoot) {
-							$row -= $tableHeadCount;
-						} elseif (!$this->mpdf->tablethead) {
-							$row -= ($tableHeadCount + $tableFootCount);
-						}
-
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-							$select = $this->matchesNthChild($a, $row);
-						}
-					} elseif ($tag === 'TD' || $tag === 'TH') {
-						if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
-							$select = $this->matchesNthChild($a, $this->mpdf->col);
-						}
+					if (preg_match($regex, $m[1], $a)) { // mPDF 5.7.4
+						$select = $this->matchesNthChild($a, $row);
 					}
+				} elseif (($tag === 'TD' || $tag === 'TH') && preg_match($regex, $m[1], $a)) {
+						$select = $this->matchesNthChild($a, $this->mpdf->col);
+				}
 
-					if ($select) {
-						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], false, 9);
-					}
+				if ($select) {
+					$this->setMergedCss($node[$tag . '>>SELECTORNTHCHILD>>' . $m[1]], false, 9);
 				}
 			}
-
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], false, 9);
-			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], false, 9);
-			}
-
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], false, 9);
 		}
+
+		$this->setMergedCss($node['ID>>' . $attr['ID']], false, 9);
+		foreach ($classes as $class) {
+			$this->setMergedCss($node[$tag . '>>CLASS>>' . $class], false, 9);
+		}
+
+		$this->setMergedCss($node[$tag . '>>ID>>' . $attr['ID']], false, 9);
+
+		$this->tablecascadeCSS[$this->tbCSSlvl - 1] = $node;
 	}
 
 	/**
@@ -860,152 +918,152 @@ class CssManager
 	 * Transforms internal inline property format (used in TextVars) back into
 	 * CSS property array. Used for property inheritance and cascading.
 	 *
-	 * @param array $bilp Inline properties array
+	 * @param array $properties Inline properties array
 	 * @return void
 	 */
-	protected function convertInlinePropertiesToCss($bilp)
+	protected function convertInlinePropertiesToCss($properties)
 	{
-		if (isset($bilp['family']) && $bilp['family']) {
-			$this->cssProperties['FONT-FAMILY'] = $bilp['family'];
+		if (isset($properties['family']) && $properties['family']) {
+			$this->cssProperties['FONT-FAMILY'] = $properties['family'];
 		}
 
-		if (isset($bilp['I']) && $bilp['I']) {
+		if (isset($properties['I']) && $properties['I']) {
 			$this->cssProperties['FONT-STYLE'] = 'italic';
 		}
 
-		if (isset($bilp['sizePt']) && $bilp['sizePt']) {
-			$this->cssProperties['FONT-SIZE'] = $bilp['sizePt'] . 'pt';
+		if (isset($properties['sizePt']) && $properties['sizePt']) {
+			$this->cssProperties['FONT-SIZE'] = $properties['sizePt'] . 'pt';
 		}
 
-		if (isset($bilp['B']) && $bilp['B']) {
+		if (isset($properties['B']) && $properties['B']) {
 			$this->cssProperties['FONT-WEIGHT'] = 'bold';
 		}
 
-		if (isset($bilp['colorarray']) && $bilp['colorarray']) {
-			$cor = $bilp['colorarray'];
+		if (isset($properties['colorarray']) && $properties['colorarray']) {
+			$cor = $properties['colorarray'];
 			$this->cssProperties['COLOR'] = $this->colorConverter->colAtoString($cor);
 		}
 
-		if (isset($bilp['lSpacingCSS']) && $bilp['lSpacingCSS']) {
-			$this->cssProperties['LETTER-SPACING'] = $bilp['lSpacingCSS'];
+		if (isset($properties['lSpacingCSS']) && $properties['lSpacingCSS']) {
+			$this->cssProperties['LETTER-SPACING'] = $properties['lSpacingCSS'];
 		}
 
-		if (isset($bilp['wSpacingCSS']) && $bilp['wSpacingCSS']) {
-			$this->cssProperties['WORD-SPACING'] = $bilp['wSpacingCSS'];
+		if (isset($properties['wSpacingCSS']) && $properties['wSpacingCSS']) {
+			$this->cssProperties['WORD-SPACING'] = $properties['wSpacingCSS'];
 		}
 
-		if (isset($bilp['textparam']) && $bilp['textparam']) {
-			if (isset($bilp['textparam']['hyphens'])) {
-				if ($bilp['textparam']['hyphens'] == 2) {
+		if (isset($properties['textparam']) && $properties['textparam']) {
+			if (isset($properties['textparam']['hyphens'])) {
+				if ($properties['textparam']['hyphens'] == 2) {
 					$this->cssProperties['HYPHENS'] = 'none';
 				}
-				if ($bilp['textparam']['hyphens'] == 1) {
+				if ($properties['textparam']['hyphens'] == 1) {
 					$this->cssProperties['HYPHENS'] = 'auto';
 				}
-				if ($bilp['textparam']['hyphens'] == 0) {
+				if ($properties['textparam']['hyphens'] == 0) {
 					$this->cssProperties['HYPHENS'] = 'manual';
 				}
 			}
 
-			if (isset($bilp['textparam']['outline-s']) && !$bilp['textparam']['outline-s']) {
+			if (isset($properties['textparam']['outline-s']) && !$properties['textparam']['outline-s']) {
 				$this->cssProperties['TEXT-OUTLINE'] = 'none';
 			}
 
-			if (isset($bilp['textparam']['outline-COLOR']) && $bilp['textparam']['outline-COLOR']) {
-				$this->cssProperties['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($bilp['textparam']['outline-COLOR']);
+			if (isset($properties['textparam']['outline-COLOR']) && $properties['textparam']['outline-COLOR']) {
+				$this->cssProperties['TEXT-OUTLINE-COLOR'] = $this->colorConverter->colAtoString($properties['textparam']['outline-COLOR']);
 			}
 
-			if (isset($bilp['textparam']['outline-WIDTH']) && $bilp['textparam']['outline-WIDTH']) {
-				$this->cssProperties['TEXT-OUTLINE-WIDTH'] = $bilp['textparam']['outline-WIDTH'] . 'mm';
+			if (isset($properties['textparam']['outline-WIDTH']) && $properties['textparam']['outline-WIDTH']) {
+				$this->cssProperties['TEXT-OUTLINE-WIDTH'] = $properties['textparam']['outline-WIDTH'] . 'mm';
 			}
 		}
 
-		if (isset($bilp['textvar']) && $bilp['textvar']) {
+		if (isset($properties['textvar']) && $properties['textvar']) {
 			// CSS says text-decoration is not inherited, but IE7 does??
-			if ($bilp['textvar'] & TextVars::FD_LINETHROUGH) {
-				if ($bilp['textvar'] & TextVars::FD_UNDERLINE) {
+			if ($properties['textvar'] & TextVars::FD_LINETHROUGH) {
+				if ($properties['textvar'] & TextVars::FD_UNDERLINE) {
 					$this->cssProperties['TEXT-DECORATION'] = 'underline line-through';
 				} else {
 					$this->cssProperties['TEXT-DECORATION'] = 'line-through';
 				}
-			} elseif ($bilp['textvar'] & TextVars::FD_UNDERLINE) {
+			} elseif ($properties['textvar'] & TextVars::FD_UNDERLINE) {
 				$this->cssProperties['TEXT-DECORATION'] = 'underline';
 			} else {
 				$this->cssProperties['TEXT-DECORATION'] = 'none';
 			}
 
-			if ($bilp['textvar'] & TextVars::FA_SUPERSCRIPT) {
+			if ($properties['textvar'] & TextVars::FA_SUPERSCRIPT) {
 				$this->cssProperties['VERTICAL-ALIGN'] = 'super';
-			} elseif ($bilp['textvar'] & TextVars::FA_SUBSCRIPT) {
+			} elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
 				$this->cssProperties['VERTICAL-ALIGN'] = 'sub';
 			} else {
 				$this->cssProperties['VERTICAL-ALIGN'] = 'baseline';
 			}
 
-			if ($bilp['textvar'] & TextVars::FT_CAPITALIZE) {
+			if ($properties['textvar'] & TextVars::FT_CAPITALIZE) {
 				$this->cssProperties['TEXT-TRANSFORM'] = 'capitalize';
-			} elseif ($bilp['textvar'] & TextVars::FT_UPPERCASE) {
+			} elseif ($properties['textvar'] & TextVars::FT_UPPERCASE) {
 				$this->cssProperties['TEXT-TRANSFORM'] = 'uppercase';
-			} elseif ($bilp['textvar'] & TextVars::FT_LOWERCASE) {
+			} elseif ($properties['textvar'] & TextVars::FT_LOWERCASE) {
 				$this->cssProperties['TEXT-TRANSFORM'] = 'lowercase';
 			} else {
 				$this->cssProperties['TEXT-TRANSFORM'] = 'none';
 			}
 
-			if ($bilp['textvar'] & TextVars::FC_KERNING) {
+			if ($properties['textvar'] & TextVars::FC_KERNING) {
 				$this->cssProperties['FONT-KERNING'] = 'normal';
 			} // ignore 'auto' as default already applied
 			else {
 				$this->cssProperties['FONT-KERNING'] = 'none';
 			}
 
-			if ($bilp['textvar'] & TextVars::FA_SUPERSCRIPT) {
+			if ($properties['textvar'] & TextVars::FA_SUPERSCRIPT) {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'super';
 			}
-			elseif ($bilp['textvar'] & TextVars::FA_SUBSCRIPT) {
+			elseif ($properties['textvar'] & TextVars::FA_SUBSCRIPT) {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'sub';
 			} else {
 				$this->cssProperties['FONT-VARIANT-POSITION'] = 'normal';
 			}
 
-			if ($bilp['textvar'] & TextVars::FC_SMALLCAPS) {
+			if ($properties['textvar'] & TextVars::FC_SMALLCAPS) {
 				$this->cssProperties['FONT-VARIANT-CAPS'] = 'small-caps';
 			}
 		}
 
-		if (isset($bilp['fontLanguageOverride'])) {
-			if ($bilp['fontLanguageOverride']) {
-				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = $bilp['fontLanguageOverride'];
+		if (isset($properties['fontLanguageOverride'])) {
+			if ($properties['fontLanguageOverride']) {
+				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = $properties['fontLanguageOverride'];
 			} else {
 				$this->cssProperties['FONT-LANGUAGE-OVERRIDE'] = 'normal';
 			}
 		}
 		// All the variations of font-variant-* we are going to set as font-feature-settings...
-		if (isset($bilp['OTLtags']) && $bilp['OTLtags']) {
+		if (isset($properties['OTLtags']) && $properties['OTLtags']) {
 			$ffs = [];
-			if (isset($bilp['OTLtags']['Minus']) && $bilp['OTLtags']['Minus']) {
-				$f = preg_split('/\s+/', trim($bilp['OTLtags']['Minus']));
+			if (isset($properties['OTLtags']['Minus']) && $properties['OTLtags']['Minus']) {
+				$f = preg_split('/\s+/', trim($properties['OTLtags']['Minus']));
 				foreach ($f as $ff) {
 					$ffs[] = "'" . $ff . "' 0";
 				}
 			}
 
-			if (isset($bilp['OTLtags']['FFMinus']) && $bilp['OTLtags']['FFMinus']) {
-				$f = preg_split('/\s+/', trim($bilp['OTLtags']['FFMinus']));
+			if (isset($properties['OTLtags']['FFMinus']) && $properties['OTLtags']['FFMinus']) {
+				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFMinus']));
 				foreach ($f as $ff) {
 					$ffs[] = "'" . $ff . "' 0";
 				}
 			}
 
-			if (isset($bilp['OTLtags']['Plus']) && $bilp['OTLtags']['Plus']) {
-				$f = preg_split('/\s+/', trim($bilp['OTLtags']['Plus']));
+			if (isset($properties['OTLtags']['Plus']) && $properties['OTLtags']['Plus']) {
+				$f = preg_split('/\s+/', trim($properties['OTLtags']['Plus']));
 				foreach ($f as $ff) {
 					$ffs[] = "'" . $ff . "' 1";
 				}
 			}
 
-			if (isset($bilp['OTLtags']['FFPlus']) && $bilp['OTLtags']['FFPlus']) { // May contain numeric value e.g. salt4
-				$f = preg_split('/\s+/', trim($bilp['OTLtags']['FFPlus']));
+			if (isset($properties['OTLtags']['FFPlus']) && $properties['OTLtags']['FFPlus']) { // May contain numeric value e.g. salt4
+				$f = preg_split('/\s+/', trim($properties['OTLtags']['FFPlus']));
 				foreach ($f as $ff) {
 					if (strlen($ff) > 4) {
 						$ffs[] = "'" . substr($ff, 0, 4) . "' " . substr($ff, 4);
