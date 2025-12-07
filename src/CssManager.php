@@ -418,7 +418,7 @@ class CssManager
 	 */
 	protected function mergeNthChildCss($sourceSelectors, &$targetProperties, $tag)
 	{
-		if (!in_array($tag, ['TR'], true) || empty($sourceSelectors)) {
+		if (!in_array($tag, ['TR', 'TH', 'TD'], true) || empty($sourceSelectors)) {
 			return;
 		}
 
