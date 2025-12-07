@@ -2,12 +2,11 @@
 
 namespace Mpdf\Css;
 
-use Mpdf\Color\ColorConverter;
-use Mpdf\Css\TextVars;
 use Mockery;
+use Mpdf\Color\ColorConverter;
 use PHPUnit\Framework\TestCase;
 
-class InlinePropertyConverterTest extends TestCase
+class InlinePropertyConverterTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
 	/**
 	 * @var \Mpdf\Color\ColorConverter|\Mockery\MockInterface
@@ -19,15 +18,17 @@ class InlinePropertyConverterTest extends TestCase
 	 */
 	private $converter;
 
-	protected function setUp(): void
+	protected function set_up()
 	{
+		parent::set_up();
 		$this->colorConverter = Mockery::mock(ColorConverter::class);
 		$this->converter = new InlinePropertyConverter($this->colorConverter);
 	}
 
-	protected function tearDown(): void
+	protected function tear_down()
 	{
 		Mockery::close();
+		parent::tear_down();
 	}
 
 	public function testConvertBasicProperties()
@@ -35,8 +36,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['B' => true, 'I' => true];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('FONT-WEIGHT', $result);
-		$this->assertArrayHasKey('FONT-STYLE', $result);
 		$this->assertEquals('bold', $result['FONT-WEIGHT']);
 		$this->assertEquals('italic', $result['FONT-STYLE']);
 	}
@@ -46,7 +45,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['sizePt' => 14];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('FONT-SIZE', $result);
 		$this->assertEquals('14pt', $result['FONT-SIZE']);
 	}
 
@@ -60,7 +58,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['colorarray' => $colorArray];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('COLOR', $result);
 		$this->assertEquals('rgb(255, 0, 0)', $result['COLOR']);
 	}
 
@@ -69,7 +66,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['textvar' => TextVars::FD_UNDERLINE];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('TEXT-DECORATION', $result);
 		$this->assertEquals('underline', $result['TEXT-DECORATION']);
 	}
 
@@ -78,7 +74,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['textvar' => TextVars::FA_SUPERSCRIPT];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('VERTICAL-ALIGN', $result);
 		$this->assertEquals('super', $result['VERTICAL-ALIGN']);
 	}
 
@@ -87,7 +82,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['lSpacingCSS' => '2px'];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('LETTER-SPACING', $result);
 		$this->assertEquals('2px', $result['LETTER-SPACING']);
 	}
 
@@ -96,7 +90,6 @@ class InlinePropertyConverterTest extends TestCase
 		$bilp = ['wSpacingCSS' => '5px'];
 		$result = $this->converter->convert($bilp);
 
-		$this->assertArrayHasKey('WORD-SPACING', $result);
 		$this->assertEquals('5px', $result['WORD-SPACING']);
 	}
 

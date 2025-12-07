@@ -1,0 +1,281 @@
+<?php
+
+namespace Mpdf\Css;
+
+use Mpdf\Utils\Arrays;
+use Mpdf\Utils\Path;
+
+use Mpdf\Mpdf;
+use Mpdf\Cache;
+use Mpdf\SizeConverter;
+use Mpdf\Color\ColorConverter;
+use Mpdf\AssetFetcher;
+
+class CssParser
+{
+	/**
+	 * @var \Mpdf\Css\CssLoader
+	 */
+	private $cssLoader;
+
+	/**
+	 * @var \Mpdf\Css\MediaQueryProcessor
+	 */
+	private $mediaQueryProcessor;
+
+	/**
+	 * @var \Mpdf\Css\CommentParser
+	 */
+	private $commentParser;
+
+	/**
+	 * @var \Mpdf\Css\InlineStyleParser
+	 */
+	private $inlineStyleParser;
+
+	/**
+	 * @var \Mpdf\Css\SelectorParser
+	 */
+	private $selectorParser;
+
+	/**
+	 * @var \Mpdf\Css\NormalizeProperties
+	 */
+	private $normalizeProperties;
+
+	/**
+	 * CSS for simple selectors.
+	 *
+	 * Stores CSS properties for simple selectors (depth 1).
+	 * Format:
+	 * [
+	 *   'TAGNAME' => [
+	 *     'PROPERTY' => 'VALUE',
+	 *     ...
+	 *   ],
+	 *   ...
+	 * ]
+	 *
+	 * @var array
+	 */
+	private $css = [];
+
+	/**
+	 * CSS for cascaded selectors.
+	 *
+	 * Stores CSS properties for nested/cascaded selectors (depth > 1).
+	 * Format is a nested array mirroring the selector hierarchy.
+	 * Example for "DIV P":
+	 * [
+	 *   'DIV' => [
+	 *     'P' => [
+	 *       'PROPERTY' => 'VALUE',
+	 *       'depth' => 2
+	 *     ]
+	 *   ]
+	 * ]
+	 *
+	 * @var array
+	 */
+	private $cascadeCSS = [];
+
+	public function __construct(
+		Mpdf $mpdf,
+		Cache $cache,
+		SizeConverter $sizeConverter,
+		ColorConverter $colorConverter,
+		AssetFetcher $assetFetcher
+	) {
+		$this->normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
+		$this->cssLoader = new CssLoader($assetFetcher, $cache);
+		$this->mediaQueryProcessor = new MediaQueryProcessor($mpdf);
+		$this->commentParser = new CommentParser();
+		$this->inlineStyleParser = new InlineStyleParser($this->normalizeProperties);
+		$this->selectorParser = new SelectorParser($mpdf);
+	}
+
+	/**
+	 * Read and parse CSS from HTML content.
+	 *
+	 * @param string $html HTML content containing CSS
+	 * @return string
+	 */
+	public function parse($html)
+	{
+		$this->css = [];
+		$this->cascadeCSS = [];
+
+		$ind = 0;
+		$css = '';
+
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<style[^>]*media=["\']([^"\'>]*)["\'].*?<\/style>/is');
+		$html = $this->mediaQueryProcessor->filterByMediaQuery($html, '/<link[^>]*media=["\']([^"\'>]*)["\'].*?>/is');
+		$html = $this->commentParser->removeCommentsFromStyleBlocks($html);
+		$html = $this->commentParser->removeHtmlComments($html);
+
+		$externalCss = $this->cssLoader->extractExternalStylesheetUrls($html);
+		$externalCssCount = count($externalCss);
+		while ($externalCssCount) {
+			$path = htmlspecialchars_decode($externalCss[$ind]);
+			$path = Path::relativeToAbsolutePath($path);
+			if (strpos($path, '//') === false) { // mPDF 5.7.3
+				$path = preg_replace('/\.css\?.*$/', '.css', $path);
+			}
+
+			$stylesheetCss = $this->cssLoader->loadStylesheet($path);
+			if ($stylesheetCss) {
+				$css .= $this->cssLoader->processExternalCssImports($stylesheetCss, $path, $externalCss, $externalCssCount);
+			}
+
+			$externalCssCount--;
+			$ind++;
+		}
+
+		// CSS as <style> in HTML document
+		$regexp = '/<style.*?>(.*?)<\/style>/si';
+		if (preg_match_all($regexp, $html, $cssBlock)) {
+			$css .= ' ' . $this->cssLoader->resolveBackgroundUrls(implode(' ', $cssBlock[1]));
+		}
+
+		$css = preg_replace('|/\*.*?\*/|s', ' ', $css);
+		$css = preg_replace('/[\s\n\r\t\f]/s', ' ', $css);
+		$css = $this->mediaQueryProcessor->processMediaQueries($css);
+		$css = $this->cssLoader->processDataUriImages($css);
+		$css = preg_replace('/(<\!\-\-|\-\->)/s', ' ', $css);
+		$css = $this->inlineStyleParser->processUrlsInCss($css);
+
+		$this->processCssString($css);
+
+		// Remove CSS (tags and content), if any (it can be <style> or <style type="txt/css">)
+		$html = preg_replace('/<style.*?>(.*?)<\/style>/si', '', $html);
+
+		return $html;
+	}
+
+	/**
+	 * @return array
+	 */
+	public function getCss()
+	{
+		return $this->css;
+	}
+
+	/**
+	 * @return array
+	 */
+	public function getCascadeCss()
+	{
+		return $this->cascadeCSS;
+	}
+
+	/**
+	 * @param string $css
+	 * @return void
+	 */
+	private function processCssString($css)
+	{
+		preg_match_all('/(.*?)\{(.*?)\}/', $css, $styles);
+		$count = count($styles[1]);
+		for ($i = 0; $i < $count; $i++) {
+			$classProperties = $this->parseCssProperties($styles[2][$i]);
+			$tagName = strtoupper(trim($styles[1][$i]));
+
+			$tags = explode(',', $tagName);
+			foreach ($tags as $tag) {
+				$this->processCssSelector($tag, $classProperties);
+			}
+		}
+	}
+
+	/**
+	 * Process a CSS selector.
+	 *
+	 * @param string $selector Selector string
+	 * @param array $classProperties CSS properties
+	 * @return void
+	 */
+	private function processCssSelector($selector, $classProperties)
+	{
+		if (preg_match('/NTH-CHILD\((\s*(([\-+]?\d*)N(\s*[\-+]\s*\d+)?|[\-+]?\d+|ODD|EVEN)\s*)\)/', $selector, $m)) {
+			$selector = preg_replace('/NTH-CHILD\(.*\)/', 'NTH-CHILD(' . str_replace(' ', '', $m[1]) . ')', $selector);
+		}
+
+		$tags = preg_split('/\s+/', trim($selector));
+		$level = count($tags);
+		if (trim($tags[0]) === '@PAGE') {
+			$tag = $this->selectorParser->parsePageSelector($tags);
+			if ($tag && isset($this->css[$tag])) {
+				$this->css[$tag] = Arrays::uniqueRecursiveMerge($this->css[$tag], $classProperties);
+			} elseif ($tag) {
+				$this->css[$tag] = $classProperties;
+			}
+
+			return;
+		}
+
+		if ($level === 1) {
+			$tag = $this->selectorParser->parseSimpleSelector($tags);
+			if ($tag && isset($this->css[$tag])) {
+				$this->css[$tag] = Arrays::uniqueRecursiveMerge($this->css[$tag], $classProperties);
+			} elseif ($tag) {
+				$this->css[$tag] = $classProperties;
+			}
+			return;
+		}
+
+		$cascade = $this->selectorParser->parseCascadedSelector($tags);
+		if (empty($cascade)) {
+			return;
+		}
+
+		$cascadeCSS = &$this->cascadeCSS;
+		foreach ($cascade as $tag) {
+			$cascadeCSS = &$cascadeCSS[$tag];
+		}
+
+		$cascadeCSS = Arrays::uniqueRecursiveMerge($cascadeCSS, $classProperties);
+		$cascadeCSS['depth'] = $level;
+	}
+
+	/**
+	 * Parse CSS property string into an array.
+	 *
+	 * @param string $rawStyles CSS style string (e.g. "color: red; font-size: 12px")
+	 * @return array Associative array of CSS properties
+	 */
+	public function parseCssProperties($rawStyles)
+	{
+		$classProperties = [];
+		$styles = explode(';', trim($rawStyles));
+
+		foreach ($styles as $style) {
+			if (empty(trim($style))) {
+				continue;
+			}
+
+			// Changed to allow style="background: url('http://www.bpm1.com/bg.jpg')"
+			$tmp = explode(':', $style, 2);
+			$property = strtoupper(trim($tmp[0]));
+			$value = isset($tmp[1]) ? $tmp[1] : '';
+
+			$value = str_replace('%ZZ', ';', $value); // restore URL placeholder
+			$value = preg_replace('/\s*!important/i', '', $value);
+			$value = trim($value);
+
+			if (empty($property) || strlen($value) === 0) {
+				continue;
+			}
+
+			// Ignores -webkit-gradient so doesn't override -moz-
+			if (($property === 'BACKGROUND-IMAGE' || $property === 'BACKGROUND') &&
+				stripos($value, '-webkit-gradient') !== false
+			) {
+				continue;
+			}
+
+			$classProperties[$property] = $value;
+		}
+
+		return $this->normalizeProperties->normalize($classProperties);
+	}
+}
