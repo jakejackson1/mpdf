@@ -418,9 +418,11 @@ class CssManager
 	 */
 	protected function mergeNthChildCss($sourceSelectors, &$targetProperties, $tag)
 	{
-		if (!in_array($tag, ['TR', 'TH', 'TD'], true) || empty($sourceSelectors)) {
+		if (!in_array($tag, ['TR'], true) || empty($sourceSelectors)) {
 			return;
 		}
+
+		$regex = '/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/';
 
 		foreach ($sourceSelectors as $key => $selector) {
 			if (!preg_match('/' . $tag . '>>SELECTORNTHCHILD>>(.*)/', $key, $m)) {
@@ -431,23 +433,25 @@ class CssManager
 			switch ($tag) {
 				case 'TR':
 					$row = $this->mpdf->row;
-					$thnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_thead']) : 0);
-					$tfnr = (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) ? count($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot']) : 0);
+					$tableCell = isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]) ? $this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]] : [];
+
+					$theadCount = !empty($tableCell['is_thead']) ? count($tableCell['is_thead']) : 0;
+					$tfootCount = !empty($tableCell['is_tfoot']) ? count($tableCell['is_tfoot']) : 0;
 
 					if ($this->mpdf->tabletfoot) {
-						$row -= $thnr;
+						$row -= $theadCount;
 					} elseif (!$this->mpdf->tablethead) {
-						$row -= ($thnr + $tfnr);
+						$row -= ($theadCount + $tfootCount);
 					}
 
-					if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+					if (preg_match($regex, $m[1], $a)) { // mPDF 5.7.4
 						$select = $this->matchesNthChild($a, $row);
 					}
 					break;
 
 				case 'TH':
 				case 'TD':
-					if (preg_match('/(([\-+]?\d*)?N([\-+]\d+)?|[\-+]?\d+|ODD|EVEN)/', $m[1], $a)) { // mPDF 5.7.4
+					if (preg_match($regex, $m[1], $a)) { // mPDF 5.7.4
 						$select = $this->matchesNthChild($a, $this->mpdf->col);
 					}
 					break;
@@ -551,21 +555,18 @@ class CssManager
 	 * Merge CSS properties with existing properties.
 	 *
 	 * @param array $property Source CSS properties
-	 * @param bool $bypassDepthCheck Use default strict mode
+	 * @param bool $strictMode Use default strict mode
 	 * @param bool|int $borderDominanceLevel Border dominance level (or false)
 	 * @return void
 	 */
-	protected function setMergedCss(&$property, $bypassDepthCheck = false, $borderDominanceLevel = false)
+	protected function setMergedCss(&$property, $strictMode = true, $borderDominanceLevel = false)
 	{
 		if (!isset($property)) {
 			return;
 		}
 
-		if ($bypassDepthCheck) {
-			return;
-		}
-
-		if (!isset($property['depth']) || $property['depth'] < 2) {
+		$depth = isset($property['depth']) ? $property['depth'] : 0;
+		if ($depth < 2 && $strictMode) {
 			return;
 		}
 
@@ -805,9 +806,9 @@ class CssManager
 			// NB looks at $this->tablecascadeCSS-1 for cascading CSS
 
 			// false, 9 = don't check for 'depth' and do set border dominance
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], true, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag], false, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], true, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['CLASS>>' . $class], false, 9);
 			}
 
 			// STYLESHEET nth-child SELECTOR e.g. tr:nth-child(odd)  td:nth-child(2n+1)
@@ -839,17 +840,17 @@ class CssManager
 					}
 
 					if ($select) {
-						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], true, 9);
+						$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>SELECTORNTHCHILD>>' . $m[1]], false, 9);
 					}
 				}
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], true, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1]['ID>>' . $attr['ID']], false, 9);
 			foreach ($classes as $class) {
-				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], true, 9);
+				$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>CLASS>>' . $class], false, 9);
 			}
 
-			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], true, 9);
+			$this->setMergedCss($this->tablecascadeCSS[$this->tbCSSlvl - 1][$tag . '>>ID>>' . $attr['ID']], false, 9);
 		}
 	}
 
@@ -1602,7 +1603,7 @@ class CssManager
 
 		// cellPadding overwrites TD/TH default but not specific CSS set on cell
 		$cellPadding = isset($tableCell['cell_padding']) ? $tableCell['cell_padding'] : '';
-		if ($cellPadding !== '') {
+		if (!empty($cellPadding) || $cellPadding === '0') {
 			$this->cssProperties['PADDING-LEFT'] = $cellPadding;
 			$this->cssProperties['PADDING-RIGHT'] = $cellPadding;
 			$this->cssProperties['PADDING-TOP'] = $cellPadding;
