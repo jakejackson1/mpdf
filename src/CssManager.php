@@ -12,6 +12,7 @@ use Mpdf\Css\InlinePropertyConverter;
 use Mpdf\Exception\InvalidArgumentException;
 use Mpdf\Utils\Arrays;
 use Mpdf\Css\CssParser;
+use Mpdf\Css\BorderMerger;
 
 class CssManager
 {
@@ -121,6 +122,7 @@ class CssManager
 		$selectorParser = new SelectorParser($mpdf);
 		$this->inlineStyleParser = new InlineStyleParser($normalizeProperties);
 		$inlinePropertyConverter = new InlinePropertyConverter($colorConverter);
+		$borderMerger = new BorderMerger();
 
 		$this->cssParser = new CssParser(
 			$mpdf,
@@ -137,7 +139,8 @@ class CssManager
 			$this->inlineStyleParser,
 			$selectorParser,
 			$inlinePropertyConverter,
-			$colorConverter
+			$colorConverter,
+			$borderMerger
 		);
 	}
 

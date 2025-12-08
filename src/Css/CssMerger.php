@@ -52,14 +52,9 @@ class CssMerger
 	private $cssProperties = [];
 
 	/**
-	 * @var array<int> Border dominance levels for cell borders (top/right/bottom/left)
+	 * @var \Mpdf\Css\BorderMerger
 	 */
-	private $borderDominance = [
-		'T' => 0,
-		'R' => 0,
-		'B' => 0,
-		'L' => 0,
-	];
+	private $borderMerger;
 
 	/**
 	 * @var bool When true, state outside this object will be modified
@@ -73,7 +68,8 @@ class CssMerger
 		InlineStyleParser $inlineStyleParser,
 		SelectorParser $selectorParser,
 		InlinePropertyConverter $inlinePropertyConverter,
-		ColorConverter $colorConverter
+		ColorConverter $colorConverter,
+		BorderMerger $borderMerger
 	) {
 		$this->mpdf = $mpdf;
 		$this->cssManager = $cssManager;
@@ -82,6 +78,7 @@ class CssMerger
 		$this->selectorParser = $selectorParser;
 		$this->inlinePropertyConverter = $inlinePropertyConverter;
 		$this->colorConverter = $colorConverter;
+		$this->borderMerger = $borderMerger;
 	}
 
 	public function merge($inherit, $tag, $attr)
@@ -383,7 +380,6 @@ class CssMerger
 			} elseif ($size === '7') {
 				$this->cssProperties['FONT-SIZE'] = 'XX-LARGE';
 			}
-
 		}
 
 		if (!empty($attr['VALIGN'])) {
@@ -707,6 +703,7 @@ class CssMerger
 			return;
 		}
 
+		// @todo: check if this sideeffect rule also applies here?
 		$this->mergeDescendantCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'], $tag, $attr, $classes);
 	}
 
@@ -1001,62 +998,7 @@ class CssMerger
 	 */
 	protected function mergeBorderProperties($properties)
 	{
-		foreach (['TOP', 'RIGHT', 'BOTTOM', 'LEFT'] as $side) {
-			$this->mergeSideBorder($side, $properties);
-		}
-	}
-
-	/**
-	 * Merge border properties for a specific side.
-	 *
-	 * Helper method for mergeBorderProperties to handle merging of individual side properties
-	 * (style, width, color) into the shorthand border property.
-	 *
-	 * @param string $side Side to merge (TOP, RIGHT, BOTTOM, LEFT)
-	 * @param array $properties Source border properties
-	 * @return void
-	 */
-	protected function mergeSideBorder($side, $properties)
-	{
-		// Merges $a['BORDER-TOP-STYLE'] to $this->cssProperties['BORDER-TOP'] etc.
-		$defaults = [
-			'WIDTH' => '0px',
-			'STYLE' => 'none',
-			'COLOR' => '#000000'
-		];
-
-		$borderKey = 'BORDER-' . $side;
-		$currentBorder = isset($this->cssProperties[$borderKey]) ? trim($this->cssProperties[$borderKey]) : '';
-
-		foreach (['STYLE', 'WIDTH', 'COLOR'] as $el) {
-			$propertyKey = $borderKey . '-' . $el;
-			if (!isset($properties[$propertyKey])) {
-				continue;
-			}
-
-			$value = trim($properties[$propertyKey]);
-			if ($currentBorder) {
-				// Update existing border value
-				if ($el === 'STYLE') {
-					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 ' . $value . ' \\3', $currentBorder);
-				} elseif ($el === 'WIDTH') {
-					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', $value . ' \\2 \\3', $currentBorder);
-				} else { // COLOR
-					$this->cssProperties[$borderKey] = preg_replace('/(\S+)\s+(\S+)\s+(\S+)/', '\\1 \\2 ' . $value, $currentBorder);
-				}
-
-				$currentBorder = $this->cssProperties[$borderKey]; // Update current border for next iteration
-			} else {
-				// Build new border from scratch with defaults
-				if (!isset($borderParts)) {
-					$borderParts = $defaults;
-				}
-
-				$borderParts[$el] = $value;
-				$this->cssProperties[$borderKey] = $borderParts['WIDTH'] . ' ' . $borderParts['STYLE'] . ' ' . $borderParts['COLOR'];
-				$currentBorder = $this->cssProperties[$borderKey];
-			}
-		}
+		$this->borderMerger->mergeBorderProperties($properties, $this->cssProperties);
 	}
 
 	/**
@@ -1075,21 +1017,7 @@ class CssMerger
 			return;
 		}
 
-		if (!empty($prop['BORDER-TOP'])) {
-			$this->setBorderDominance('T', $val);
-		}
-
-		if (!empty($prop['BORDER-RIGHT'])) {
-			$this->setBorderDominance('R', $val);
-		}
-
-		if (!empty($prop['BORDER-BOTTOM'])) {
-			$this->setBorderDominance('B', $val);
-		}
-
-		if (!empty($prop['BORDER-LEFT'])) {
-			$this->setBorderDominance('L', $val);
-		}
+		$this->borderMerger->setDominanceFromProperties($prop, $val);
 	}
 
 	/**
@@ -1101,11 +1029,7 @@ class CssMerger
 	 */
 	public function setBorderDominance($side, $val)
 	{
-		if (!isset($this->borderDominance[$side])) {
-			throw new InvalidArgumentException('Invalid border dominance value:' . $side);
-		}
-
-		$this->borderDominance[$side] = (int) $val;
+		$this->borderMerger->setBorderDominance($side, $val);
 	}
 
 	/**
@@ -1116,7 +1040,7 @@ class CssMerger
 	 */
 	public function getBorderDominance($side)
 	{
-		return isset($this->borderDominance[$side]) ? $this->borderDominance[$side] : 0;
+		return $this->borderMerger->getBorderDominance($side);
 	}
 
 	/**
