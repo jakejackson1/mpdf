@@ -283,4 +283,15 @@ class CssParser
 
 		return $this->normalizeProperties->normalize($classProperties);
 	}
+
+	/**
+	 * Parse inline CSS style attribute.
+	 *
+	 * @param string $html CSS string from style attribute
+	 * @return array Parsed CSS properties
+	 */
+	public function parseInlineCss($html)
+	{
+		return $this->inlineStyleParser->parse($html);
+	}
 }

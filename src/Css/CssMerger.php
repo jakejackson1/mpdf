@@ -63,7 +63,6 @@ class CssMerger
 
 	public function __construct(
 		Mpdf $mpdf,
-		CssManager $cssManager,
 		NormalizeProperties $normalizeProperties,
 		InlineStyleParser $inlineStyleParser,
 		SelectorParser $selectorParser,
@@ -72,13 +71,25 @@ class CssMerger
 		BorderMerger $borderMerger
 	) {
 		$this->mpdf = $mpdf;
-		$this->cssManager = $cssManager;
 		$this->normalizeProperties = $normalizeProperties;
 		$this->inlineStyleParser = $inlineStyleParser;
 		$this->selectorParser = $selectorParser;
 		$this->inlinePropertyConverter = $inlinePropertyConverter;
 		$this->colorConverter = $colorConverter;
 		$this->borderMerger = $borderMerger;
+	}
+
+	/**
+	 * Make the CssManager state available to the merger
+	 *
+	 * @param CssManager $cssManager
+	 * @return void
+	 *
+	 * @internal Temporary method required under the global CssManager properties/state is refactored
+	 */
+	public function setCssManager(CssManager $cssManager)
+	{
+		$this->cssManager = $cssManager;
 	}
 
 	public function merge($inherit, $tag, $attr)

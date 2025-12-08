@@ -2,24 +2,13 @@
 
 namespace Mpdf;
 
-use Mpdf\Color\ColorConverter;
 use Mpdf\Css\CssMerger;
-use Mpdf\Css\NormalizeProperties;
-use Mpdf\Css\SelectorParser;
-use Mpdf\Css\InlineStyleParser;
-use Mpdf\Css\InlinePropertyConverter;
 use Mpdf\Exception\InvalidArgumentException;
 use Mpdf\Utils\Arrays;
 use Mpdf\Css\CssParser;
-use Mpdf\Css\BorderMerger;
 
 class CssManager
 {
-	/**
-	 * @var \Mpdf\Css\InlineStyleParser
-	 */
-	private $inlineStyleParser;
-
 	/**
 	 * @var \Mpdf\Css\CssParser
 	 */
@@ -103,38 +92,14 @@ class CssManager
 	 * Initializes the CSS manager with required dependencies and sets up
 	 * internal storage structures for CSS properties and cascading.
 	 *
-	 * @param Mpdf $mpdf Main mPDF instance
-	 * @param Cache $cache Cache instance for temporary file storage
-	 * @param SizeConverter $sizeConverter Size conversion utility
-	 * @param ColorConverter $colorConverter Color conversion utility
-	 * @param AssetFetcher $assetFetcher Asset fetching utility for external resources
+	 * @param CssParser $cssParser
+	 * @param CssMerger $cssMerger
 	 */
-	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
+	public function __construct(cssParser $cssParser, CssMerger $cssMerger)
 	{
-		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
-		$selectorParser = new SelectorParser($mpdf);
-		$this->inlineStyleParser = new InlineStyleParser($normalizeProperties);
-		$inlinePropertyConverter = new InlinePropertyConverter($colorConverter);
-		$borderMerger = new BorderMerger();
-
-		$this->cssParser = new CssParser(
-			$mpdf,
-			$cache,
-			$sizeConverter,
-			$colorConverter,
-			$assetFetcher
-		);
-
-		$this->cssMerger = new CssMerger(
-			$mpdf,
-			$this,
-			$normalizeProperties,
-			$this->inlineStyleParser,
-			$selectorParser,
-			$inlinePropertyConverter,
-			$colorConverter,
-			$borderMerger
-		);
+		$this->cssParser = $cssParser;
+		$this->cssMerger = $cssMerger;
+		$this->cssMerger->setCssManager($this);
 	}
 
 	/**
@@ -169,7 +134,7 @@ class CssManager
 	 */
 	public function readInlineCSS($html)
 	{
-		return $this->inlineStyleParser->parse($html);
+		return $this->cssParser->parseInlineCss($html);
 	}
 
 	/**
