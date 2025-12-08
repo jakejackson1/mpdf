@@ -15,7 +15,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	/**
 	 * @var \Mpdf\Css\NormalizeProperties
 	 */
-	private $properties;
+	private $normalizeProperties;
 
 	private $mpdf;
 
@@ -30,12 +30,12 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$colorSpaceRestrictor = new ColorSpaceRestrictor($this->mpdf, $colorModeConverter);
 		$colorConverter = new ColorConverter($this->mpdf, $colorModeConverter, $colorSpaceRestrictor);
 
-		$this->properties = new NormalizeProperties($this->mpdf, $sizeConverter, $colorConverter);
+		$this->normalizeProperties = new NormalizeProperties($this->mpdf, $sizeConverter, $colorConverter);
 	}
 
 	public function tear_down()
 	{
-		unset($this->properties, $this->mpdf);
+		unset($this->normalizeProperties, $this->mpdf);
 
 		parent::tear_down();
 	}
@@ -74,7 +74,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 			'FONT-WEIGHT' => 'normal',
 		];
 
-		$result = $this->properties->normalize($prop);
+		$result = $this->normalizeProperties->normalize($prop);
 
 		foreach ($expected as $k => $v) {
 			$this->assertArrayHasKey($k, $result);
@@ -84,8 +84,8 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	public function testNormalizeEmpty()
 	{
-		$this->assertEquals([], $this->properties->normalize([]));
-		$this->assertEquals([], $this->properties->normalize(null));
+		$this->assertEquals([], $this->normalizeProperties->normalize([]));
+		$this->assertEquals([], $this->normalizeProperties->normalize(null));
 	}
 
 	/**
@@ -93,7 +93,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	 */
 	public function testNormalizeBorderRadius($prop, $expected)
 	{
-		$result = $this->properties->normalize($prop);
+		$result = $this->normalizeProperties->normalize($prop);
 		
 		foreach ($expected as $k => $v) {
 			$this->assertArrayHasKey($k, $result, "Missing key: $k");
@@ -161,7 +161,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 			'LIST-STYLE-IMAGE' => 'bullet.png'
 		];
 
-		$result = $this->properties->normalize($prop);
+		$result = $this->normalizeProperties->normalize($prop);
 		
 		foreach ($expected as $k => $v) {
 			$this->assertEquals($v, $result[$k]);
@@ -171,11 +171,11 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	public function testNormalizeTextAlign()
 	{
 		$prop = ['TEXT-ALIGN' => 'center'];
-		$result = $this->properties->normalize($prop);
+		$result = $this->normalizeProperties->normalize($prop);
 		$this->assertEquals('center', $result['TEXT-ALIGN']);
 		
 		$prop = ['TEXT-ALIGN' => 'decimal "DP"'];
-		$result = $this->properties->normalize($prop);
+		$result = $this->normalizeProperties->normalize($prop);
 		$this->assertEquals('decimal "dp"', $result['TEXT-ALIGN']);
 	}
 
@@ -184,7 +184,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	 */
 	public function testMarginShorthand($input, $expected)
 	{
-		$result = $this->properties->normalize(['MARGIN' => $input]);
+		$result = $this->normalizeProperties->normalize(['MARGIN' => $input]);
 		$this->assertEquals($expected['T'], $result['MARGIN-TOP']);
 		$this->assertEquals($expected['R'], $result['MARGIN-RIGHT']);
 		$this->assertEquals($expected['B'], $result['MARGIN-BOTTOM']);
@@ -207,7 +207,7 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	 */
 	public function testBorderStringNormalization($input, $expected)
 	{
-		$result = $this->properties->normalize(['BORDER-TOP' => $input]);
+		$result = $this->normalizeProperties->normalize(['BORDER-TOP' => $input]);
 		$this->assertEquals($expected, $result['BORDER-TOP']);
 	}
 
@@ -229,33 +229,33 @@ class NormalizePropertiesTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	public function testParseCSSbackground()
 	{
 		// Color only
-		$res = $this->properties->normalize(['BACKGROUND' => '#ff0000']);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => '#ff0000']);
 		$this->assertEquals('#ff0000', $res['BACKGROUND-COLOR']);
 		$this->assertEquals('', $res['BACKGROUND-IMAGE']);
 
 		// URL
-		$res = $this->properties->normalize(['BACKGROUND' => 'url(image.jpg)']);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => 'url(image.jpg)']);
 		$this->assertEquals('image.jpg', $res['BACKGROUND-IMAGE']);
 		$this->assertEquals('transparent', $res['BACKGROUND-COLOR']);
 
 		// URL and Color
-		$res = $this->properties->normalize(['BACKGROUND' => '#fff url(bg.png)']);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => '#fff url(bg.png)']);
 		$this->assertEquals('#fff', $res['BACKGROUND-COLOR']);
 		$this->assertEquals('bg.png', $res['BACKGROUND-IMAGE']);
 
 		// URL and Repeat
-		$res = $this->properties->normalize(['BACKGROUND' => 'url(bg.png) repeat-x']);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => 'url(bg.png) repeat-x']);
 		$this->assertEquals('bg.png', $res['BACKGROUND-IMAGE']);
 		$this->assertEquals('repeat-x', $res['BACKGROUND-REPEAT']);
 
 		// URL and Position
-		$res = $this->properties->normalize(['BACKGROUND' => 'url(bg.png) center top']);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => 'url(bg.png) center top']);
 		$this->assertEquals('bg.png', $res['BACKGROUND-IMAGE']);
 		$this->assertEquals('50% 0%', $res['BACKGROUND-POSITION']);
 
 		// Gradient
 		$gradient = 'linear-gradient(to bottom, #fff, #000)';
-		$res = $this->properties->normalize(['BACKGROUND' => $gradient]);
+		$res = $this->normalizeProperties->normalize(['BACKGROUND' => $gradient]);
 		$this->assertEquals($gradient, $res['BACKGROUND-IMAGE']);
 	}
 

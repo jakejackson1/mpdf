@@ -14,8 +14,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 	private $tempDir;
 
-	private $normalizeProperties;
-
 	protected function set_up()
 	{
 		parent::set_up();
@@ -31,12 +29,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$property   = $reflection->getProperty('cssManager');
 		$property->setAccessible(true);
 		$this->cssManager = $property->getValue($this->mpdf);
-
-		// Use reflection to access private normalizeProperties property
-		$reflection = new \ReflectionClass($this->cssManager);
-		$property   = $reflection->getProperty('normalizeProperties');
-		$property->setAccessible(true);
-		$this->normalizeProperties = $property->getValue($this->cssManager);
 
 		// Ensure we have a page to work with
 		$this->mpdf->AddPage();
@@ -563,62 +555,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertArrayNotHasKey('BACKGROUND', $result);
 	}
 
-	public function testFixCSS_WithEmptyArray()
-	{
-		$result = $this->normalizeProperties->normalize([]);
-		$this->assertEquals([], $result);
-	}
-
-	public function testFixCSS_WithNonArray()
-	{
-		$result = $this->normalizeProperties->normalize(null);
-		$this->assertEquals([], $result);
-	}
-
-	public function testFixCSS_WithMargin()
-	{
-		$result = $this->normalizeProperties->normalize(['MARGIN' => '10px']);
-		$this->assertArrayHasKey('MARGIN-TOP', $result);
-		$this->assertArrayHasKey('MARGIN-RIGHT', $result);
-		$this->assertArrayHasKey('MARGIN-BOTTOM', $result);
-		$this->assertArrayHasKey('MARGIN-LEFT', $result);
-		$this->assertEquals('10px', $result['MARGIN-TOP']);
-	}
-
-	public function testFixCSS_WithPadding()
-	{
-		$result = $this->normalizeProperties->normalize(['PADDING' => '5px 10px']);
-		$this->assertArrayHasKey('PADDING-TOP', $result);
-		$this->assertArrayHasKey('PADDING-RIGHT', $result);
-		$this->assertEquals('5px', $result['PADDING-TOP']);
-		$this->assertEquals('10px', $result['PADDING-RIGHT']);
-	}
-
-	public function testFixCSS_WithBorderSimple()
-	{
-		$result = $this->normalizeProperties->normalize(['BORDER' => '1px solid #000000']);
-		$this->assertArrayHasKey('BORDER-TOP', $result);
-		$this->assertEquals('1px solid #000000', $result['BORDER-TOP']);
-	}
-
-	public function testFixCSS_WithBorderStyle()
-	{
-		$result = $this->normalizeProperties->normalize(['BORDER-STYLE' => 'solid dashed']);
-		$this->assertArrayHasKey('BORDER-TOP-STYLE', $result);
-		$this->assertArrayHasKey('BORDER-RIGHT-STYLE', $result);
-		$this->assertEquals('solid', $result['BORDER-TOP-STYLE']);
-		$this->assertEquals('dashed', $result['BORDER-RIGHT-STYLE']);
-	}
-
-	public function testFixCSS_WithFontFamily()
-	{
-		$this->mpdf->available_unifonts = ['dejavusans'];
-
-		$result = $this->normalizeProperties->normalize(['FONT-FAMILY' => 'DejaVu Sans, Arial']);
-		$this->assertArrayHasKey('FONT-FAMILY', $result);
-		$this->assertEquals('dejavusans', $result['FONT-FAMILY']);
-	}
-
 	public function testMergeCSS_WithInheritBlock()
 	{
 		// Set up mock data for BLOCK inheritance
@@ -938,34 +874,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 		$this->assertArrayHasKey('border', $result);
 		$this->assertArrayHasKey('margin', $result);
-	}
-
-	public function testFixCSS_ComplexBorderRadius()
-	{
-		$result = $this->normalizeProperties->normalize(['BORDER-RADIUS' => '10px 20px / 30px']);
-
-		$this->assertArrayHasKey('BORDER-TOP-LEFT-RADIUS-H', $result);
-		$this->assertArrayHasKey('BORDER-TOP-LEFT-RADIUS-V', $result);
-		$this->assertEquals('10px', $result['BORDER-TOP-LEFT-RADIUS-H']);
-		$this->assertEquals('30px', $result['BORDER-TOP-LEFT-RADIUS-V']);
-	}
-
-	public function testFixCSS_ListStyle()
-	{
-		$result = $this->normalizeProperties->normalize(['LIST-STYLE' => 'disc inside']);
-
-		$this->assertArrayHasKey('LIST-STYLE-TYPE', $result);
-		$this->assertArrayHasKey('LIST-STYLE-POSITION', $result);
-		$this->assertEquals('disc', $result['LIST-STYLE-TYPE']);
-		$this->assertEquals('inside', $result['LIST-STYLE-POSITION']);
-	}
-
-	public function testFixCSS_TextAlign()
-	{
-		$result = $this->normalizeProperties->normalize(['TEXT-ALIGN' => 'center']);
-
-		$this->assertArrayHasKey('TEXT-ALIGN', $result);
-		$this->assertEquals('center', $result['TEXT-ALIGN']);
 	}
 
 	public function testReadInlineCSS_WithUrlsContainingSpecialChars()

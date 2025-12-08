@@ -18359,7 +18359,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					/* -- END BORDER-RADIUS -- */
 
 					case 'BOX-SHADOW':
-						$bs = $this->cssManager->setCSSboxshadow($v);
+						$bs = $this->cssManager->parseBoxShadow($v);
 						if ($bs) {
 							$this->blk[$this->blklvl]['box_shadow'] = $bs;
 						}
@@ -18869,7 +18869,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					break;
 
 				case 'TEXT-SHADOW':
-					$ts = $this->cssManager->setCSStextshadow($v);
+					$ts = $this->cssManager->parseTextShadow($v);
 					if ($ts) {
 						$this->textshadow = $ts;
 					}
