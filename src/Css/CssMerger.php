@@ -92,6 +92,19 @@ class CssMerger
 		$this->cssManager = $cssManager;
 	}
 
+	/**
+	 * Merge CSS properties for an HTML element.
+	 *
+	 * Main method for applying CSS to an element. Combines CSS from multiple sources
+	 * including default styles, stylesheets, inline styles, and inherited properties.
+	 * Handles inheritance type (BLOCK, INLINE, TABLE, TOPTABLE) and applies
+	 * appropriate cascading rules.
+	 *
+	 * @param string $inherit Inheritance context (BLOCK, INLINE, TABLE, TOPTABLE)
+	 * @param string $tag HTML tag name
+	 * @param array $attr HTML attributes including CLASS, ID, STYLE
+	 * @return array Merged CSS properties array
+	 */
 	public function merge($inherit, $tag, $attr)
 	{
 		$this->cssProperties = [];
