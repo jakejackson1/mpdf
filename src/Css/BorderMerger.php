@@ -95,7 +95,6 @@ class BorderMerger
 	 * @param array $prop CSS properties containing border definitions
 	 * @param int $val Dominance level value
 	 * @return void
-	 * @throws InvalidArgumentException
 	 */
 	public function setDominanceFromProperties($prop, $val)
 	{

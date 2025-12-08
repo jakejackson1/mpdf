@@ -240,7 +240,7 @@ class CssMerger
 		$currentBlockHasCascade = isset($currentBlock['cascadeCSS']) && is_array($currentBlock['cascadeCSS']);
 		$currentBlock['cascadeCSS'] = $currentBlockHasCascade ? $currentBlock['cascadeCSS'] : [];
 
-		$previousBlockLevel = $this->getPreviousBlockLevel();
+		$previousBlockLevel = $this->getBlockLevel();
 		$previousBlock = isset($this->mpdf->blk[$previousBlockLevel]) ? $this->mpdf->blk[$previousBlockLevel] : [];
 		$previousBlockHasCascade = isset($previousBlock['cascadeCSS']) && is_array($previousBlock['cascadeCSS']);
 		$previousBlock['cascadeCSS'] = $previousBlockHasCascade ? $previousBlock['cascadeCSS'] : [];
@@ -686,49 +686,22 @@ class CssMerger
 	 */
 	protected function mergeDescendantSelectors($inherit, $tag, $attr, $classes)
 	{
-		if ($inherit === 'BLOCK') {
-			$this->mergeBlockDescendantSelectors($tag, $attr, $classes);
-		} elseif ($inherit === 'INLINE') {
-			$this->mergeInlineDescendantSelectors($tag, $attr, $classes);
-		} elseif ($inherit === 'TOPTABLE' || $inherit === 'TABLE') {
+		if ($inherit === 'TOPTABLE' || $inherit === 'TABLE') {
 			$this->mergeTableDescendantSelectors($tag, $attr, $classes);
-		}
-	}
-
-	/**
-	 * Merge block cascaded CSS.
-	 *
-	 * @param string $tag HTML tag
-	 * @param array $attr HTML attributes
-	 * @param array $classes Array of class names
-	 * @return void
-	 */
-	protected function mergeBlockDescendantSelectors($tag, $attr, $classes)
-	{
-		$previousBlockLevel = $this->getPreviousBlockLevel();
-		if (!isset($this->mpdf->blk[$previousBlockLevel]['cascadeCSS'])) {
 			return;
 		}
 
-		$this->mergeDescendantCss($this->mpdf->blk[$previousBlockLevel]['cascadeCSS'], $tag, $attr, $classes);
-	}
-
-	/**
-	 * Merge inline cascaded CSS.
-	 *
-	 * @param string $tag HTML tag
-	 * @param array $attr HTML attributes
-	 * @param array $classes Array of class names
-	 * @return void
-	 */
-	protected function mergeInlineDescendantSelectors($tag, $attr, $classes)
-	{
-		if (!isset($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'])) {
+		$level = $this->getBlockLevel($inherit);
+		if (!isset($this->mpdf->blk[$level]['cascadeCSS'])) {
 			return;
 		}
 
-		// @todo: check if this sideeffect rule also applies here?
-		$this->mergeDescendantCss($this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'], $tag, $attr, $classes);
+		$cascadeCSS = $this->mpdf->blk[$level]['cascadeCSS'];
+		$this->mergeDescendantCss($cascadeCSS, $tag, $attr, $classes);
+
+		if ($this->sideEffects) {
+			$this->mpdf->blk[$level]['cascadeCSS'] = $cascadeCSS;
+		}
 	}
 
 	/**
@@ -1070,8 +1043,12 @@ class CssMerger
 	/**
 	 * @return int
 	 */
-	protected function getPreviousBlockLevel()
+	protected function getBlockLevel($inherit = 'BLOCK')
 	{
-		return $this->sideEffects ? $this->mpdf->blklvl - 1 : $this->mpdf->blklvl;
+		if (!$this->sideEffects || $inherit !== 'BLOCK') {
+			return $this->mpdf->blklvl;
+		}
+
+		return $this->mpdf->blklvl - 1;
 	}
 }
