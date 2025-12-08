@@ -5,6 +5,7 @@ namespace Mpdf;
 use Mpdf\Color\ColorConverter;
 use Mpdf\Color\ColorModeConverter;
 use Mpdf\Color\ColorSpaceRestrictor;
+use Mpdf\Css\ShadowParser;
 use Mpdf\File\LocalContentLoader;
 use Mpdf\Fonts\FontCache;
 use Mpdf\Fonts\FontFileFinder;
@@ -83,6 +84,7 @@ class ServiceFactory
 
 		$assetFetcher = new AssetFetcher($mpdf, $localContentLoader, $httpClient, $logger);
 
+		$shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
 		$cssManager = new CssManager($mpdf, $cache, $sizeConverter, $colorConverter, $assetFetcher);
 
 		$otl = new Otl($mpdf, $fontCache);
@@ -156,6 +158,7 @@ class ServiceFactory
 			'bmp' => $bmp,
 			'cache' => $cache,
 			'cssManager' => $cssManager,
+			'shadowParser' => $shadowParser,
 			'directWrite' => $directWrite,
 			'fontCache' => $fontCache,
 			'fontFileFinder' => $fontFileFinder,

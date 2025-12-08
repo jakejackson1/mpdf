@@ -6,6 +6,7 @@ use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\Conversion;
 use Mpdf\Css\Border;
+use Mpdf\Css\ShadowParser;
 use Mpdf\Css\TextVars;
 use Mpdf\Log\Context as LogContext;
 use Mpdf\Fonts\MetricsGenerator;
@@ -847,6 +848,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @var \Mpdf\CssManager
 	 */
 	private $cssManager;
+
+	/**
+	 * @var ShadowParser
+	 */
+	private $shadowParser;
 
 	/**
 	 * @var \Mpdf\Gradient
@@ -18359,7 +18365,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					/* -- END BORDER-RADIUS -- */
 
 					case 'BOX-SHADOW':
-						$bs = $this->cssManager->parseBoxShadow($v);
+						$bs = $this->shadowParser->parseBoxShadow($v);
 						if ($bs) {
 							$this->blk[$this->blklvl]['box_shadow'] = $bs;
 						}
@@ -18869,7 +18875,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					break;
 
 				case 'TEXT-SHADOW':
-					$ts = $this->cssManager->parseTextShadow($v);
+					$ts = $this->shadowParser->parseTextShadow($v);
 					if ($ts) {
 						$this->textshadow = $ts;
 					}

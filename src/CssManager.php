@@ -5,7 +5,6 @@ namespace Mpdf;
 use Mpdf\Color\ColorConverter;
 use Mpdf\Css\CssMerger;
 use Mpdf\Css\NormalizeProperties;
-use Mpdf\Css\ShadowParser;
 use Mpdf\Css\SelectorParser;
 use Mpdf\Css\InlineStyleParser;
 use Mpdf\Css\InlinePropertyConverter;
@@ -16,11 +15,6 @@ use Mpdf\Css\BorderMerger;
 
 class CssManager
 {
-	/**
-	 * @var \Mpdf\Css\ShadowParser
-	 */
-	private $shadowParser;
-
 	/**
 	 * @var \Mpdf\Css\InlineStyleParser
 	 */
@@ -118,7 +112,6 @@ class CssManager
 	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
 	{
 		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
-		$this->shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
 		$selectorParser = new SelectorParser($mpdf);
 		$this->inlineStyleParser = new InlineStyleParser($normalizeProperties);
 		$inlinePropertyConverter = new InlinePropertyConverter($colorConverter);
@@ -177,34 +170,6 @@ class CssManager
 	public function readInlineCSS($html)
 	{
 		return $this->inlineStyleParser->parse($html);
-	}
-
-	/**
-	 * Parse box-shadow CSS property.
-	 *
-	 * Converts box-shadow CSS property string into array format used internally.
-	 * Handles multiple shadows, inset shadows, blur, spread, and colors.
-	 *
-	 * @param string $value Box-shadow property value
-	 * @return array Array of shadow definitions
-	 */
-	public function parseBoxShadow($value)
-	{
-		return $this->shadowParser->parseBoxShadow($value);
-	}
-
-	/**
-	 * Parse text-shadow CSS property.
-	 *
-	 * Converts text-shadow CSS property string into array format used internally.
-	 * Handles multiple shadows, blur, and colors.
-	 *
-	 * @param string $value Text-shadow property value
-	 * @return array Array of text shadow definitions
-	 */
-	public function parseTextShadow($value)
-	{
-		return $this->shadowParser->parseTextShadow($value);
 	}
 
 	/**
