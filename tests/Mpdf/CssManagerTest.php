@@ -619,36 +619,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertEquals('dejavusans', $result['FONT-FAMILY']);
 	}
 
-	public function testSetBorderDominance_WithAllBorders()
-	{
-		$prop = [
-			'BORDER-LEFT'   => '1px solid #000',
-			'BORDER-RIGHT'  => '1px solid #000',
-			'BORDER-TOP'    => '1px solid #000',
-			'BORDER-BOTTOM' => '1px solid #000',
-		];
-
-		$this->cssManager->setDominanceFromProperties($prop, 5);
-		$this->assertEquals(5, $this->cssManager->getBorderDominance('L'));
-		$this->assertEquals(5, $this->cssManager->getBorderDominance('R'));
-		$this->assertEquals(5, $this->cssManager->getBorderDominance('T'));
-		$this->assertEquals(5, $this->cssManager->getBorderDominance('B'));
-	}
-
-	public function testSetBorderDominance_WithPartialBorders()
-	{
-		$this->cssManager->setBorderDominance('L', 0);
-		$this->cssManager->setBorderDominance('T', 0);
-
-		$prop = ['BORDER-LEFT' => '1px solid #000'];
-		$this->cssManager->setDominanceFromProperties($prop, 3);
-
-		$this->assertEquals(3, $this->cssManager->getBorderDominance('L'));
-		$this->assertEquals(0, $this->cssManager->getBorderDominance('T'));
-	}
-
-
-
 	public function testMergeCSS_WithInheritBlock()
 	{
 		// Set up mock data for BLOCK inheritance
@@ -969,12 +939,6 @@ class CssManagerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertArrayHasKey('border', $result);
 		$this->assertArrayHasKey('margin', $result);
 	}
-
-
-
-
-
-
 
 	public function testFixCSS_ComplexBorderRadius()
 	{

@@ -16,6 +16,21 @@ use Mpdf\Css\CssParser;
 class CssManager
 {
 	/**
+	 * @var \Mpdf\Mpdf
+	 */
+	private $mpdf;
+
+	/**
+	 * @var \Mpdf\Color\ColorConverter
+	 */
+	private $colorConverter;
+
+	/**
+	 * @var \Mpdf\Css\NormalizeProperties
+	 */
+	private $normalizeProperties;
+
+	/**
 	 * @var \Mpdf\Css\ShadowParser
 	 */
 	private $shadowParser;
@@ -24,6 +39,16 @@ class CssManager
 	 * @var \Mpdf\Css\InlineStyleParser
 	 */
 	private $inlineStyleParser;
+
+	/**
+	 * @var \Mpdf\Css\InlinePropertyConverter
+	 */
+	private $inlinePropertyConverter;
+
+	/**
+	 * @var \Mpdf\Css\SelectorParser
+	 */
+	private $selectorParser;
 
 	/**
 	 * @var \Mpdf\Css\CssParser
@@ -116,11 +141,14 @@ class CssManager
 	 */
 	public function __construct(Mpdf $mpdf, Cache $cache, SizeConverter $sizeConverter, ColorConverter $colorConverter, AssetFetcher $assetFetcher)
 	{
-		$normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
+		$this->mpdf = $mpdf;
+		$this->colorConverter = $colorConverter;
+
+		$this->normalizeProperties = new NormalizeProperties($mpdf, $sizeConverter, $colorConverter);
 		$this->shadowParser = new ShadowParser($mpdf, $sizeConverter, $colorConverter);
-		$selectorParser = new SelectorParser($mpdf);
-		$this->inlineStyleParser = new InlineStyleParser($normalizeProperties);
-		$inlinePropertyConverter = new InlinePropertyConverter($colorConverter);
+		$this->selectorParser = new SelectorParser($mpdf);
+		$this->inlineStyleParser = new InlineStyleParser($this->normalizeProperties);
+		$this->inlinePropertyConverter = new InlinePropertyConverter($colorConverter);
 
 		$this->cssParser = new CssParser(
 			$mpdf,
@@ -133,10 +161,10 @@ class CssManager
 		$this->cssMerger = new CssMerger(
 			$mpdf,
 			$this,
-			$normalizeProperties,
+			$this->normalizeProperties,
 			$this->inlineStyleParser,
-			$selectorParser,
-			$inlinePropertyConverter,
+			$this->selectorParser,
+			$this->inlinePropertyConverter,
 			$colorConverter
 		);
 	}

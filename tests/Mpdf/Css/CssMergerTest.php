@@ -508,4 +508,32 @@ class CssMergerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertArrayHasKey('display', $result);
 		$this->assertEquals('inline', $result['display']);
 	}
+
+	public function testSetBorderDominance_WithAllBorders()
+	{
+		$prop = [
+			'BORDER-LEFT'   => '1px solid #000',
+			'BORDER-RIGHT'  => '1px solid #000',
+			'BORDER-TOP'    => '1px solid #000',
+			'BORDER-BOTTOM' => '1px solid #000',
+		];
+
+		$this->cssMerger->setDominanceFromProperties($prop, 5);
+		$this->assertEquals(5, $this->cssMerger->getBorderDominance('L'));
+		$this->assertEquals(5, $this->cssMerger->getBorderDominance('R'));
+		$this->assertEquals(5, $this->cssMerger->getBorderDominance('T'));
+		$this->assertEquals(5, $this->cssMerger->getBorderDominance('B'));
+	}
+
+	public function testSetBorderDominance_WithPartialBorders()
+	{
+		$this->cssMerger->setBorderDominance('L', 0);
+		$this->cssMerger->setBorderDominance('T', 0);
+
+		$prop = ['BORDER-LEFT' => '1px solid #000'];
+		$this->cssMerger->setDominanceFromProperties($prop, 3);
+
+		$this->assertEquals(3, $this->cssMerger->getBorderDominance('L'));
+		$this->assertEquals(0, $this->cssMerger->getBorderDominance('T'));
+	}
 }
