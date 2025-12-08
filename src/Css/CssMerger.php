@@ -153,8 +153,8 @@ class CssMerger
 		}
 
 		// STYLESHEET TAG e.g. h1  p  div  table
-		if (isset($this->CSS[$tag])) {
-			$zp = $this->CSS[$tag];
+		if (isset($this->cssManager->CSS[$tag])) {
+			$zp = $this->cssManager->CSS[$tag];
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
@@ -163,8 +163,8 @@ class CssMerger
 		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
 		foreach ($classes as $class) {
 			$zp = [];
-			if (isset($this->CSS['CLASS>>' . $class])) {
-				$zp = $this->CSS['CLASS>>' . $class];
+			if (isset($this->cssManager->CSS['CLASS>>' . $class])) {
+				$zp = $this->cssManager->CSS['CLASS>>' . $class];
 			}
 
 			if (is_array($zp)) {
@@ -173,8 +173,8 @@ class CssMerger
 		}
 
 		// STYLESHEET ID e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID']) && isset($this->CSS['ID>>' . $attr['ID']])) {
-			$zp = $this->CSS['ID>>' . $attr['ID']];
+		if (isset($attr['ID']) && isset($this->cssManager->CSS['ID>>' . $attr['ID']])) {
+			$zp = $this->cssManager->CSS['ID>>' . $attr['ID']];
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
@@ -183,8 +183,8 @@ class CssMerger
 		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
 		foreach ($classes as $class) {
 			$zp = [];
-			if (isset($this->CSS[$tag . '>>CLASS>>' . $class])) {
-				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
+			if (isset($this->cssManager->CSS[$tag . '>>CLASS>>' . $class])) {
+				$zp = $this->cssManager->CSS[$tag . '>>CLASS>>' . $class];
 			}
 
 			if (is_array($zp)) {
@@ -193,8 +193,8 @@ class CssMerger
 		}
 
 		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && isset($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
-			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
+		if (isset($attr['ID']) && isset($this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']])) {
+			$zp = $this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']];
 			if (is_array($zp)) {
 				$this->cssProperties = array_merge($this->cssProperties, $zp);
 			}
@@ -559,8 +559,8 @@ class CssMerger
 	protected function mergeStylesheetSelectors($tag, $attr, $classes, $languageCode)
 	{
 		// STYLESHEET TAG e.g. h1  p  div  table
-		if (isset($this->CSS[$tag])) {
-			$zp = $this->CSS[$tag];
+		if (isset($this->cssManager->CSS[$tag])) {
+			$zp = $this->cssManager->CSS[$tag];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setDominanceFromProperties($zp, 9);
 			}
@@ -574,8 +574,8 @@ class CssMerger
 		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
 		foreach ($classes as $class) {
 			$zp = [];
-			if (!empty($this->CSS['CLASS>>' . $class])) {
-				$zp = $this->CSS['CLASS>>' . $class];
+			if (!empty($this->cssManager->CSS['CLASS>>' . $class])) {
+				$zp = $this->cssManager->CSS['CLASS>>' . $class];
 			}
 
 			if ($tag === 'TD' || $tag === 'TH') {
@@ -626,7 +626,7 @@ class CssMerger
 				}
 
 				if ($select) {
-					$zp = $this->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
+					$zp = $this->cssManager->CSS[$tag . '>>SELECTORNTHCHILD>>' . $m[1]];
 					if ($tag === 'TD' || $tag === 'TH') {
 						$this->setDominanceFromProperties($zp, 9);
 					}
@@ -642,8 +642,8 @@ class CssMerger
 
 		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
 		if (isset($attr['LANG'])) {
-			if (!empty($this->CSS['LANG>>' . $attr['LANG']])) {
-				$zp = $this->CSS['LANG>>' . $attr['LANG']];
+			if (!empty($this->cssManager->CSS['LANG>>' . $attr['LANG']])) {
+				$zp = $this->cssManager->CSS['LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setDominanceFromProperties($zp, 9);
 				}
@@ -652,8 +652,8 @@ class CssMerger
 					$this->cssProperties = array_merge($this->cssProperties, $zp);
 					$this->mergeBorderProperties($zp);
 				}
-			} elseif (!empty($this->CSS['LANG>>' . $languageCode])) {
-				$zp = $this->CSS['LANG>>' . $languageCode];
+			} elseif (!empty($this->cssManager->CSS['LANG>>' . $languageCode])) {
+				$zp = $this->cssManager->CSS['LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setDominanceFromProperties($zp, 9);
 				}
@@ -666,8 +666,8 @@ class CssMerger
 		}
 
 		// STYLESHEET ID e.g. #smallone{}  #redletter{}
-		if (!empty($attr['ID']) && !empty($this->CSS['ID>>' . $attr['ID']])) {
-			$zp = $this->CSS['ID>>' . $attr['ID']];
+		if (!empty($attr['ID']) && !empty($this->cssManager->CSS['ID>>' . $attr['ID']])) {
+			$zp = $this->cssManager->CSS['ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setDominanceFromProperties($zp, 9);
 			}
@@ -693,8 +693,8 @@ class CssMerger
 		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
 		foreach ($classes as $class) {
 			$zp = [];
-			if (!empty($this->CSS[$tag . '>>CLASS>>' . $class])) {
-				$zp = $this->CSS[$tag . '>>CLASS>>' . $class];
+			if (!empty($this->cssManager->CSS[$tag . '>>CLASS>>' . $class])) {
+				$zp = $this->cssManager->CSS[$tag . '>>CLASS>>' . $class];
 			}
 
 			if ($tag === 'TD' || $tag === 'TH') {
@@ -709,8 +709,8 @@ class CssMerger
 
 		// STYLESHEET LANG e.g. [lang=fr]{} or :lang(fr)
 		if (isset($attr['LANG'])) {
-			if (!empty($this->CSS[$tag . '>>LANG>>' . $attr['LANG']])) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $attr['LANG']];
+			if (!empty($this->cssManager->CSS[$tag . '>>LANG>>' . $attr['LANG']])) {
+				$zp = $this->cssManager->CSS[$tag . '>>LANG>>' . $attr['LANG']];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setDominanceFromProperties($zp, 9);
 				}
@@ -719,8 +719,8 @@ class CssMerger
 					$this->cssProperties = array_merge($this->cssProperties, $zp);
 					$this->mergeBorderProperties($zp);
 				}
-			} elseif (!empty($this->CSS[$tag . '>>LANG>>' . $languageCode])) {
-				$zp = $this->CSS[$tag . '>>LANG>>' . $languageCode];
+			} elseif (!empty($this->cssManager->CSS[$tag . '>>LANG>>' . $languageCode])) {
+				$zp = $this->cssManager->CSS[$tag . '>>LANG>>' . $languageCode];
 				if ($tag === 'TD' || $tag === 'TH') {
 					$this->setDominanceFromProperties($zp, 9);
 				}
@@ -733,8 +733,8 @@ class CssMerger
 		}
 
 		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && !empty($this->CSS[$tag . '>>ID>>' . $attr['ID']])) {
-			$zp = $this->CSS[$tag . '>>ID>>' . $attr['ID']];
+		if (isset($attr['ID']) && !empty($this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']])) {
+			$zp = $this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']];
 			if ($tag === 'TD' || $tag === 'TH') {
 				$this->setDominanceFromProperties($zp, 9);
 			}

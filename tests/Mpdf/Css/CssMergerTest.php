@@ -16,8 +16,6 @@ class CssMergerTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	/** @var Mpdf */
 	private $mpdf;
 
-	private $tempDir;
-
 	protected function set_up()
 	{
 		parent::set_up();
