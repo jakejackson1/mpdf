@@ -219,7 +219,8 @@ class CssMerger
 		$currentBlockHasCascade = isset($currentBlock['cascadeCSS']) && is_array($currentBlock['cascadeCSS']);
 		$currentBlock['cascadeCSS'] = $currentBlockHasCascade ? $currentBlock['cascadeCSS'] : [];
 
-		$previousBlock = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]) ? $this->mpdf->blk[$this->mpdf->blklvl - 1] : [];
+		$previousBlockLevel = $this->getPreviousBlockLevel();
+		$previousBlock = isset($this->mpdf->blk[$previousBlockLevel]) ? $this->mpdf->blk[$previousBlockLevel] : [];
 		$previousBlockHasCascade = isset($previousBlock['cascadeCSS']) && is_array($previousBlock['cascadeCSS']);
 		$previousBlock['cascadeCSS'] = $previousBlockHasCascade ? $previousBlock['cascadeCSS'] : [];
 
@@ -684,11 +685,12 @@ class CssMerger
 	 */
 	protected function mergeBlockDescendantSelectors($tag, $attr, $classes)
 	{
-		if (!isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'])) {
+		$previousBlockLevel = $this->getPreviousBlockLevel();
+		if (!isset($this->mpdf->blk[$previousBlockLevel]['cascadeCSS'])) {
 			return;
 		}
 
-		$this->mergeDescendantCss($this->mpdf->blk[$this->mpdf->blklvl - 1]['cascadeCSS'], $tag, $attr, $classes);
+		$this->mergeDescendantCss($this->mpdf->blk[$previousBlockLevel]['cascadeCSS'], $tag, $attr, $classes);
 	}
 
 	/**
@@ -1115,5 +1117,13 @@ class CssMerger
 	public function getBorderDominance($side)
 	{
 		return isset($this->borderDominance[$side]) ? $this->borderDominance[$side] : 0;
+	}
+
+	/**
+	 * @return int
+	 */
+	protected function getPreviousBlockLevel()
+	{
+		return $this->sideEffects ? $this->mpdf->blklvl - 1 : $this->mpdf->blklvl;
 	}
 }
