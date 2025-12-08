@@ -61,6 +61,11 @@ class CssMerger
 		'L' => 0,
 	];
 
+	/**
+	 * @var bool When true, state outside this object will be modified
+	 */
+	private $sideEffects = true;
+
 	public function __construct(
 		Mpdf $mpdf,
 		CssManager $cssManager,
@@ -131,110 +136,11 @@ class CssMerger
 	 */
 	public function previewBlockCss($tag, $attr)
 	{
-		// @TODO - move to different class?
-		// Looks ahead from current block level to a new level
-		$oldCssProperties = $this->cssProperties;
-		$this->cssProperties = [];
+		$this->sideEffects = false;
+		$results = $this->merge('BLOCK', $tag, $attr);
+		$this->sideEffects = true;
 
-		$oldcascadeCSS = $this->mpdf->blk[$this->mpdf->blklvl]['cascadeCSS'];
-		$classes = [];
-		if (isset($attr['CLASS'])) {
-			$classes = array_map(function ($combination) {
-				return implode('.', $combination);
-			}, Arrays::allUniqueSortedCombinations(preg_split('/\s+/', $attr['CLASS'])));
-		}
-
-		// DEFAULT for this TAG set in DefaultCSS
-		if (isset($this->mpdf->defaultCSS[$tag])) {
-			$zp = $this->normalizeProperties->normalize($this->mpdf->defaultCSS[$tag]);
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($zp, $this->cssProperties);
-			} // Inherited overwrites default
-		}
-
-		// STYLESHEET TAG e.g. h1  p  div  table
-		if (isset($this->cssManager->CSS[$tag])) {
-			$zp = $this->cssManager->CSS[$tag];
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->cssManager->CSS['CLASS>>' . $class])) {
-				$zp = $this->cssManager->CSS['CLASS>>' . $class];
-			}
-
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		// STYLESHEET ID e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID']) && isset($this->cssManager->CSS['ID>>' . $attr['ID']])) {
-			$zp = $this->cssManager->CSS['ID>>' . $attr['ID']];
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		// STYLESHEET CLASS e.g. p.smallone{}  div.redletter{}
-		foreach ($classes as $class) {
-			$zp = [];
-			if (isset($this->cssManager->CSS[$tag . '>>CLASS>>' . $class])) {
-				$zp = $this->cssManager->CSS[$tag . '>>CLASS>>' . $class];
-			}
-
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		// STYLESHEET CLASS e.g. p#smallone{}  div#redletter{}
-		if (isset($attr['ID']) && isset($this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']])) {
-			$zp = $this->cssManager->CSS[$tag . '>>ID>>' . $attr['ID']];
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		// STYLESHEET TAG e.g. div h1    div p
-		$this->setMergedCss($oldcascadeCSS[$tag]);
-
-		// STYLESHEET CLASS e.g. .smallone{}  .redletter{}
-		foreach ($classes as $class) {
-			$this->setMergedCss($oldcascadeCSS['CLASS>>' . $class]);
-		}
-
-		// STYLESHEET CLASS e.g. #smallone{}  #redletter{}
-		if (isset($attr['ID'])) {
-			$this->setMergedCss($oldcascadeCSS['ID>>' . $attr['ID']]);
-		}
-
-		// STYLESHEET CLASS e.g. div.smallone{}  p.redletter{}
-		foreach ($classes as $class) {
-			$this->setMergedCss($oldcascadeCSS[$tag . '>>CLASS>>' . $class]);
-		}
-
-		// STYLESHEET CLASS e.g. div#smallone{}  p#redletter{}
-		if (isset($attr['ID'])) {
-			$this->setMergedCss($oldcascadeCSS[$tag . '>>ID>>' . $attr['ID']]);
-		}
-
-		// INLINE STYLE e.g. style="CSS:property"
-		if (isset($attr['STYLE'])) {
-			$zp = $this->inlineStyleParser->parse($attr['STYLE']);
-			if (is_array($zp)) {
-				$this->cssProperties = array_merge($this->cssProperties, $zp);
-			}
-		}
-
-		$p = $this->cssProperties;
-		$this->cssProperties = $oldCssProperties;
-
-		return $p;
+		return $results;
 	}
 
 	/**
@@ -250,7 +156,7 @@ class CssMerger
 	 */
 	protected function mergeTableCascadingCss($inherit, $tag, $attr, $classes)
 	{
-		if (! in_array($inherit, [ 'TOPTABLE', 'TABLE' ], true)) {
+		if (! in_array($inherit, [ 'TOPTABLE', 'TABLE' ], true) || !$this->sideEffects) {
 			return;
 		}
 
@@ -342,7 +248,9 @@ class CssMerger
 		);
 
 		// Set the new block info
-		$this->mpdf->blk[$this->mpdf->blklvl] = $currentBlock;
+		if ($this->sideEffects) {
+			$this->mpdf->blk[$this->mpdf->blklvl] = $currentBlock;
+		}
 
 		// Block properties which are inherited
 		if (!empty($previousBlock['margin_collapse'])) {
@@ -862,7 +770,9 @@ class CssMerger
 
 		$this->setMergedCss($node[$tag . '>>ID>>' . $attr['ID']], false, 9);
 
-		$this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl - 1] = $node;
+		if ($this->sideEffects) {
+			$this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl - 1] = $node;
+		}
 	}
 
 	/**
@@ -1159,6 +1069,10 @@ class CssMerger
 	 */
 	public function setDominanceFromProperties($prop, $val)
 	{
+		if (!$this->sideEffects) {
+			return;
+		}
+
 		if (!empty($prop['BORDER-TOP'])) {
 			$this->setBorderDominance('T', $val);
 		}
