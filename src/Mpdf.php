@@ -7,6 +7,9 @@ use Mpdf\Config\FontVariables;
 use Mpdf\Conversion;
 use Mpdf\Css\Border;
 use Mpdf\Css\TextVars;
+use Mpdf\Exception\InvalidArgumentException;
+use Mpdf\Fonts\FontRegistrationInterface;
+use Mpdf\Fonts\FontRegistry;
 use Mpdf\Log\Context as LogContext;
 use Mpdf\Fonts\MetricsGenerator;
 use Mpdf\Output\Destination;
@@ -1349,6 +1352,20 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->SetDisplayPreferences('');
 
 		$this->initFontConfig($originalConfig);
+
+		// @TODO - set/merge other config params
+		// @TODO - autoload/register font packages
+		$fontRegistry = $originalConfig['fontRegistry'] ?: new FontRegistry();
+		foreach ($fontRegistry->getAll() as $fontPackage) {
+			$this->AddFontDirectory($fontPackage->getFontDirectory());
+			foreach ($fontPackage->getFontData() as $fontName => $fontData) {
+				if (isset($this->fontdata[$fontName])) {
+					throw new InvalidArgumentException('@TODO');
+				}
+
+				$this->fontdata[$fontName] = $fontData;
+			}
+		}
 
 		// Available fonts
 		$this->available_unifonts = [];

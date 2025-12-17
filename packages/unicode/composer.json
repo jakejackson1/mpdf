@@ -1,0 +1,22 @@
+{
+
+  "name": "mpdf/font-unicode",
+  "version": "0.1",
+  "type": "library",
+  "description": "The base Unicode fonts for mPDF",
+  "keywords": ["mpdf"],
+  "license": ["MIT"],
+  "autoload": {
+    "psr-4": {
+      "Mpdf\\Fonts\\Unicode\\": ""
+    }
+  },
+  "extra": {
+    "mpdf": {
+      "fonts": [
+        "Mpdf\\Fonts\\Unicode\\Registration"
+      ]
+    }
+  }
+
+}
