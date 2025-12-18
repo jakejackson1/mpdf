@@ -5,34 +5,25 @@ namespace Mpdf\Fonts;
 abstract class FontRegistration implements FontRegistrationInterface
 {
 	/**
-	 * Get the unique name of the Language Package
+	 * Get the absolute path to the fonts directory
 	 *
 	 * @return string
-	 * @since 9.0
 	 */
-	abstract public function getName();
-
-	/**
-	 * Get path to the registered font file directory
-	 *
-	 * @return string The full path to the font directory
-	 * @since 9.0
-	 */
-	abstract public function getFontDirectory();
+	abstract public function getDirectory();
 
 	/**
 	 * Get the fonts to be registered with mPDF
 	 *
-	 * @return array A valid 'fontdata' configuration array
+	 * @return  []
 	 * @see     http://mpdf.github.io/fonts-languages/fonts-in-mpdf-7-x.html
-	 * @since 9.0
+	 * @version 9.0
 	 */
-	abstract public function getFontData();
+	abstract public function getFonts();
 
 	/**
 	 * Get the Language Package LanguageToFont implementation
 	 *
-	 * @return LanguageToFontInterface|null
+	 * @return \Mpdf\Language\LanguageToFontInterface|null
 	 * @since 9.0
 	 */
 	public function getLanguageToFont()
@@ -46,7 +37,7 @@ abstract class FontRegistration implements FontRegistrationInterface
 	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
 	 * @since 9.0
 	 */
-	public function getBackupSubsFont()
+	public function getBackupSubsFonts()
 	{
 		return [];
 	}

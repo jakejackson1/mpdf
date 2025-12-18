@@ -6,31 +6,21 @@ use Mpdf\Language\LanguageToFontInterface;
 
 interface FontRegistrationInterface
 {
-
 	/**
-	 * Get the unique name of the Language Package
+	 * Get the absolute path to the fonts directory
 	 *
 	 * @return string
-	 * @since 9.0
 	 */
-	public function getName();
-
-	/**
-	 * Get path to the registered font file directory
-	 *
-	 * @return string The full path to the font directory
-	 * @since 9.0
-	 */
-	public function getFontDirectory();
+	public function getDirectory();
 
 	/**
 	 * Get the fonts to be registered with mPDF
 	 *
-	 * @return array A valid 'fontdata' configuration array
+	 * @return []
 	 * @see     http://mpdf.github.io/fonts-languages/fonts-in-mpdf-7-x.html
-	 * @since 9.0
+	 * @version 9.0
 	 */
-	public function getFontData();
+	public function getFonts();
 
 	/**
 	 * Get the Language Package LanguageToFont implementation
@@ -46,7 +36,7 @@ interface FontRegistrationInterface
 	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
 	 * @since 9.0
 	 */
-	public function getBackupSubsFont();
+	public function getBackupSubsFonts();
 
 	/**
 	 * Get a list of fonts which contain characters in the SIP or SMP Unicode planes but is not required.

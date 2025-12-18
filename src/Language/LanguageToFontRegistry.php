@@ -4,27 +4,29 @@ namespace Mpdf\Language;
 
 use Mpdf\MpdfException;
 
-class LanguageToFontRegistry
+class LanguageToFontRegistry implements LanguageToFontInterface
 {
 	/**
 	 * @var LanguageToFontInterface[]
 	 */
 	private $register = [];
 
-	public function __construct(array $classes)
+	public function __construct($classes = [])
 	{
-		foreach ($classes as $key => $languageClass) {
+		$classes = is_array($classes) ? $classes : [$classes];
+
+		foreach ($classes as $languageClass) {
 			if (!$languageClass instanceof LanguageToFontInterface) {
 				throw new MpdfException('The LanguageToFontRegistry only accepts classes that implement LanguageToFontInterface: ' . get_class($languageClass));
 			}
 
-			$this->add($key, $languageClass);
+			$this->add($languageClass);
 		}
 	}
 
-	public function add($key, LanguageToFontInterface $languageClass)
+	public function add(LanguageToFontInterface $languageClass)
 	{
-		$this->register[$key] = $languageClass;
+		$this->register[get_class($languageClass)] = $languageClass;
 	}
 
 	public function remove($key)
@@ -39,15 +41,6 @@ class LanguageToFontRegistry
 	public function getAll()
 	{
 		return $this->register;
-	}
-
-	public function getByName($key)
-	{
-		if (!isset($this->register[$key])) {
-			throw new MpdfException('Could not find language package in registry');
-		}
-
-		return $this->register[$key];
 	}
 
 	public function getLanguageOptions($mode, $adobeCJK)

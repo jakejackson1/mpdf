@@ -21,7 +21,6 @@ class FontRegistry
 	public function __construct($classes = [])
 	{
 		$classes = is_array($classes) ? $classes : [$classes];
-
 		foreach ($classes as $class) {
 			$this->add($class);
 		}
@@ -35,7 +34,7 @@ class FontRegistry
 	 */
 	public function add(FontRegistrationInterface $class)
 	{
-		$this->register[$class->getName()] = $class;
+		$this->register[get_class($class)] = $class;
 	}
 
 	/**
@@ -64,23 +63,5 @@ class FontRegistry
 	public function getAll()
 	{
 		return $this->register;
-	}
-
-	/**
-	 * Get a Font Package by Name
-	 *
-	 * @param string $name
-	 *
-	 * @return FontRegistrationInterface
-	 * @throws MpdfException
-	 * @since 9.0
-	 */
-	public function getByName($name)
-	{
-		if (!isset($this->register[$name])) {
-			throw new MpdfException('Could not find font package in registry');
-		}
-
-		return $this->register[$name];
 	}
 }

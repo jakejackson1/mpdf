@@ -10,6 +10,7 @@ use Mpdf\Css\TextVars;
 use Mpdf\Exception\InvalidArgumentException;
 use Mpdf\Fonts\FontRegistrationInterface;
 use Mpdf\Fonts\FontRegistry;
+use Mpdf\Language\LanguageToFontRegistry;
 use Mpdf\Log\Context as LogContext;
 use Mpdf\Fonts\MetricsGenerator;
 use Mpdf\Output\Destination;
@@ -966,7 +967,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	private $imageProcessor;
 
 	/**
-	 * @var \Mpdf\Language\LanguageToFontInterface
+	 * @var \Mpdf\Language\LanguageToFontRegistry
 	 */
 	private $languageToFont;
 
@@ -1353,18 +1354,39 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->initFontConfig($originalConfig);
 
-		// @TODO - set/merge other config params
 		// @TODO - autoload/register font packages
 		$fontRegistry = $originalConfig['fontRegistry'] ?: new FontRegistry();
+		$backupSubsFont = $bmpFonts = $fontFamilySubstitution = [];
 		foreach ($fontRegistry->getAll() as $fontPackage) {
-			$this->AddFontDirectory($fontPackage->getFontDirectory());
-			foreach ($fontPackage->getFontData() as $fontName => $fontData) {
+			$this->AddFontDirectory($fontPackage->getDirectory());
+			foreach ($fontPackage->getFonts() as $fontName => $fontData) {
 				if (isset($this->fontdata[$fontName])) {
 					throw new InvalidArgumentException('@TODO');
 				}
 
 				$this->fontdata[$fontName] = $fontData;
 			}
+
+			$languageToFont = $fontPackage->getLanguageToFont();
+			if (!$languageToFont) {
+				$this->languageToFont->add($languageToFont);
+			}
+
+			$backupSubsFont[] = $fontPackage->getBackupSubsFonts();
+			$bmpFonts[] = $fontPackage->getBmpFonts();
+			$fontFamilySubstitution[] = $fontPackage->getFontFamilySubstitution();
+		}
+
+		/* Flatten and merge font arrays */
+		$this->backupSubsFont = array_merge($this->backupSubsFont, ...$backupSubsFont);
+		$this->BMPonly = array_merge($this->BMPonly, ...$bmpFonts);
+		foreach (['sans_fonts', 'serif_fonts', 'mono_fonts'] as $key) {
+			$this->$key = array_unique(
+				array_merge(
+					$this->$key,
+					...array_column($fontFamilySubstitution, $key)
+				)
+			);
 		}
 
 		// Available fonts
