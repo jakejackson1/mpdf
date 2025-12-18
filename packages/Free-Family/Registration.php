@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\Unicode;
+namespace Mpdf\Fonts\FreeFamily;
 
 use Mpdf\Fonts\FontRegistration;
 
@@ -27,47 +27,6 @@ class Registration extends FontRegistration
 	{
 		/* @TODO - return an array of Font classes */
 		return [
-			'dejavusanscondensed' => [
-				'R' => 'DejaVuSansCondensed.ttf',
-				'B' => 'DejaVuSansCondensed-Bold.ttf',
-				'I' => 'DejaVuSansCondensed-Oblique.ttf',
-				'BI' => 'DejaVuSansCondensed-BoldOblique.ttf',
-				'useOTL' => 0xFF,
-				'useKashida' => 75,
-			],
-
-			'dejavusans' => [
-				'R' => 'DejaVuSans.ttf',
-				'B' => 'DejaVuSans-Bold.ttf',
-				'I' => 'DejaVuSans-Oblique.ttf',
-				'BI' => 'DejaVuSans-BoldOblique.ttf',
-				'useOTL' => 0xFF,
-				'useKashida' => 75,
-			],
-
-			'dejavuserif' => [
-				'R' => 'DejaVuSerif.ttf',
-				'B' => 'DejaVuSerif-Bold.ttf',
-				'I' => 'DejaVuSerif-Italic.ttf',
-				'BI' => 'DejaVuSerif-BoldItalic.ttf',
-			],
-
-			'dejavuserifcondensed' => [
-				'R' => 'DejaVuSerifCondensed.ttf',
-				'B' => 'DejaVuSerifCondensed-Bold.ttf',
-				'I' => 'DejaVuSerifCondensed-Italic.ttf',
-				'BI' => 'DejaVuSerifCondensed-BoldItalic.ttf',
-			],
-
-			'dejavusansmono' => [
-				'R' => 'DejaVuSansMono.ttf',
-				'B' => 'DejaVuSansMono-Bold.ttf',
-				'I' => 'DejaVuSansMono-Oblique.ttf',
-				'BI' => 'DejaVuSansMono-BoldOblique.ttf',
-				'useOTL' => 0xFF,
-				'useKashida' => 75,
-			],
-
 			'freesans' => [
 				'R' => 'FreeSans.ttf',
 				'B' => 'FreeSansBold.ttf',
@@ -112,25 +71,7 @@ class Registration extends FontRegistration
 	public function getBackupSubsFonts()
 	{
 		return [
-			'dejavusanscondensed',
 			'freesans',
-		];
-	}
-
-	/**
-	 * Get a list of fonts which contain characters in the SIP or SMP Unicode planes but is not required.
-	 * This allows a more efficient form of subsetting to be used.
-	 *
-	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
-	 */
-	public function getBmpFonts()
-	{
-		return [
-			'dejavusanscondensed',
-			'dejavusans',
-			'dejavuserifcondensed',
-			'dejavuserif',
-			'dejavusansmono',
 		];
 	}
 
@@ -145,19 +86,14 @@ class Registration extends FontRegistration
 	{
 		return [
 			'sans_fonts' => [
-				'dejavusanscondensed',
-				'dejavusans',
 				'freesans',
 			],
 
 			'serif_fonts' => [
-				'dejavuserifcondensed',
-				'dejavuserif',
 				'freeserif',
 			],
 
 			'mono_fonts' => [
-				'dejavusansmono',
 				'freemono',
 			],
 		];

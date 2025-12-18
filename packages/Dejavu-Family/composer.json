@@ -1,0 +1,22 @@
+{
+
+  "name": "mpdf/font-dejavu-family",
+  "version": "0.1",
+  "type": "library",
+  "description": "The DejaVu family of fonts for mPDF. Includes sans, serif, condensed, and mono font varieties. Supported scripts include: Latin, Greek, Cyrillic, Armenian, and Georgian.",
+  "keywords": ["mpdf"],
+  "license": ["MIT"],
+  "autoload": {
+    "psr-4": {
+      "Mpdf\\Fonts\\DejavuFamily\\": ""
+    }
+  },
+  "extra": {
+    "mpdf": {
+      "fonts": [
+        "Mpdf\\Fonts\\DejavuFamily\\Registration"
+      ]
+    }
+  }
+
+}

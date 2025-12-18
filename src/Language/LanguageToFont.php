@@ -141,6 +141,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			case 'urd': // Urdu
 				$unifont = 'xbriyaz';
 				break;
+
 			case 'he':
 			case 'heb': // HEBREW
 			case 'yi':
@@ -196,10 +197,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			case 'sin': // SINHALA
 				$unifont = 'kaputaunicode';
 				break;
-			case 'ta':
-			case 'tam': // TAMIL
-				$unifont = 'freeserif';
-				break;
+
 			case 'te':
 			case 'tel': // TELUGU
 				$unifont = 'pothana2000';
