@@ -1356,6 +1356,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// @TODO - move to separate method
 		// @TODO - autoload/register font packages
+
+		/* Init font package arrays for the font registry */
 		$fontPackageConfigKeys = ['backupSubsFont', 'BMPonly', 'sans_fonts', 'serif_fonts', 'mono_fonts'];
 		foreach ($fontPackageConfigKeys as $fontPackageConfig) {
 			$$fontPackageConfig = [];
@@ -1367,6 +1369,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			foreach ($fontPackage->getFonts() as $fontName => $fontData) {
 				if (isset($this->fontdata[$fontName])) {
 					throw new InvalidArgumentException('@TODO');
+				}
+
+				if (!empty($fontData['sip-ext'])) {
+					$this->backupSIPFont = $fontData['sip-ext'];
 				}
 
 				$this->fontdata[$fontName] = $fontData;
@@ -1386,7 +1392,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$mono_fonts[] = $fontFamilySubstitution['mono_fonts'];
 		}
 
-		/* Combine and save font package config to Mpdf */
+		/* Combine and save font package config to associated Mpdf properties */
 		foreach ($fontPackageConfigKeys as $fontPackageConfig) {
 			$$fontPackageConfig = array_merge([], ...$$fontPackageConfig); // flatten array
 			$this->$fontPackageConfig = array_unique(array_merge($$fontPackageConfig, $this->$fontPackageConfig)); // push config to start of existing array

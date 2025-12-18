@@ -25,14 +25,14 @@ class FontVariables
 			// only works using subsets (otherwise would add very large file)
 			// More than 1 font can be specified but each will add to the processing time of the script
 
-			'backupSubsFont' => ['sun-exta'],
+			'backupSubsFont' => [],
 
 			// Optionally set a font (name as defined below in 'fontdata') to use for CJK characters
 			// in Plane 2 Unicode (> U+20000) when using useSubstitutions.
 			// Use a font like hannomb or sun-extb if available
 			// only works using subsets (otherwise would add very large file)
 
-			'backupSIPFont' => 'sun-extb',
+			'backupSIPFont' => '',
 
 			/*
 			  This array defines translations from font-family in CSS or HTML
@@ -218,14 +218,7 @@ class FontVariables
 					'useOTL' => 0xFF,
 					'useKashida' => 75,
 				],
-				/* CJK fonts */
-				"sun-exta" => [
-					'R' => "Sun-ExtA.ttf",
-					'sip-ext' => 'sun-extb', /* SIP=Plane2 Unicode (extension B) */
-				],
-				"sun-extb" => [
-					'R' => "Sun-ExtB.ttf",
-				],
+
 				"unbatang" => [/* Korean */
 					'R' => "UnBatang_0613.ttf",
 				],

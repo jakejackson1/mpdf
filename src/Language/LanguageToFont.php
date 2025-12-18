@@ -205,9 +205,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 
 			//CASE 'ccp':	// CHAKMA
 			//CASE 'lep':	// LEPCHA
-			case 'lif':  // LIMBU
-				$unifont = 'sun-exta';
-				break;
+
 			//CASE 'sat':	// OL_CHIKI
 			//CASE 'saz':	// SAURASHTRA
 			case 'syl':  // SYLOTI_NAGRI
@@ -267,7 +265,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			/* East Asian */
 			case 'zh':
 			case 'zho': // Chinese
-				$unifont = 'sun-exta';
 				if ($adobeCJK) {
 					$unifont = 'gb';
 					if ($country === 'hk' || $country === 'tw') {
@@ -284,14 +281,12 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				break;
 			case 'ja':
 			case 'jpn': // Japanese HIRAGANA KATAKANA
-				$unifont = 'sun-exta';
 				if ($adobeCJK) {
 					$unifont = 'sjis';
 				}
 				break;
 			case 'ii':
 			case 'iii': // Nuosu; Yi
-				$unifont = 'sun-exta';
 				if ($adobeCJK) {
 					$unifont = 'gb';
 				}
@@ -332,8 +327,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				return 'aegean';
 			case 'ital': // OLD_ITALIC
 				return 'aegean';
-			case 'runr': // RUNIC
-				return 'sun-exta';
+
 			case 'shaw': // SHAVIAN
 				return 'mph2bdamase';
 
@@ -383,12 +377,8 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				if ($adobeCJK) {
 					return 'gb';
 				}
-				return 'sun-exta';
-			case 'bopo': // BOPOMOFO
-				return 'sun-exta';
+
 			//CASE 'plrd':	// MIAO
-			case 'yiii': // YI
-				return 'sun-exta';
 
 			/* American */
 			case 'dsrt': // DESERET

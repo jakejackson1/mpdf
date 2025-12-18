@@ -1,0 +1,22 @@
+{
+
+  "name": "mpdf/font-sunext-family",
+  "version": "0.1",
+  "type": "library",
+  "description": "The Sun-Ext family of fonts for mPDF. Supported scripts include: ... (@TODO - is this open source???)",
+  "keywords": ["mpdf"],
+  "license": ["MIT"],
+  "autoload": {
+    "psr-4": {
+      "Mpdf\\Fonts\\SunExtFamily\\": ""
+    }
+  },
+  "extra": {
+    "mpdf": {
+      "fonts": [
+        "Mpdf\\Fonts\\SunExFamily\\Registration"
+      ]
+    }
+  }
+
+}
