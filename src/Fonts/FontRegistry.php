@@ -34,7 +34,7 @@ class FontRegistry
 	 */
 	public function add(FontRegistrationInterface $class)
 	{
-		$this->register[get_class($class)] = $class;
+		$this->register = [get_class($class) => $class] + $this->register;
 	}
 
 	/**

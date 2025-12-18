@@ -1354,9 +1354,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->initFontConfig($originalConfig);
 
+		// @TODO - move to separate method
 		// @TODO - autoload/register font packages
+		$fontPackageConfigKeys = ['backupSubsFont', 'BMPonly', 'sans_fonts', 'serif_fonts', 'mono_fonts'];
+		foreach ($fontPackageConfigKeys as $fontPackageConfig) {
+			$$fontPackageConfig = [];
+		}
+
 		$fontRegistry = $originalConfig['fontRegistry'] ?: new FontRegistry();
-		$backupSubsFont = $bmpFonts = $fontFamilySubstitution = [];
 		foreach ($fontRegistry->getAll() as $fontPackage) {
 			$this->AddFontDirectory($fontPackage->getDirectory());
 			foreach ($fontPackage->getFonts() as $fontName => $fontData) {
@@ -1368,25 +1373,23 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 
 			$languageToFont = $fontPackage->getLanguageToFont();
-			if (!$languageToFont) {
+			if ($languageToFont) {
 				$this->languageToFont->add($languageToFont);
 			}
 
+			/* Save data to font package config */
 			$backupSubsFont[] = $fontPackage->getBackupSubsFonts();
-			$bmpFonts[] = $fontPackage->getBmpFonts();
-			$fontFamilySubstitution[] = $fontPackage->getFontFamilySubstitution();
+			$BMPonly[] = $fontPackage->getBmpFonts();
+			$fontFamilySubstitution = $fontPackage->getFontFamilySubstitution();
+			$sans_fonts[] = $fontFamilySubstitution['sans_fonts'];
+			$serif_fonts[] = $fontFamilySubstitution['serif_fonts'];
+			$mono_fonts[] = $fontFamilySubstitution['mono_fonts'];
 		}
 
-		/* Flatten and merge font arrays */
-		$this->backupSubsFont = array_merge($this->backupSubsFont, ...$backupSubsFont);
-		$this->BMPonly = array_merge($this->BMPonly, ...$bmpFonts);
-		foreach (['sans_fonts', 'serif_fonts', 'mono_fonts'] as $key) {
-			$this->$key = array_unique(
-				array_merge(
-					$this->$key,
-					...array_column($fontFamilySubstitution, $key)
-				)
-			);
+		/* Combine and save font package config to Mpdf */
+		foreach ($fontPackageConfigKeys as $fontPackageConfig) {
+			$$fontPackageConfig = array_merge([], ...$$fontPackageConfig); // flatten array
+			$this->$fontPackageConfig = array_unique(array_merge($$fontPackageConfig, $this->$fontPackageConfig)); // push config to start of existing array
 		}
 
 		// Available fonts

@@ -24,9 +24,9 @@ class LanguageToFontRegistry implements LanguageToFontInterface
 		}
 	}
 
-	public function add(LanguageToFontInterface $languageClass)
+	public function add(LanguageToFontInterface $class)
 	{
-		$this->register[get_class($languageClass)] = $languageClass;
+		$this->register = [get_class($class) => $class] + $this->register;
 	}
 
 	public function remove($key)
