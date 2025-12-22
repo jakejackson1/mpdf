@@ -109,13 +109,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'bax':	// BAMUM
 			//CASE 'ha':  CASE 'hau':	// Hausa
 
-			case 'am':
-			case 'amh': // Amharic ETHIOPIC
-			case 'ti':
-			case 'tir': // Tigrinya ETHIOPIC
-					$unifont = 'abyssinicasil';
-				break;
-
 			/* Middle Eastern */
 			case 'ar':
 			case 'ara': // Arabic	NB Arabic text identified by Autofont will be marked as und-Arab
@@ -304,8 +297,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			/* African */
 			case 'egyp': // EGYPTIAN_HIEROGLYPHS
 				return 'aegyptus';
-			case 'ethi': // ETHIOPIC
-				return 'abyssinicasil';
+
 			//CASE 'merc':	// MEROITIC_CURSIVE
 			//CASE 'mero':	// MEROITIC_HIEROGLYPHS
 			case 'osma': // OSMANYA

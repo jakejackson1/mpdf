@@ -41,7 +41,8 @@
         "mpdf/font-free-family": "*",
         "mpdf/font-sunext-family": "*",
         "mpdf/font-aboriginal-family": "*",
-        "mpdf/font-quivira": "*"
+        "mpdf/font-quivira": "*",
+        "mpdf/font-abyssinica-sil": "*"
 	},
 	"require-dev": {
 		"mockery/mockery": "^1.3.0",

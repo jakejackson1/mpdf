@@ -106,10 +106,6 @@ class FontVariables
 					'R' => "kaputaunicode.ttf",
 					'useOTL' => 0xFF,
 				],
-				"abyssinicasil" => [/* Ethiopic */
-					'R' => "Abyssinica_SIL.ttf",
-					'useOTL' => 0xFF,
-				],
 				"jomolhari" => [/* Tibetan */
 					'R' => "Jomolhari.ttf",
 					'useOTL' => 0xFF,
