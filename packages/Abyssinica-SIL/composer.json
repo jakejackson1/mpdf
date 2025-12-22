@@ -3,7 +3,7 @@
   "name": "mpdf/font-abyssinica-sil",
   "version": "0.1",
   "type": "library",
-  "description": "Abyssinica SIL is unicode font that supports Ethiopic and Latin languages. It does not include bold or italic varieties. Supported scripts include: Ethipic, and Latin.",
+  "description": "Abyssinica SIL is a unicode font that supports Ethiopic and Latin languages. It does not include bold or italic varieties. Supported scripts include: Ethipic, and Latin.",
   "keywords": ["mpdf", "mpdf-fonts"],
   "license": ["MIT"],
   "autoload": {

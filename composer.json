@@ -37,12 +37,7 @@
 		"psr/http-message": "^1.0 || ^2.0",
 		"psr/log": "^1.0 || ^2.0 || ^3.0",
 		"setasign/fpdi": "^2.1",
-        "mpdf/font-dejavu-family": "*",
-        "mpdf/font-free-family": "*",
-        "mpdf/font-sunext-family": "*",
-        "mpdf/font-aboriginal-family": "*",
-        "mpdf/font-quivira": "*",
-        "mpdf/font-abyssinica-sil": "*"
+        "mpdf/font-bundle-all": "*"
 	},
 	"require-dev": {
 		"mockery/mockery": "^1.3.0",

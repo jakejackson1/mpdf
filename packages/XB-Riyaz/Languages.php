@@ -1,0 +1,58 @@
+<?php
+
+namespace Mpdf\Fonts\XbRiyaz;
+
+use Mpdf\Language\LanguageToFontInterface;
+
+class Languages implements LanguageToFontInterface
+{
+	public function getLanguageOptions($mode, $adobeCJK)
+	{
+		$tags = explode('-', $mode);
+		$language = strtolower($tags[0]);
+
+		$script = '';
+		if (!empty($tags[1]) && strlen($tags[1]) === 4) {
+			$script = strtolower($tags[1]);
+		}
+
+		switch ($language) {
+			// Arabic
+			case 'ar':
+			case 'ara':
+
+			// Persian (Farsi)
+			case 'fa':
+			case 'fas':
+
+			// Pashto
+			case 'ps':
+			case 'pus':
+
+			// Kurdish
+			case 'ku':
+			case 'kur':
+
+			// Urdu
+			case 'ur':
+			case 'urd':
+				return 'xbriyaz';
+
+			/* Undetermined language - script used */
+			case 'und':
+				return $this->fontByScript($script);
+		}
+
+		return '';
+	}
+
+	protected function fontByScript($script)
+	{
+		switch ($script) {
+			case 'arab':  // ARABIC
+				return 'xbriyaz';
+		}
+
+		return '';
+	}
+}

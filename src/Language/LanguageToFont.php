@@ -28,7 +28,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 		switch ($lang) {
 			/* European */
 			case 'en':
-			case 'eng': // English		// LATIN
+			case 'eng': // English
 			case 'eu':
 			case 'eus': // Basque
 			case 'br':
@@ -110,32 +110,11 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'ha':  CASE 'hau':	// Hausa
 
 			/* Middle Eastern */
-			case 'ar':
-			case 'ara': // Arabic	NB Arabic text identified by Autofont will be marked as und-Arab
-				$unifont = 'xbriyaz';
-				break;
-			case 'fa':
-			case 'fas': // Persian (Farsi)
-				$unifont = 'xbriyaz';
-				break;
-			case 'ps':
-			case 'pus': // Pashto
-				$unifont = 'xbriyaz';
-				break;
-			case 'ku':
-			case 'kur': // Kurdish
-				$unifont = 'xbriyaz';
-				break;
-			case 'ur':
-			case 'urd': // Urdu
-				$unifont = 'xbriyaz';
-				break;
-
 			case 'he':
 			case 'heb': // HEBREW
 			case 'yi':
 			case 'yid': // Yiddish
-					$unifont = 'taameydavidclm'; // dejavusans,dejavusanscondensed,freeserif are fine if you do not need cantillation marks
+					$unifont = 'taameydavidclm';
 				break;
 
 			case 'syr':  // SYRIAC
@@ -237,8 +216,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				$unifont = 'taiheritagepro';
 				break;
 
-
-
 			/* East Asian */
 			case 'zh':
 			case 'zho': // Chinese
@@ -249,6 +226,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 					}
 				}
 				break;
+
 			case 'ko':
 			case 'kor': // HANGUL Korean
 				$unifont = 'unbatang';
@@ -256,12 +234,14 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 					$unifont = 'uhc';
 				}
 				break;
+
 			case 'ja':
 			case 'jpn': // Japanese HIRAGANA KATAKANA
 				if ($adobeCJK) {
 					$unifont = 'sjis';
 				}
 				break;
+
 			case 'ii':
 			case 'iii': // Nuosu; Yi
 				if ($adobeCJK) {
@@ -304,8 +284,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				return 'mph2bdamase';
 
 			/* Middle Eastern */
-			case 'arab':  // ARABIC
-				return 'xbriyaz';
 			case 'xsux': // CUNEIFORM
 				return 'akkadian';
 			//CASE 'sarb':	// OLD_SOUTH_ARABIAN
