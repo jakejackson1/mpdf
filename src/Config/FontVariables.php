@@ -228,9 +228,22 @@ class FontVariables
 			//     (Otherwise the order is irrelevant)
 			// Use the mPDF font-family names i.e. lowercase and no spaces (after any translations in $fonttrans)
 			// Always include "sans-serif", "serif" and "monospace" etc.
-			'sans_fonts' => ['sans', 'sans-serif', 'cursive', 'fantasy', 'helvetica'],
-			'serif_fonts' => ['serif', 'times'],
-			'mono_fonts' => ['mono', 'monospace','courier'],
+			'sans_fonts' => ['sans', 'sans-serif', 'cursive', 'fantasy', 'liberationsans',
+				'arial', 'helvetica', 'verdana', 'geneva', 'lucida', 'arialnarrow', 'arialblack',
+				'franklin', 'franklingothicbook', 'tahoma', 'garuda', 'calibri', 'trebuchet', 'lucidagrande', 'microsoftsansserif',
+				'trebuchetms', 'lucidasansunicode', 'franklingothicmedium', 'albertusmedium', 'xbriyaz', 'albasuper', 'quillscript',
+				'humanist777', 'humanist777black', 'humanist777light', 'futura', 'hobo', 'segoeprint'
+			],
+
+			'serif_fonts' => ['serif', 'liberationserif',
+				'timesnewroman', 'times', 'centuryschoolbookl', 'palatinolinotype', 'centurygothic',
+				'bookmanoldstyle', 'bookantiqua', 'cyberbit', 'cambria',
+				'norasi', 'charis', 'palatino', 'constantia', 'georgia', 'albertus', 'xbzar', 'algerian', 'garamond',
+			],
+
+			'mono_fonts' => ['mono', 'monospace', 'liberationmono', 'courier', 'ocrb', 'ocr-b', 'lucidaconsole',
+				'couriernew', 'monotypecorsiva'
+			],
 		];
 	}
 
