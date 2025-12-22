@@ -106,10 +106,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				$coreSuitable = true;
 				break;
 
-			case 'cop':  // COPTIC
-				$unifont = 'quivira';
-				break;
-
 			//CASE 'bax':	// BAMUM
 			//CASE 'ha':  CASE 'hau':	// Hausa
 
@@ -248,19 +244,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				$unifont = 'taiheritagepro';
 				break;
 
-			/* Phillipine */
-			case 'bku':  // BUHID
-				$unifont = 'quivira';
-				break;
-			case 'hnn':  // HANUNOO
-				$unifont = 'quivira';
-				break;
-			case 'tl':  // TAGALOG
-				$unifont = 'quivira';
-				break;
-			case 'tbw':  // TAGBANWA
-				$unifont = 'quivira';
-				break;
+
 
 			/* East Asian */
 			case 'zh':
@@ -290,9 +274,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				if ($adobeCJK) {
 					$unifont = 'gb';
 				}
-				break;
-			case 'lis':  // LISU
-				$unifont = 'quivira';
 				break;
 
 			/* Undetermined language - script used */

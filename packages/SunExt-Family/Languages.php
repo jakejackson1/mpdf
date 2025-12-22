@@ -13,7 +13,6 @@ class Languages implements LanguageToFontInterface
 			return '';
 		}
 
-		// @TODO - extract this logic
 		$tags = explode('-', $mode);
 		$language = strtolower($tags[0]);
 		$script = '';

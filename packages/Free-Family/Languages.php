@@ -8,7 +8,6 @@ class Languages implements LanguageToFontInterface
 {
 	public function getLanguageOptions($mode, $adobeCJK)
 	{
-		// @TODO - extract this logic
 		$tags    = explode('-', $mode);
 		$language    = strtolower($tags[0]);
 
