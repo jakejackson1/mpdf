@@ -12,7 +12,7 @@
     "mpdf/font-quivira": "*",
     "mpdf/font-abyssinica-sil": "*",
     "mpdf/font-xb-riyaz": "*",
-    "mpdf/font-sunext-family": "*",
+    "mpdf/font-sunext": "*",
     "mpdf/font-free-family": "*",
     "mpdf/font-dejavu-family": "*"
   }

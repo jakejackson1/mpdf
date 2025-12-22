@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\SunExtFamily;
+namespace Mpdf\Fonts\SunExt;
 
 use Mpdf\Fonts\FontRegistration;
 
