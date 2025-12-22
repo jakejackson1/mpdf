@@ -295,17 +295,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				$unifont = 'quivira';
 				break;
 
-			/* American */
-			case 'chr':  // CHEROKEE
-			case 'oj':
-			case 'oji': // Ojibwe; Chippewa
-			case 'cr':
-			case 'cre': // Cree CANADIAN_ABORIGINAL
-			case 'iu':
-			case 'iku': // Inuktitut
-				$unifont = 'aboriginalsans';
-				break;
-
 			/* Undetermined language - script used */
 			case 'und':
 				$unifont = $this->fontByScript($script, $adobeCJK);

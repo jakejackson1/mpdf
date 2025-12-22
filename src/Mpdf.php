@@ -1387,9 +1387,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$backupSubsFont[] = $fontPackage->getBackupSubsFonts();
 			$BMPonly[] = $fontPackage->getBmpFonts();
 			$fontFamilySubstitution = $fontPackage->getFontFamilySubstitution();
-			$sans_fonts[] = $fontFamilySubstitution['sans_fonts'];
-			$serif_fonts[] = $fontFamilySubstitution['serif_fonts'];
-			$mono_fonts[] = $fontFamilySubstitution['mono_fonts'];
+			$sans_fonts[] = isset($fontFamilySubstitution['sans_fonts']) ? $fontFamilySubstitution['sans_fonts'] : [];
+			$serif_fonts[] = isset($fontFamilySubstitution['serif_fonts']) ? $fontFamilySubstitution['serif_fonts'] : [];
+			$mono_fonts[] = isset($fontFamilySubstitution['mono_fonts']) ? $fontFamilySubstitution['mono_fonts'] : [];
 		}
 
 		/* Combine and save font package config to associated Mpdf properties */

@@ -110,9 +110,6 @@ class FontVariables
 					'R' => "Abyssinica_SIL.ttf",
 					'useOTL' => 0xFF,
 				],
-				"aboriginalsans" => [/* Cherokee and Canadian */
-					'R' => "AboriginalSansREGULAR.ttf",
-				],
 				"jomolhari" => [/* Tibetan */
 					'R' => "Jomolhari.ttf",
 					'useOTL' => 0xFF,
