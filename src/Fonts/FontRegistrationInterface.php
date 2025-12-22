@@ -18,6 +18,7 @@ interface FontRegistrationInterface
 	 *
 	 * @return []
 	 * @see     http://mpdf.github.io/fonts-languages/fonts-in-mpdf-7-x.html
+	 * @TODO - fix up docblock
 	 * @version 9.0
 	 */
 	public function getFonts();
