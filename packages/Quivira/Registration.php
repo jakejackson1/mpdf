@@ -24,7 +24,6 @@ class Registration extends FontRegistration
 	 */
 	public function getFonts()
 	{
-		/* @TODO - return an array of Font classes */
 		return [
 			'quivira' => [
 				'R' => 'Quivira.otf',
