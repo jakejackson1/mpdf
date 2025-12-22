@@ -229,7 +229,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 
 			case 'ko':
 			case 'kor': // HANGUL Korean
-				$unifont = 'unbatang';
 				if ($adobeCJK) {
 					$unifont = 'uhc';
 				}

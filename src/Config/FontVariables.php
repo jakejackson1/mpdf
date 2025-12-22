@@ -199,10 +199,6 @@ class FontVariables
 					'useOTL' => 0xFF,
 					'useKashida' => 75,
 				],
-
-				"unbatang" => [/* Korean */
-					'R' => "UnBatang_0613.ttf",
-				],
 			],
 
 			// Add fonts to this array if they contain characters in the SIP or SMP Unicode planes
