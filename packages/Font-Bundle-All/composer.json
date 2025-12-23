@@ -9,6 +9,7 @@
   "require": {
     "mpdf/font-ancient-scripts-bundle": "*",
     "mpdf/font-aboriginal-family": "*",
+    "mpdf/font-dhyana": "*",
     "mpdf/font-daibanna-sil": "*",
     "mpdf/font-myanmar-bundle": "*",
     "mpdf/font-garuda": "*",

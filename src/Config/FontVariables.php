@@ -129,11 +129,7 @@ class FontVariables
 					'R' => "KhmerOS.ttf",
 					'useOTL' => 0xFF,
 				],
-				"dhyana" => [/* Lao fonts */
-					'R' => "Dhyana-Regular.ttf",
-					'B' => "Dhyana-Bold.ttf",
-					'useOTL' => 0xFF,
-				],
+
 				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
 					'R' => "TaameyDavidCLM-Medium.ttf",
 					'useOTL' => 0xFF,
