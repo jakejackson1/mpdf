@@ -110,12 +110,6 @@ class FontVariables
 					'R' => "TaiHeritagePro.ttf",
 				],
 
-
-				"lannaalif" => [/* Tai Tham */
-					'R' => "lannaalif-v1-03.ttf",
-					'useOTL' => 0xFF,
-				],
-
 				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
 					'R' => "TaameyDavidCLM-Medium.ttf",
 					'useOTL' => 0xFF,
