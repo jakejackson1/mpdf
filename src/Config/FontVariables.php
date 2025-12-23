@@ -111,10 +111,7 @@ class FontVariables
 				/* SMP */
 
 				/* Indic */
-				"pothana2000" => [
-					'R' => "Pothana2000.ttf",
-					'useOTL' => 0xFF,
-				],
+
 				/* Arabic fonts */
 			],
 
