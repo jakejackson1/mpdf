@@ -117,10 +117,7 @@ class FontVariables
 				"taiheritagepro" => [/* Tai Viet */
 					'R' => "TaiHeritagePro.ttf",
 				],
-				"akkadian" => [/* Cuneiform */
-					'R' => "Akkadian.otf",
-					'useOTL' => 0xFF,
-				],
+
 				"eeyekunicode" => [/* Meetei Mayek */
 					'R' => "Eeyek-Regular.ttf",
 				],

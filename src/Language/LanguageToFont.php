@@ -255,8 +255,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				return 'mph2bdamase';
 
 			/* Middle Eastern */
-			case 'xsux': // CUNEIFORM
-				return 'akkadian';
 			//CASE 'sarb':	// OLD_SOUTH_ARABIAN
 			//CASE 'prti':	// INSCRIPTIONAL_PARTHIAN
 			//CASE 'phli':	// INSCRIPTIONAL_PAHLAVI

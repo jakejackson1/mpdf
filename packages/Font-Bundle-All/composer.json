@@ -7,8 +7,7 @@
   "keywords": ["mpdf", "mpdf-fonts"],
   "license": ["MIT"],
   "require": {
-    "mpdf/font-aegyptus": "*",
-    "mpdf/font-aegean": "*",
+    "mpdf/font-ancient-scripts": "*",
     "mpdf/font-aboriginal-family": "*",
     "mpdf/font-garuda": "*",
     "mpdf/font-unbatang": "*",

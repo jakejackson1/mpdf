@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\Aegyptus;
+namespace Mpdf\Fonts\AncientScripts;
 
 use Mpdf\Language\LanguageToFontInterface;
 
@@ -17,6 +17,22 @@ class Languages implements LanguageToFontInterface
 		}
 
 		switch ($language) {
+			// CARIAN
+			case 'xcr':
+
+				// LYCIAN
+			case 'xlc':
+
+				// LYDIAN
+			case 'xld':
+
+				// PHOENICIAN
+			case 'phn':
+
+				// UGARITIC
+			case 'uga':
+				return 'aegean';
+
 			/* Undetermined language - script used */
 			case 'und':
 				return $this->fontByScript($script);
@@ -31,6 +47,14 @@ class Languages implements LanguageToFontInterface
 			// EGYPTIAN HIEROGLYPHS
 			case 'egyp':
 				return 'aegyptus';
+
+			case 'cprt': // CYPRIOT
+			case 'linb': // LINEAR_B
+			case 'ital': // OLD_ITALIC
+				return 'aegean';
+
+			case 'xsux': // CUNEIFORM
+				return 'akkadian';
 		}
 
 		return '';
