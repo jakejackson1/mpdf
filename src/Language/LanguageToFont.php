@@ -262,8 +262,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'rjng':	// REJANG
 			case 'lana': // TAI_THAM
 				return 'lannaalif';
-			case 'talu': // NEW_TAI_LUE
-				return 'daibannasilbook';
 
 			/* East Asian */
 			case 'hans': // HAN (SIMPLIFIED)

@@ -124,9 +124,7 @@ class FontVariables
 					'R' => "lannaalif-v1-03.ttf",
 					'useOTL' => 0xFF,
 				],
-				"daibannasilbook" => [/* New Tai Lue */
-					'R' => "DBSILBR.ttf",
-				],
+
 				"khmeros" => [/* Khmer */
 					'R' => "KhmerOS.ttf",
 					'useOTL' => 0xFF,
