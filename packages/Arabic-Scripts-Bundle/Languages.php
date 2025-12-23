@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\XbRiyaz;
+namespace Mpdf\Fonts\ArabicScriptsBundle;
 
 use Mpdf\Language\LanguageToFontInterface;
 
@@ -11,12 +11,13 @@ class Languages implements LanguageToFontInterface
 		$tags = explode('-', $mode);
 		$language = strtolower($tags[0]);
 
-		$script = '';
-		if (!empty($tags[1]) && strlen($tags[1]) === 4) {
+		$script  = '';
+		if (! empty($tags[1]) && strlen($tags[1]) === 4) {
 			$script = strtolower($tags[1]);
 		}
 
 		switch ($language) {
+
 			// Arabic
 			case 'ar':
 			case 'ara':
@@ -37,6 +38,10 @@ class Languages implements LanguageToFontInterface
 			case 'ur':
 			case 'urd':
 				return 'xbriyaz';
+
+			case 'sd':
+			case 'snd': // Sindhi
+				return 'lateef';
 
 			/* Undetermined language - script used */
 			case 'und':

@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\XbRiyaz;
+namespace Mpdf\Fonts\ArabicScriptsBundle;
 
 use Mpdf\Fonts\FontRegistration;
 
@@ -54,6 +54,13 @@ class Registration extends FontRegistration
 	public function getFonts()
 	{
 		return [
+			/* Sindhi, Pashto and Urdu */
+			'lateef' => [
+				'R' => 'LateefRegOT.ttf',
+				'useOTL' => 0xFF,
+				'useKashida' => 75,
+			],
+
 			'xbriyaz' => [
 				'R' => 'XB Riyaz.ttf',
 				'B' => 'XB RiyazBd.ttf',

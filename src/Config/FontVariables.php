@@ -126,16 +126,6 @@ class FontVariables
 					'useOTL' => 0xFF,
 				],
 				/* Arabic fonts */
-				"lateef" => [/* Sindhi, Pashto and Urdu */
-					'R' => "LateefRegOT.ttf",
-					'useOTL' => 0xFF,
-					'useKashida' => 75,
-				],
-				"kfgqpcuthmantahanaskh" => [/* KFGQPC Uthman Taha Naskh - Koranic */
-					'R' => "Uthman.otf",
-					'useOTL' => 0xFF,
-					'useKashida' => 75,
-				],
 			],
 
 			// Add fonts to this array if they contain characters in the SIP or SMP Unicode planes
