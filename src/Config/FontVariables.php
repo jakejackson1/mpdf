@@ -53,8 +53,6 @@ class FontVariables
 				'trebuchet' => 'trebuchetms',
 				'comic' => 'comicsansms',
 				'franklin' => 'franklingothicbook',
-				'ocr-b' => 'ocrb',
-				'ocr-b10bt' => 'ocrb',
 			],
 
 			/*
@@ -92,10 +90,6 @@ class FontVariables
 			 */
 
 			'fontdata' => [
-				/* OCR-B font for Barcodes */
-				"ocrb" => [
-					'R' => "ocrb10.ttf",
-				],
 				/* Miscellaneous language font(s) */
 				"estrangeloedessa" => [/* Syriac */
 					'R' => "SyrCOMEdessa.otf",
@@ -148,7 +142,7 @@ class FontVariables
 				'norasi', 'charis', 'palatino', 'constantia', 'georgia', 'albertus', 'xbzar', 'algerian', 'garamond',
 			],
 
-			'mono_fonts' => ['mono', 'monospace', 'liberationmono', 'courier', 'ocrb', 'ocr-b', 'lucidaconsole',
+			'mono_fonts' => ['mono', 'monospace', 'liberationmono', 'courier', 'lucidaconsole',
 				'couriernew', 'monotypecorsiva'
 			],
 		];

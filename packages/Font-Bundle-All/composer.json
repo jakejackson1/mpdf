@@ -7,6 +7,7 @@
   "keywords": ["mpdf", "mpdf-fonts"],
   "license": ["MIT"],
   "require": {
+    "mpdf/font-ocr-family": "*",
     "mpdf/font-ancient-scripts-bundle": "*",
     "mpdf/font-aboriginal-family": "*",
     "mpdf/font-lohit-kannada": "*",
