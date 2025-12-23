@@ -109,9 +109,6 @@ class Languages implements LanguageToFontInterface
 	protected function fontByScript($script)
 	{
 		switch ($script) {
-			case 'ogam': // OGHAM
-				return 'dejavusans';
-
 			/* South East Asian */
 			case 'kali': // KAYAH_LI
 				return 'freemono';

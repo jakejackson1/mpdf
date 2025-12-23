@@ -136,6 +136,7 @@ class Languages implements LanguageToFontInterface
 			case 'cyrl': // CYRILLIC
 				return 'dejavusanscondensed';
 
+			case 'ogam': // OGHAM
 			case 'tfng': // TIFINAGH
 			case 'brai': // BRAILLE
 				return 'dejavusans';
