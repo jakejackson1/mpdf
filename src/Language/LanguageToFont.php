@@ -152,9 +152,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'bya':	// BATAK
 			//CASE 'cjm':	// CHAM
 			//CASE 'jv':	// JAVANESE
-			case 'su':  // SUNDANESE
-				$unifont = 'sundaneseunicode';
-				break;
 
 			case 'blt':  // TAI_VIET
 				$unifont = 'taiheritagepro';

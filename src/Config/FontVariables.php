@@ -96,10 +96,6 @@ class FontVariables
 					'useOTL' => 0xFF,
 				],
 
-				"sundaneseunicode" => [/* Sundanese */
-					'R' => "SundaneseUnicode-1.0.5.ttf",
-					'useOTL' => 0xFF,
-				],
 				"taiheritagepro" => [/* Tai Viet */
 					'R' => "TaiHeritagePro.ttf",
 				],
