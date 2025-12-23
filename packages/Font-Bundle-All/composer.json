@@ -8,6 +8,7 @@
   "license": ["MIT"],
   "require": {
     "mpdf/font-aboriginal-family": "*",
+    "mpdf/font-garuda": "*",
     "mpdf/font-unbatang": "*",
     "mpdf/font-quivira": "*",
     "mpdf/font-abyssinica-sil": "*",

@@ -196,10 +196,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				// ayar is also not strictly compliant
 				// padaukbook is unicode compliant
 				break;
-			case 'th':
-			case 'tha': // THAI
-				$unifont = 'garuda';
-				break;
 
 			//CASE 'ms':  CASE 'msa':	// Malay
 			//CASE 'ban':	// BALINESE

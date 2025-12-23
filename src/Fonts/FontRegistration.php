@@ -15,8 +15,7 @@ abstract class FontRegistration implements FontRegistrationInterface
 	 * Get the fonts to be registered with mPDF
 	 *
 	 * @return  []
-	 * @see     http://mpdf.github.io/fonts-languages/fonts-in-mpdf-7-x.html
-	 * @version 9.0
+	 * @see http://mpdf.github.io/fonts-languages/fonts-in-mpdf-7-x.html
 	 */
 	abstract public function getFonts();
 
@@ -24,7 +23,6 @@ abstract class FontRegistration implements FontRegistrationInterface
 	 * Get the Language Package LanguageToFont implementation
 	 *
 	 * @return \Mpdf\Language\LanguageToFontInterface|null
-	 * @since 9.0
 	 */
 	public function getLanguageToFont()
 	{
@@ -35,7 +33,6 @@ abstract class FontRegistration implements FontRegistrationInterface
 	 * Define fonts to be used for character substitution, when the useSubstitutions configuration option enabled
 	 *
 	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
-	 * @since 9.0
 	 */
 	public function getBackupSubsFonts()
 	{
@@ -47,7 +44,6 @@ abstract class FontRegistration implements FontRegistrationInterface
 	 * This allows a more efficient form of subsetting to be used.
 	 *
 	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
-	 * @since 9.0
 	 */
 	public function getBmpFonts()
 	{
@@ -55,12 +51,9 @@ abstract class FontRegistration implements FontRegistrationInterface
 	}
 
 	/**
-	 * Get a list of substituted fonts used when a font is not available in mPDF. Define 'sans_fonts', 'serif_fonts', and 'mono_fonts'
-	 * fallback fonts as necessary.
+	 * Get a list of substituted fonts used when a font is not available in mPDF
 	 *
-	 * @return array Multidimensional array with keys 'sans', 'serif', and 'mono'. Each array should use the keys found
-	 * in $this->getFontData()
-	 * @since 9.0
+	 * @return array Multidimensional array with keys 'sans_fonts', 'serif_fonts', and 'mono_fonts'
 	 */
 	public function getFontFamilySubstitution()
 	{

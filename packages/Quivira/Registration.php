@@ -55,11 +55,9 @@ class Registration extends FontRegistration
 	}
 
 	/**
-	 * Get a list of substituted fonts used when a font is not available in mPDF. Define 'sans_fonts', 'serif_fonts', and 'mono_fonts'
-	 * fallback fonts as necessary.
+	 * Get a list of substituted fonts used when a font is not available in mPDF
 	 *
-	 * @return array Multidimensional array with keys 'sans', 'serif', and 'mono'. Each array should use the keys found
-	 * in $this->getFontData()
+	 * @return array Multidimensional array with keys 'sans_fonts', 'serif_fonts', and 'mono_fonts'
 	 */
 	public function getFontFamilySubstitution()
 	{

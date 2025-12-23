@@ -139,13 +139,6 @@ class FontVariables
 				"daibannasilbook" => [/* New Tai Lue */
 					'R' => "DBSILBR.ttf",
 				],
-				"garuda" => [/* Thai */
-					'R' => "Garuda.ttf",
-					'B' => "Garuda-Bold.ttf",
-					'I' => "Garuda-Oblique.ttf",
-					'BI' => "Garuda-BoldOblique.ttf",
-					'useOTL' => 0xFF,
-				],
 				"khmeros" => [/* Khmer */
 					'R' => "KhmerOS.ttf",
 					'useOTL' => 0xFF,
@@ -214,7 +207,7 @@ class FontVariables
 			// Always include "sans-serif", "serif" and "monospace" etc.
 			'sans_fonts' => ['sans', 'sans-serif', 'cursive', 'fantasy', 'liberationsans',
 				'arial', 'helvetica', 'verdana', 'geneva', 'lucida', 'arialnarrow', 'arialblack',
-				'franklin', 'franklingothicbook', 'tahoma', 'garuda', 'calibri', 'trebuchet', 'lucidagrande', 'microsoftsansserif',
+				'franklin', 'franklingothicbook', 'tahoma', 'calibri', 'trebuchet', 'lucidagrande', 'microsoftsansserif',
 				'trebuchetms', 'lucidasansunicode', 'franklingothicmedium', 'albertusmedium', 'albasuper', 'quillscript',
 				'humanist777', 'humanist777black', 'humanist777light', 'futura', 'hobo', 'segoeprint'
 			],

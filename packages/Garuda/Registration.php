@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\AboriginalFamily;
+namespace Mpdf\Fonts\Garuda;
 
 use Mpdf\Fonts\FontRegistration;
 
@@ -25,18 +25,12 @@ class Registration extends FontRegistration
 	public function getFonts()
 	{
 		return [
-			'aboriginalsans' => [
-				'R' => 'AboriginalSansREGULAR.ttf',
-				'B' => 'AboriginalSansBOLD.ttf',
-				'I' => 'AboriginalSansITALIC.ttf',
-				'BI' => 'AboriginalSansBOLDITALIC.ttf',
-			],
-
-			'aboriginalserif' => [
-				'R' => 'AboriginalSerifREGULAR.ttf',
-				'B' => 'AboriginalSerifBOLD.ttf',
-				'I' => 'AboriginalSerifITALIC.ttf',
-				'BI' => 'AboriginalSerifBOLDITALIC.ttf',
+			'garuda' => [/* Thai */
+				'R' => 'Garuda.ttf',
+				'B' => 'Garuda-Bold.ttf',
+				'I' => 'Garuda-Oblique.ttf',
+				'BI' => 'Garuda-BoldOblique.ttf',
+				'useOTL' => 0xFF,
 			],
 		];
 	}
@@ -59,7 +53,7 @@ class Registration extends FontRegistration
 	public function getBackupSubsFonts()
 	{
 		return [
-			'aboriginalsans',
+			'garuda',
 		];
 	}
 
@@ -72,11 +66,7 @@ class Registration extends FontRegistration
 	{
 		return [
 			'sans_fonts' => [
-				'aboriginalsans',
-			],
-
-			'serif_fonts' => [
-				'aboriginalserif',
+				'garuda',
 			],
 		];
 	}

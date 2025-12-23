@@ -43,9 +43,9 @@ class Registration extends FontRegistration
 	}
 
 	/**
-	 * Define fonts to be used for character substitution, when the useSubstitutions configuration option enabled
+	 * Get a list of substituted fonts used when a font is not available in mPDF
 	 *
-	 * @return array The list of fonts to exclude using the keys found in $this->getFontData()
+	 * @return array Multidimensional array with keys 'sans_fonts', 'serif_fonts', and 'mono_fonts'
 	 */
 	public function getBackupSubsFonts()
 	{
