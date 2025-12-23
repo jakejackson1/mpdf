@@ -137,15 +137,12 @@ class FontVariables
 					'B' => "Dhyana-Bold.ttf",
 					'useOTL' => 0xFF,
 				],
-
 				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
 					'R' => "TaameyDavidCLM-Medium.ttf",
 					'useOTL' => 0xFF,
 				],
 				/* SMP */
-				"mph2bdamase" => [
-					'R' => "damase_v.2.ttf",
-				],
+
 				/* Indic */
 				"lohitkannada" => [
 					'R' => "Lohit-Kannada.ttf",

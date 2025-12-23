@@ -161,9 +161,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 
 			//CASE 'sat':	// OL_CHIKI
 			//CASE 'saz':	// SAURASHTRA
-			case 'syl':  // SYLOTI_NAGRI
-				$unifont = 'mph2bdamase';
-				break;
+
 			//CASE 'dgo':	// TAKRI
 
 			/* South East Asian */
@@ -234,17 +232,12 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 	{
 		switch ($script) {
 			/* European */
-			case 'glag': // GLAGOLITIC
-				return 'mph2bdamase';
 
-			case 'shaw': // SHAVIAN
-				return 'mph2bdamase';
 
 			/* African */
 			//CASE 'merc':	// MEROITIC_CURSIVE
 			//CASE 'mero':	// MEROITIC_HIEROGLYPHS
-			case 'osma': // OSMANYA
-				return 'mph2bdamase';
+
 
 			/* Middle Eastern */
 			//CASE 'sarb':	// OLD_SOUTH_ARABIAN
@@ -259,8 +252,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			/* South Asian */
 			//CASE 'brah':	// BRAHMI
 			//CASE 'kthi':	// KAITHI
-			case 'khar': // KHAROSHTHI
-				return 'mph2bdamase';
+
 			case 'mtei': // MEETEI_MAYEK
 				return 'eeyekunicode';
 			//CASE 'shrd':	// SHARADA
@@ -282,8 +274,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'plrd':	// MIAO
 
 			/* American */
-			case 'dsrt': // DESERET
-				return 'mph2bdamase';
+
 		}
 
 		return null;
