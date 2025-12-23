@@ -97,10 +97,7 @@ class FontVariables
 					'R' => "TaiHeritagePro.ttf",
 				],
 
-				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
-					'R' => "TaameyDavidCLM-Medium.ttf",
-					'useOTL' => 0xFF,
-				],
+
 				/* SMP */
 
 				/* Indic */

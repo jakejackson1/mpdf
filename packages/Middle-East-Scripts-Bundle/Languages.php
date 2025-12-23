@@ -47,6 +47,15 @@ class Languages implements LanguageToFontInterface
 			case 'syr':
 				return 'estrangeloedessa';
 
+			// HEBREW
+			case 'he':
+			case 'heb':
+
+			// Yiddish
+			case 'yi':
+			case 'yid':
+				return 'taameydavidclm';
+
 			/* Undetermined language - script used */
 			case 'und':
 				return $this->fontByScript($script);

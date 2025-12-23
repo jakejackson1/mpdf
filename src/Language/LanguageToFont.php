@@ -110,12 +110,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'ha':  CASE 'hau':	// Hausa
 
 			/* Middle Eastern */
-			case 'he':
-			case 'heb': // HEBREW
-			case 'yi':
-			case 'yid': // Yiddish
-					$unifont = 'taameydavidclm';
-				break;
+
 
 			//CASE 'arc':	// IMPERIAL_ARAMAIC
 			//CASE ''ae:	// AVESTAN

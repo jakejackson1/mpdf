@@ -76,6 +76,12 @@ class Registration extends FontRegistration
 				'R' => 'Estrangelo-Edessa.otf',
 				'useOTL' => 0xFF,
 			],
+
+			/* Hebrew with full Niqud and Cantillation */
+			'taameydavidclm' => [
+				'R' => 'TaameyDavidCLM-Medium.ttf',
+				'useOTL' => 0xFF,
+			],
 		];
 	}
 
@@ -98,6 +104,7 @@ class Registration extends FontRegistration
 	{
 		return [
 			'xbriyaz',
+			'taameydavidclm',
 		];
 	}
 }
