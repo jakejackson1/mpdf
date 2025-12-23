@@ -117,9 +117,7 @@ class FontVariables
 					'R' => "TaiHeritagePro.ttf",
 				],
 
-				"eeyekunicode" => [/* Meetei Mayek */
-					'R' => "Eeyek-Regular.ttf",
-				],
+
 				"lannaalif" => [/* Tai Tham */
 					'R' => "lannaalif-v1-03.ttf",
 					'useOTL' => 0xFF,

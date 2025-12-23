@@ -248,9 +248,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			/* South Asian */
 			//CASE 'brah':	// BRAHMI
 			//CASE 'kthi':	// KAITHI
-
-			case 'mtei': // MEETEI_MAYEK
-				return 'eeyekunicode';
 			//CASE 'shrd':	// SHARADA
 			//CASE 'sora':	// SORA_SOMPENG
 
