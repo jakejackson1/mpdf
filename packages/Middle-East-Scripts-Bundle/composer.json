@@ -1,5 +1,5 @@
 {
-  "name": "mpdf/font-arabic-scripts-bundle",
+  "name": "mpdf/font-middle-east-scripts-bundle",
   "version": "0.1",
   "type": "library",
   "description": "An mPDF scripts bundle designed for middle-eastern languages, and includes the fonts Lateef and XB Riyaz. Supported scripts include: Latin and Arabic.",

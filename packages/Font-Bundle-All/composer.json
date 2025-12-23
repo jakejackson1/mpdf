@@ -10,7 +10,6 @@
     "mpdf/font-ocr-family": "*",
     "mpdf/font-ancient-scripts-bundle": "*",
     "mpdf/font-aboriginal-family": "*",
-    "mpdf/font-estrangelo-edessa": "*",
     "mpdf/font-sundanese-unicode": "*",
     "mpdf/font-pothana-2000": "*",
     "mpdf/font-lohit-kannada": "*",
@@ -27,7 +26,7 @@
     "mpdf/font-mph-2b-damase": "*",
     "mpdf/font-quivira": "*",
     "mpdf/font-abyssinica-sil": "*",
-    "mpdf/font-arabic-scripts-bundle": "*",
+    "mpdf/font-middle-east-scripts-bundle": "*",
     "mpdf/font-sunext": "*",
     "mpdf/font-free-family": "*",
     "mpdf/font-dejavu-family": "*"

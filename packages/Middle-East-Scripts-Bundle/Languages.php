@@ -43,6 +43,10 @@ class Languages implements LanguageToFontInterface
 			case 'snd': // Sindhi
 				return 'lateef';
 
+			// SYRIAC
+			case 'syr':
+				return 'estrangeloedessa';
+
 			/* Undetermined language - script used */
 			case 'und':
 				return $this->fontByScript($script);

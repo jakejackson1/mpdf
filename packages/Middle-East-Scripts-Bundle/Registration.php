@@ -61,6 +61,7 @@ class Registration extends FontRegistration
 				'useKashida' => 75,
 			],
 
+			/* Arabic / Persian (Farsi) */
 			'xbriyaz' => [
 				'R' => 'XB Riyaz.ttf',
 				'B' => 'XB RiyazBd.ttf',
@@ -68,6 +69,12 @@ class Registration extends FontRegistration
 				'BI' => 'XB RiyazBdIt.ttf',
 				'useOTL' => 0xFF,
 				'useKashida' => 75,
+			],
+
+			/* Syriac */
+			'estrangeloedessa' => [
+				'R' => 'Estrangelo-Edessa.otf',
+				'useOTL' => 0xFF,
 			],
 		];
 	}
