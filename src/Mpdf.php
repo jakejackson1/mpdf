@@ -1461,6 +1461,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->default_lang = $mode;
 		}
 
+		/* No fonts registered. Force Core mode */
+		if (count($this->available_unifonts) === 0) {
+			$onlyCoreFonts = true;
+			$this->useAdobeCJK = true;
+		}
+
 		$this->onlyCoreFonts = $onlyCoreFonts;
 
 		if ($this->onlyCoreFonts) {
@@ -1734,14 +1740,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	function RestrictUnicodeFonts($res)
 	{
 		// $res = array of (Unicode) fonts to restrict to: e.g. norasi|norasiB - language specific
-		if (count($res)) { // Leave full list of available fonts if passed blank array
-			$this->available_unifonts = $res;
-		} else {
-			$this->available_unifonts = $this->default_available_fonts;
-		}
-		if (count($this->available_unifonts) == 0) {
+		$this->available_unifonts = count($res) ? $res : $this->default_available_fonts;
+
+		if (count($this->available_unifonts) === 0 && count($this->default_available_fonts) > 0) {
 			$this->available_unifonts[] = $this->default_available_fonts[0];
 		}
+
 		$this->available_unifonts = array_values($this->available_unifonts);
 	}
 
