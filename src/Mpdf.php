@@ -1368,7 +1368,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->AddFontDirectory($fontPackage->getDirectory());
 			foreach ($fontPackage->getFonts() as $fontName => $fontData) {
 				if (isset($this->fontdata[$fontName])) {
-					throw new InvalidArgumentException('@TODO');
+					throw new MpdfException(sprintf('Font "%s" already registered', $fontName));
 				}
 
 				if (!empty($fontData['sip-ext'])) {
