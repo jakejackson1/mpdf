@@ -105,10 +105,7 @@ class FontVariables
 					'R' => "kaputaunicode.ttf",
 					'useOTL' => 0xFF,
 				],
-				"jomolhari" => [/* Tibetan */
-					'R' => "Jomolhari.ttf",
-					'useOTL' => 0xFF,
-				],
+
 				"sundaneseunicode" => [/* Sundanese */
 					'R' => "SundaneseUnicode-1.0.5.ttf",
 					'useOTL' => 0xFF,

@@ -128,12 +128,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'smp':	// SAMARITAN
 
 			/* Central Asian */
-			case 'bo':
-			case 'bod': // TIBETAN
-			case 'dz':
-			case 'dzo': // Dzongkha
-					$unifont = 'jomolhari';
-				break;
 
 			//CASE 'mn':  CASE 'mon':	// MONGOLIAN	(Vertical script)
 			//CASE 'ug':  CASE 'uig':	// Uyghur
