@@ -137,22 +137,7 @@ class FontVariables
 					'B' => "Dhyana-Bold.ttf",
 					'useOTL' => 0xFF,
 				],
-				"tharlon" => [/* Myanmar / Burmese */
-					'R' => "Tharlon-Regular.ttf",
-					'useOTL' => 0xFF,
-				],
-				"padaukbook" => [/* Myanmar / Burmese */
-					'R' => "Padauk-book.ttf",
-					'useOTL' => 0xFF,
-				],
-				"zawgyi-one" => [/* Myanmar / Burmese */
-					'R' => "ZawgyiOne.ttf",
-					'useOTL' => 0xFF,
-				],
-				"ayar" => [/* Myanmar / Burmese */
-					'R' => "ayar.ttf",
-					'useOTL' => 0xFF,
-				],
+
 				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
 					'R' => "TaameyDavidCLM-Medium.ttf",
 					'useOTL' => 0xFF,

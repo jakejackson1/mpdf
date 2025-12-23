@@ -7,8 +7,9 @@
   "keywords": ["mpdf", "mpdf-fonts"],
   "license": ["MIT"],
   "require": {
-    "mpdf/font-ancient-scripts": "*",
+    "mpdf/font-ancient-scripts-bundle": "*",
     "mpdf/font-aboriginal-family": "*",
+    "mpdf/font-myanmar-bundle": "*",
     "mpdf/font-garuda": "*",
     "mpdf/font-unbatang": "*",
     "mpdf/font-quivira": "*",

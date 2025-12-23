@@ -175,12 +175,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			case 'lao': // LAO
 				$unifont = 'dhyana';
 				break;
-			case 'my':
-			case 'mya': // MYANMAR Burmese
-				$unifont = 'tharlon'; // zawgyi-one is non-unicode compliant but in wide usage
-				// ayar is also not strictly compliant
-				// padaukbook is unicode compliant
-				break;
 
 			//CASE 'ms':  CASE 'msa':	// Malay
 			//CASE 'ban':	// BALINESE
@@ -190,9 +184,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			case 'su':  // SUNDANESE
 				$unifont = 'sundaneseunicode';
 				break;
-			case 'tdd':  // TAI_LE
-				$unifont = 'tharlon';
-				break;
+
 			case 'blt':  // TAI_VIET
 				$unifont = 'taiheritagepro';
 				break;

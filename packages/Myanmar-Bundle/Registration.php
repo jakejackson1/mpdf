@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\AncientScripts;
+namespace Mpdf\Fonts\MyanmarBundle;
 
 use Mpdf\Fonts\FontRegistration;
 
@@ -25,18 +25,23 @@ class Registration extends FontRegistration
 	public function getFonts()
 	{
 		return [
-			'aegyptus' => [
-				'R' => 'Aegyptus.otf',
+			'ayar' => [
+				'R' => 'ayar.ttf',
 				'useOTL' => 0xFF,
 			],
 
-			'aegean' => [
-				'R' => 'Aegean.otf',
+			'padaukbook' => [
+				'R' => 'Padauk-book.ttf',
 				'useOTL' => 0xFF,
 			],
 
-			'akkadian' => [
-				'R' => 'Akkadian.otf',
+			'tharlon' => [
+				'R' => 'Tharlon-Regular.ttf',
+				'useOTL' => 0xFF,
+			],
+
+			'zawgyi-one' => [
+				'R' => 'ZawgyiOne.ttf',
 				'useOTL' => 0xFF,
 			],
 		];

@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\AncientScripts;
+namespace Mpdf\Fonts\AncientScriptsBundle;
 
 use Mpdf\Language\LanguageToFontInterface;
 
