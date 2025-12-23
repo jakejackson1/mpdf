@@ -89,19 +89,7 @@ class FontVariables
 				),
 			 */
 
-			'fontdata' => [
-				/* Miscellaneous language font(s) */
-
-
-
-
-
-				/* SMP */
-
-				/* Indic */
-
-				/* Arabic fonts */
-			],
+			'fontdata' => [],
 
 			// Add fonts to this array if they contain characters in the SIP or SMP Unicode planes
 			// but you do not require them. This allows a more efficient form of subsetting to be used.
