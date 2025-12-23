@@ -117,10 +117,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 					$unifont = 'taameydavidclm';
 				break;
 
-			case 'syr':  // SYRIAC
-				$unifont = 'estrangeloedessa';
-				break;
-
 			//CASE 'arc':	// IMPERIAL_ARAMAIC
 			//CASE ''ae:	// AVESTAN
 			//CASE 'peo':	// OLD_PERSIAN

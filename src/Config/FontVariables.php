@@ -91,10 +91,7 @@ class FontVariables
 
 			'fontdata' => [
 				/* Miscellaneous language font(s) */
-				"estrangeloedessa" => [/* Syriac */
-					'R' => "SyrCOMEdessa.otf",
-					'useOTL' => 0xFF,
-				],
+
 
 				"taiheritagepro" => [/* Tai Viet */
 					'R' => "TaiHeritagePro.ttf",

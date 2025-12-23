@@ -1,0 +1,20 @@
+{
+  "name": "mpdf/font-estrangelo-edessa",
+  "version": "0.1",
+  "type": "library",
+  "description": "Estrangelo Edessa is a Syriac script font created by Paul Nelson and George Kiraz. Supported scripts include: Syriac.",
+  "keywords": ["mpdf", "mpdf-fonts"],
+  "license": ["MIT"],
+  "autoload": {
+    "psr-4": {
+      "Mpdf\\Fonts\\EstrangeloEdessa\\": ""
+    }
+  },
+  "extra": {
+    "mpdf": {
+      "fonts": [
+        "Mpdf\\Fonts\\EstrangeloEdessa\\Registration"
+      ]
+    }
+  }
+}
