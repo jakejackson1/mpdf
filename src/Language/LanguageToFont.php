@@ -144,9 +144,7 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'cjm':	// CHAM
 			//CASE 'jv':	// JAVANESE
 
-			case 'blt':  // TAI_VIET
-				$unifont = 'taiheritagepro';
-				break;
+
 
 			/* East Asian */
 			case 'zh':

@@ -93,9 +93,7 @@ class FontVariables
 				/* Miscellaneous language font(s) */
 
 
-				"taiheritagepro" => [/* Tai Viet */
-					'R' => "TaiHeritagePro.ttf",
-				],
+
 
 
 				/* SMP */
