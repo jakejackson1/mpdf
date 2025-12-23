@@ -117,10 +117,6 @@ class FontVariables
 				/* SMP */
 
 				/* Indic */
-				"lohitkannada" => [
-					'R' => "Lohit-Kannada.ttf",
-					'useOTL' => 0xFF,
-				],
 				"pothana2000" => [
 					'R' => "Pothana2000.ttf",
 					'useOTL' => 0xFF,

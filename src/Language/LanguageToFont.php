@@ -135,12 +135,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'az':  CASE 'azb':	// South Azerbaijani
 
 			/* South Asian */
-				break;
-			case 'kn':
-			case 'kan': // Kannada
-				$unifont = 'lohitkannada';
-				break;
-
 			case 'te':
 			case 'tel': // TELUGU
 				$unifont = 'pothana2000';
