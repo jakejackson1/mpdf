@@ -8,7 +8,6 @@ class FontRegistry
 {
 	/**
 	 * @var FontRegistrationInterface[]
-	 * @since 9.0
 	 */
 	private $register = [];
 
@@ -16,7 +15,6 @@ class FontRegistry
 	 * FontRegistry constructor.
 	 *
 	 * @param FontRegistrationInterface[]|FontRegistrationInterface $classes
-	 * @since 9.0
 	 */
 	public function __construct($classes = [])
 	{
@@ -30,7 +28,6 @@ class FontRegistry
 	 * Add a Font Package
 	 *
 	 * @param FontRegistrationInterface $class
-	 * @since 9.0
 	 */
 	public function add(FontRegistrationInterface $class)
 	{
@@ -43,7 +40,6 @@ class FontRegistry
 	 * @param string $name
 	 *
 	 * @throws MpdfException
-	 * @since 9.0
 	 */
 	public function remove($name)
 	{
@@ -58,7 +54,6 @@ class FontRegistry
 	 * Get all registered Font Packages
 	 *
 	 * @return FontRegistrationInterface[]
-	 * @since 9.0
 	 */
 	public function getAll()
 	{
