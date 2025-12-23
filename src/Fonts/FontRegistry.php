@@ -9,7 +9,12 @@ class FontRegistry
 	/**
 	 * @var FontRegistrationInterface[]
 	 */
-	private $register = [];
+	protected $register = [];
+
+	/**
+	 * @var bool Whether to autoload the font aliases, backup subs, BMPonly, and font family substitution list
+	 */
+	protected $autoloadConfig = true;
 
 	/**
 	 * FontRegistry constructor.
@@ -58,5 +63,22 @@ class FontRegistry
 	public function getAll()
 	{
 		return $this->register;
+	}
+
+	/**
+	 * @param bool $autoloadConfig
+	 * @return void
+	 */
+	public function setAutoloadConfigSetting($autoloadConfig)
+	{
+		$this->autoloadConfig = (bool) $autoloadConfig;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function getAutoloadConfigSetting()
+	{
+		return $this->autoloadConfig;
 	}
 }

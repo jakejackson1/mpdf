@@ -1364,6 +1364,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 
 		$fontRegistry = $originalConfig['fontRegistry'] ?: new FontRegistry();
+		$autoloadFontConfig = $fontRegistry->getAutoloadConfigSetting();
 		foreach ($fontRegistry->getAll() as $fontPackage) {
 			$this->AddFontDirectory($fontPackage->getDirectory());
 			foreach ($fontPackage->getFonts() as $fontName => $fontData) {
@@ -1381,6 +1382,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$languageToFont = $fontPackage->getLanguageToFont();
 			if ($languageToFont) {
 				$this->languageToFont->add($languageToFont);
+			}
+
+			/* Check if the user requested the font config autoloader be skipped */
+			if (!$autoloadFontConfig) {
+				continue;
 			}
 
 			/* Save data to font package config */
