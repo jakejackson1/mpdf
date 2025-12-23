@@ -1358,7 +1358,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// @TODO - autoload/register font packages
 
 		/* Init font package arrays for the font registry */
-		$fontPackageConfigKeys = ['backupSubsFont', 'BMPonly', 'sans_fonts', 'serif_fonts', 'mono_fonts'];
+		$fontPackageConfigKeys = ['fonttrans', 'backupSubsFont', 'BMPonly', 'sans_fonts', 'serif_fonts', 'mono_fonts'];
 		foreach ($fontPackageConfigKeys as $fontPackageConfig) {
 			$$fontPackageConfig = [];
 		}
@@ -1384,6 +1384,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 
 			/* Save data to font package config */
+			$fonttrans[] = $fontPackage->getFontAliases();
 			$backupSubsFont[] = $fontPackage->getBackupSubsFonts();
 			$BMPonly[] = $fontPackage->getBmpFonts();
 			$fontFamilySubstitution = $fontPackage->getFontFamilySubstitution();

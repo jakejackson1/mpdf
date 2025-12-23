@@ -55,7 +55,6 @@ class FontVariables
 				'franklin' => 'franklingothicbook',
 				'ocr-b' => 'ocrb',
 				'ocr-b10bt' => 'ocrb',
-				'damase' => 'mph2bdamase',
 			],
 
 			/*
