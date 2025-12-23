@@ -1,0 +1,21 @@
+{
+  "name": "mpdf/font-aegean",
+  "version": "0.1",
+  "type": "library",
+  "description": "Aegean is apart of the Ancient Scripts collection and designed by George Douros. Supported scripts include: Latin, Greek and Coptic.",
+  "keywords": ["mpdf", "mpdf-fonts"],
+  "license": ["MIT"],
+  "autoload": {
+    "psr-4": {
+      "Mpdf\\Fonts\\Aegean\\": ""
+    }
+  },
+  "extra": {
+    "mpdf": {
+      "fonts": [
+        "Mpdf\\Fonts\\Aegean\\Registration"
+      ]
+    }
+  }
+
+}

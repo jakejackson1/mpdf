@@ -123,24 +123,9 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 
 			//CASE 'arc':	// IMPERIAL_ARAMAIC
 			//CASE ''ae:	// AVESTAN
-			case 'xcr':  // CARIAN
-				$unifont = 'aegean';
-				break;
-			case 'xlc':  // LYCIAN
-				$unifont = 'aegean';
-				break;
-			case 'xld':  // LYDIAN
-				$unifont = 'aegean';
-				break;
-			//CASE 'mid':	// MANDAIC
 			//CASE 'peo':	// OLD_PERSIAN
-			case 'phn':  // PHOENICIAN
-				$unifont = 'aegean';
-				break;
+			//CASE 'mid':	// MANDAIC
 			//CASE 'smp':	// SAMARITAN
-			case 'uga':  // UGARITIC
-				$unifont = 'aegean';
-				break;
 
 			/* Central Asian */
 			case 'bo':
@@ -257,14 +242,8 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 	{
 		switch ($script) {
 			/* European */
-			case 'cprt': // CYPRIOT
-				return 'aegean';
 			case 'glag': // GLAGOLITIC
 				return 'mph2bdamase';
-			case 'linb': // LINEAR_B
-				return 'aegean';
-			case 'ital': // OLD_ITALIC
-				return 'aegean';
 
 			case 'shaw': // SHAVIAN
 				return 'mph2bdamase';
