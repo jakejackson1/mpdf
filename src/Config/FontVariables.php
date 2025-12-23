@@ -117,10 +117,6 @@ class FontVariables
 				"taiheritagepro" => [/* Tai Viet */
 					'R' => "TaiHeritagePro.ttf",
 				],
-				"aegyptus" => [
-					'R' => "Aegyptus.otf",
-					'useOTL' => 0xFF,
-				],
 				"akkadian" => [/* Cuneiform */
 					'R' => "Akkadian.otf",
 					'useOTL' => 0xFF,

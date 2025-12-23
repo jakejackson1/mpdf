@@ -249,9 +249,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 				return 'mph2bdamase';
 
 			/* African */
-			case 'egyp': // EGYPTIAN_HIEROGLYPHS
-				return 'aegyptus';
-
 			//CASE 'merc':	// MEROITIC_CURSIVE
 			//CASE 'mero':	// MEROITIC_HIEROGLYPHS
 			case 'osma': // OSMANYA

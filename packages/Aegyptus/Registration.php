@@ -1,6 +1,6 @@
 <?php
 
-namespace Mpdf\Fonts\Aegean;
+namespace Mpdf\Fonts\Aegyptus;
 
 use Mpdf\Fonts\FontRegistration;
 
@@ -25,8 +25,8 @@ class Registration extends FontRegistration
 	public function getFonts()
 	{
 		return [
-			'aegean' => [
-				'R' => 'Aegean.otf',
+			'aegyptus' => [
+				'R' => 'Aegyptus.otf',
 				'useOTL' => 0xFF,
 			],
 		];
