@@ -1363,7 +1363,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$$fontPackageConfig = [];
 		}
 
-		$fontRegistry = $originalConfig['fontRegistry'] ?: new FontRegistry();
+		$fontRegistry = isset($originalConfig['fontRegistry']) ? $originalConfig['fontRegistry'] : new FontRegistry();
 		$autoloadFontConfig = $fontRegistry->getAutoloadConfigSetting();
 		foreach ($fontRegistry->getAll() as $fontPackage) {
 			$this->AddFontDirectory($fontPackage->getDirectory());

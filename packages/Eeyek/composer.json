@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\Eeyek\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\Eeyek\\Registration"
     }
   }
 

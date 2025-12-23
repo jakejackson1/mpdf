@@ -13,9 +13,8 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\DejavuFamily\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\DejavuFamily\\Registration",
+      "fontOrder": 30
     }
   }
 

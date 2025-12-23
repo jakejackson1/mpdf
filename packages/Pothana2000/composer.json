@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\Pothana2000\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\Pothana2000\\Registration"
     }
   }
 

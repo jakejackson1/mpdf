@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\ArabicScriptsBundle\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\ArabicScriptsBundle\\Registration"
     }
   }
 

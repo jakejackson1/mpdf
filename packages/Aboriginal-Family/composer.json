@@ -13,9 +13,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\AboriginalFamily\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\AboriginalFamily\\Registration"
     }
   }
 

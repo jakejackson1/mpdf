@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\AncientScriptsBundle\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\AncientScriptsBundle\\Registration"
     }
   }
 

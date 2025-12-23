@@ -13,9 +13,8 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\SunExFamily\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\SunExt\\Registration",
+      "fontOrder": 10
     }
   }
 

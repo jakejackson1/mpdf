@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\KhmerOs\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\KhmerOs\\Registration"
     }
   }
 

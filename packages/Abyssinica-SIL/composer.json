@@ -13,9 +13,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\AbyssinicaSil\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\AbyssinicaSil\\Registration"
     }
   }
 

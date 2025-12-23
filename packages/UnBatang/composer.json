@@ -13,9 +13,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\UnBatang\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\UnBatang\\Registration"
     }
   }
 

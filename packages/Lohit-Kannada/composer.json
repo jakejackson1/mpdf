@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\LohitKannada\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\LohitKannada\\Registration"
     }
   }
 

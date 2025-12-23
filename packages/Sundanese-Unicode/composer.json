@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\SundaneseUnicode\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\SundaneseUnicode\\Registration"
     }
   }
 

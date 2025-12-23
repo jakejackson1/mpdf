@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\Mph2bDamase\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\Mph2bDamase\\Registration"
     }
   }
 

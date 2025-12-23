@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\MyanmarBundle\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\MyanmarBundle\\Registration"
     }
   }
 

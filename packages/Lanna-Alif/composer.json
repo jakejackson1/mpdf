@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\LannaAlif\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\LannaAlif\\Registration"
     }
   }
 

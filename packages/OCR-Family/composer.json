@@ -13,9 +13,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\OcrFamily\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\OcrFamily\\Registration"
     }
   }
 

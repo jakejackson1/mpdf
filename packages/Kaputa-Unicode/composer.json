@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\KaputaUnicode\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\KaputaUnicode\\Registration"
     }
   }
 

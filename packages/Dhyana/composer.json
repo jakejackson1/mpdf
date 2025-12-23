@@ -13,9 +13,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\Dhyana\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\Dhyana\\Registration"
     }
   }
 

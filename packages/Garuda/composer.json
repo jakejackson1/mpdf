@@ -12,9 +12,7 @@
   },
   "extra": {
     "mpdf": {
-      "fonts": [
-        "Mpdf\\Fonts\\Garuda\\Registration"
-      ]
+      "fonts": "Mpdf\\Fonts\\Garuda\\Registration"
     }
   }
 
