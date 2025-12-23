@@ -155,10 +155,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			//CASE 'dgo':	// TAKRI
 
 			/* South East Asian */
-			case 'km':
-			case 'khm': // KHMER
-				$unifont = 'khmeros';
-				break;
 
 			//CASE 'ms':  CASE 'msa':	// Malay
 			//CASE 'ban':	// BALINESE

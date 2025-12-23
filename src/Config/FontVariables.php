@@ -116,11 +116,6 @@ class FontVariables
 					'useOTL' => 0xFF,
 				],
 
-				"khmeros" => [/* Khmer */
-					'R' => "KhmerOS.ttf",
-					'useOTL' => 0xFF,
-				],
-
 				"taameydavidclm" => [/* Hebrew with full Niqud and Cantillation */
 					'R' => "TaameyDavidCLM-Medium.ttf",
 					'useOTL' => 0xFF,
