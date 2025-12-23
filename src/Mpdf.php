@@ -13637,7 +13637,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$e = mb_convert_case($e, MB_CASE_TITLE, "UTF-8");
 					} // mPDF 5.7.1
 				} else {
-					if ($this->checkSIP && $this->CurrentFont['sipext'] && $this->subPos < $i && (!$this->specialcontent || !$this->useActiveForms)) {
+					if ($this->checkSIP && (isset($this->CurrentFont['sipext']) && $this->CurrentFont['sipext']) && $this->subPos < $i && (!$this->specialcontent || !$this->useActiveForms)) {
 						$cnt += $this->SubstituteCharsSIP($a, $i, $e);
 					}
 
