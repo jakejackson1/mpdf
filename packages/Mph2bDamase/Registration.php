@@ -63,7 +63,7 @@ class Registration extends FontRegistration
 	/**
 	 * Font alias mapping
 	 *
-	 * @return array [ 'alias' => 'fontkey' ]
+	 * @return array{string, string} [ 'aliasName' => 'fontKey' ]
 	 */
 	public function getFontAliases()
 	{
