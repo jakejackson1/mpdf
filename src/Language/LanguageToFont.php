@@ -140,10 +140,6 @@ class LanguageToFont implements \Mpdf\Language\LanguageToFontInterface
 			case 'kan': // Kannada
 				$unifont = 'lohitkannada';
 				break;
-			case 'si':
-			case 'sin': // SINHALA
-				$unifont = 'kaputaunicode';
-				break;
 
 			case 'te':
 			case 'tel': // TELUGU

@@ -101,10 +101,6 @@ class FontVariables
 					'R' => "SyrCOMEdessa.otf",
 					'useOTL' => 0xFF,
 				],
-				"kaputaunicode" => [/* Sinhala  */
-					'R' => "kaputaunicode.ttf",
-					'useOTL' => 0xFF,
-				],
 
 				"sundaneseunicode" => [/* Sundanese */
 					'R' => "SundaneseUnicode-1.0.5.ttf",
