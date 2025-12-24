@@ -31,7 +31,6 @@
 		"ext-gd": "*",
 		"ext-json": "*",
 		"ext-mbstring": "*",
-		"mpdf/font-bundle-lite": "^0.1.0",
 		"mpdf/psr-http-message-shim": "^1.0 || ^2.0",
 		"mpdf/psr-log-aware-trait": "^2.0 || ^3.0",
 		"myclabs/deep-copy": "^1.7",
