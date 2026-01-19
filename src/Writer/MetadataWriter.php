@@ -569,7 +569,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 								foreach ($values as $name => $entry) {
 									$this->writer->write('/' . $name . ' ', false);
-									$this->writer->writePdfType($entry);
+									$this->mpdf->writePdfType($entry);
 								}
 
 								if (isset($pl['quadPoints'])) {
