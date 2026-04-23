@@ -79,10 +79,33 @@ class Tr extends Tag
 		if ($this->mpdf->tabletfoot) {
 			$this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot'][$this->mpdf->row] = true;
 		}
+
+		// Push TR as a child of the enclosing Table (or THead/TBody/TFoot when
+		// those are supported).
+		// ISO 32000-1:2008 §14.8 Table 333 — TR is a block-level table element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->open('TR');
+
+			$trElem = $this->ua->getStructureTree()->getCurrent();
+			if (!empty($attr['ID'])) {
+				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $trElem);
+			}
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($trElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
+		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// ISO 32000-1:2008 §14.8 Table 333 — pop the TR struct element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->close();
+		}
+
 		if ($this->mpdf->tableLevel) {
 			// If Border set on TR - Update right border
 			if (isset($this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['trborder-left'][$this->mpdf->row])) {

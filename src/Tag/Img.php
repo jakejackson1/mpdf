@@ -10,6 +10,12 @@ class Img extends Tag
 	public function open($attr, &$ahtml, &$ihtml)
 	{
 		$this->mpdf->ignorefollowingspaces = false;
+
+		// null = attribute absent (unknown intent); '' = author-declared decorative.
+		// Routed to printobjectbuffer() as /Alt on the Figure StructElem
+		// (ISO 32000-1:2008 §14.7.2 Table 322).
+		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
+
 		$objattr = [];
 		$objattr['margin_top'] = 0;
 		$objattr['margin_bottom'] = 0;
@@ -405,6 +411,27 @@ class Img extends Tag
 			// mPDF 5.7.3 TRANSFORMS
 			if (isset($properties['TRANSFORM']) && !$this->mpdf->ColActive && !$this->mpdf->kwt) {
 				$objattr['transform'] = $properties['TRANSFORM'];
+			}
+
+			$objattr['pdfua_alt'] = $alt;
+
+			// HTML5 §4.8.13 — usemap value is "#" + map name; the leading "#"
+			// is optional. Resolved against the ImageMapRegistry at render time
+			// to emit one Link annotation + Link struct element per <area>.
+			if (isset($attr['USEMAP']) && $attr['USEMAP'] !== '') {
+				$um = ltrim($attr['USEMAP'], '#');
+				$objattr['pdfua_image_map_name'] = strtolower($um);
+			}
+
+			// Carry id/aria-* through serialised $objattr because the Figure
+			// struct element is created at render time (printobjectbuffer),
+			// not at parse time.
+			$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
+				}
 			}
 
 			$e = Mpdf::OBJECT_IDENTIFIER . "type=image,objattr=" . serialize($objattr) . Mpdf::OBJECT_IDENTIFIER;

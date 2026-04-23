@@ -7,6 +7,7 @@ use Mpdf\Form;
 use Mpdf\Mpdf;
 use Mpdf\Pdf\Protection;
 use Mpdf\PsrLogAwareTrait\PsrLogAwareTrait;
+use Mpdf\Ua\UaState;
 use Mpdf\Utils\PdfDate;
 
 use Psr\Log\LoggerInterface;
@@ -37,12 +38,18 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	 */
 	private $protection;
 
-	public function __construct(Mpdf $mpdf, BaseWriter $writer, Form $form, Protection $protection, LoggerInterface $logger)
+	/**
+	 * @var \Mpdf\Ua\UaState
+	 */
+	private $ua;
+
+	public function __construct(Mpdf $mpdf, BaseWriter $writer, Form $form, Protection $protection, UaState $ua, LoggerInterface $logger)
 	{
 		$this->mpdf = $mpdf;
 		$this->writer = $writer;
 		$this->form = $form;
 		$this->protection = $protection;
+		$this->ua = $ua;
 		$this->logger = $logger;
 	}
 
@@ -134,6 +141,25 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$m .= '   </rdf:Description>' . "\n";
 		}
 
+		// ISO 14289-1:2014 §6.2 — pdfuaid:part XMP identifier.
+		// Separate `if` (not `elseif`) so PDFUA and PDFA/PDFX can coexist in the same
+		// document (e.g. PDF/A-3 + PDF/UA-1 for accessible archival documents).
+		// ISO 14289-1:2014 §7.1 (Matterhorn Protocol 1.1 condition 06-003) requires
+		// a non-empty document title in the XMP dc:title element.
+		if ($this->mpdf->PDFUA) {
+			if (empty($this->mpdf->title)) {
+				if ($this->mpdf->PDFUAauto) {
+					$this->ua->addWarning('PDF/UA-1 requires a document title. Set the \'title\' config option.');
+				} else {
+					throw new \Mpdf\MpdfException('PDF/UA-1 requires a document title. Set the \'title\' config option.');
+				}
+			}
+			$m .= '   <rdf:Description rdf:about="uuid:' . $uuid
+				. '" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">' . "\n";
+			$m .= '    <pdfuaid:part>1</pdfuaid:part>' . "\n";
+			$m .= '   </rdf:Description>' . "\n";
+		}
+
 		$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/">' . "\n";
 		$m .= '    <xmpMM:DocumentID>uuid:' . $uuid . '</xmpMM:DocumentID>' . "\n";
 		$m .= '   </rdf:Description>' . "\n";
@@ -141,8 +167,19 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$m .= ' </x:xmpmeta>' . "\n";
 		$m .= str_repeat(str_repeat(' ', 100) . "\n", 20); // 2-4kB whitespace padding required
 		$m .= '<?xpacket end="w"?>'; // "r" read only
-		$this->writer->write('<</Type/Metadata/Subtype/XML/Length ' . strlen($m) . '>>');
-		$this->writer->stream($m);
+		// ISO 32000-1 §14.3.2 — XMP metadata stream must NOT be encrypted.
+		// ISO 14289-1:2014 §6.2 — pdfuaid:part must be readable by PDF/UA processors.
+		// The Identity crypt filter declares the intent; $encrypt=false delivers it.
+		if ($this->mpdf->PDFUA && $this->mpdf->encrypted) {
+			$this->writer->write('<</Type/Metadata/Subtype/XML'
+				. '/Filter[/Crypt]'
+				. '/DecodeParms<</Type/CryptFilterDecodeParms/Name/Identity>>'
+				. '/Length ' . strlen($m) . '>>');
+			$this->writer->stream($m, false);
+		} else {
+			$this->writer->write('<</Type/Metadata/Subtype/XML/Length ' . strlen($m) . '>>');
+			$this->writer->stream($m);
+		}
 		$this->writer->write('endobj');
 	}
 
@@ -171,7 +208,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		}
 
 		foreach ($this->mpdf->customProperties as $key => $value) {
-			$this->writer->write('/' . $key . ' ' . $this->writer->utf16BigEndianTextString($value));
+			// UA1 audit H-3 — custom-property keys must be escaped per
+			// ISO 32000-1 §7.3.5 PDF Name production. Without escapeName(),
+			// a key like "good\n/Producer (pwned)" smuggles extra entries
+			// into the /Info dict.
+			$this->writer->write('/' . $this->writer->escapeName($key) . ' ' . $this->writer->utf16BigEndianTextString($value));
 		}
 
 		$now = PdfDate::format(time());
@@ -340,10 +381,32 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 		$this->writer->write('/Pages 1 0 R');
 
-		if (is_string($this->mpdf->currentLang)) {
-			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->currentLang));
-		} elseif (is_string($this->mpdf->default_lang)) {
-			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->default_lang));
+		// ISO 14289-1:2014 §7.2 (Matterhorn Protocol 1.1 condition 04-001) — /Lang is required
+		// in the document catalog when PDFUA is active. Fall back to en-US with a warning in
+		// PDFUAauto mode, or throw in strict mode when neither currentLang nor default_lang is set.
+		//
+		// /Lang carries a PDF text string (ISO 32000-1 §14.9.2). When the document is
+		// encrypted, the bytes inside `(...)` MUST be RC4-encrypted with the catalog's
+		// object key — writer->string() handles that; writing the raw literal
+		// `/Lang (en-US)` into an encrypted catalog leaves the bytes plain and veraPDF
+		// then decrypts them and reads garbage, failing §7.2 test 29. When unencrypted,
+		// writer->string() returns plain ASCII so existing fixture-based tests asserting
+		// `/Lang (cs_CZ)` continue to match.
+		$langTag = null;
+		if (is_string($this->mpdf->currentLang) && $this->mpdf->currentLang !== '') {
+			$langTag = $this->mpdf->currentLang;
+		} elseif (is_string($this->mpdf->default_lang) && $this->mpdf->default_lang !== '') {
+			$langTag = $this->mpdf->default_lang;
+		} elseif ($this->mpdf->PDFUA) {
+			if ($this->mpdf->PDFUAauto) {
+				$this->ua->addWarning('PDF/UA-1 requires a /Lang entry in the document catalog. Defaulting to en-US.');
+				$langTag = 'en-US';
+			} else {
+				throw new \Mpdf\MpdfException('PDF/UA-1 requires a /Lang entry in the document catalog. Pass a language mode such as \'en-GB\' to the Mpdf constructor.');
+			}
+		}
+		if ($langTag !== null) {
+			$this->writer->write('/Lang ' . $this->writer->string($langTag));
 		}
 
 		if ($this->mpdf->ZoomMode === 'fullpage') {
@@ -387,9 +450,20 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/PageMode /FullScreen');
 		}
 
-		// Metadata
-		if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+		// ISO 32000-1:2008 §14.3.2 — /Metadata ref in catalog required for PDFA, PDFX, and PDFUA.
+		if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
 			$this->writer->write('/Metadata ' . $this->mpdf->MetadataRoot . ' 0 R');
+		}
+
+		// ISO 14289-1:2014 §7.1 (Matterhorn 01-003) — /MarkInfo with Marked=true required.
+		// ISO 32000-1:2008 §14.7.2 Table 321 — StructTreeRoot ref in catalog.
+		if ($this->mpdf->PDFUA) {
+			$this->writer->write('/MarkInfo <</Marked true /Suspects false>>');
+			// StructTreeRoot object number is 0 until StructureWriter runs.
+			// The conditional emit ensures valid PDF when the tree is absent.
+			if ($this->ua->getStructTreeRootObjNum()) {
+				$this->writer->write('/StructTreeRoot ' . $this->ua->getStructTreeRootObjNum() . ' 0 R');
+			}
 		}
 
 		// OutputIntents
@@ -417,7 +491,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/Names << /JavaScript ' . $this->mpdf->n_js . ' 0 R >> ');
 		}
 
-		if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins) {
+		// ISO 14289-1:2014 §7.1 (Matterhorn Protocol 1.1 condition 06-001) — /ViewerPreferences
+		// /DisplayDocTitle must be true so PDF viewers show the document title rather than the
+		// filename. Adding $this->mpdf->PDFUA ensures the block opens even when no other
+		// DisplayPreferences, RTL direction, or mirror-margins flag is active.
+		if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->PDFUA) {
 
 			$this->writer->write('/ViewerPreferences<<');
 
@@ -433,7 +511,9 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 				$this->writer->write('/HideWindowUI true');
 			}
 
-			if (is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
+			// ISO 14289-1:2014 §7.1 — viewers must display the document title from /Info /Title
+			// rather than the filename when /DisplayDocTitle is true.
+			if ($this->mpdf->PDFUA || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
 				$this->writer->write('/DisplayDocTitle true');
 			}
 
@@ -530,13 +610,28 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 					foreach ($this->mpdf->PageLinks[$n] as $key => $pl) {
 
 						$this->writer->object();
+						$linkAnnotObjNum = $this->mpdf->n;
 						$annot = '';
 
 						$rect = sprintf('%.3F %.3F %.3F %.3F', $pl[0], $pl[1], $pl[0] + $pl[2], $pl[1] - $pl[3]);
 
 						$annot .= '<</Type /Annot /Subtype /Link /Rect [' . $rect . ']';
-						// Removed as causing undesired effects in Chrome PDF viewer https://github.com/mpdf/mpdf/issues/283
-						// $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl[4]);
+						// PDF/UA-1 §7.18.5 test 2 — link annotations require /Contents (alternate
+						// description) per ISO 32000-1 §14.9.3. Previously removed due to a Chrome
+						// PDF viewer cosmetic bug (issue #283); re-enabled for PDFUA only because the
+						// Chrome issue is a cosmetic tooltip problem, not a data-integrity issue, and
+						// PDF/UA-1 conformance takes precedence over viewer workarounds.
+						if ($this->mpdf->PDFUA) {
+							$contents = '';
+							if (is_string($pl[4]) && strpos($pl[4], '@') !== 0) {
+								$contents = $pl[4];
+							} elseif (is_string($pl[4]) && strpos($pl[4], '@') === 0) {
+								$contents = 'Internal link';
+							} else {
+								$contents = 'Internal link';
+							}
+							$annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($contents);
+						}
 						$annot .= ' /NM ' . $this->writer->string(sprintf('%04u-%04u', $n, $key));
 						$annot .= ' /M ' . $this->writer->string('D:' . date('YmdHis'));
 
@@ -550,8 +645,23 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// $annot .= ' >>';
 						// $annot .= ' /C [1 0 0]';	// Color RGB
 
-						if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+						if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
+							// /F 28 — bits 3 (Print), 4 (NoZoom), 5 (NoRotate). PDF/UA-1
+							// §7.18.5 / Matterhorn 02-003 require these flags on link annots.
 							$annot .= ' /F 28';
+						}
+
+						// PDF/UA-1 §7.18.5 — wire the link annotation to its Link struct
+						// element via OBJR + /StructParent so AT can resolve the annotation
+						// to the surrounding Link tag. The 6th PageLinks element is the
+						// captured StructureElement reference from Tag\A::open(); absent for
+						// links emitted outside an <a href> scope (e.g. from a TOC entry,
+						// in which case the annotation is left untagged and verapdf will
+						// flag it — those call sites must be updated similarly).
+						if ($this->mpdf->PDFUA && isset($pl[5]) && $pl[5] !== null) {
+							$linkStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($pl[5]);
+							$pl[5]->addObjref($linkStructParent, $linkAnnotObjNum);
+							$annot .= ' /StructParent ' . $linkStructParent;
 						}
 
 						if (strpos($pl[4], '@') === 0) {
@@ -563,7 +673,23 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 						} elseif (is_string($pl[4])) {
 
-							$annot .= ' /A <</S /URI /URI ' . $this->writer->string($pl[4]) . '>> >>';
+							// PDF/UA-1 audit L2 — defence in depth. Tag\A::open()
+							// is the documented entry point for user-supplied
+							// hrefs and clears javascript:/vbscript: URIs in
+							// auto mode (or throws in strict). A third party
+							// pushing into PageLinks directly (or an FPDI-imported
+							// Link with such a URI) could still reach this branch.
+							// Drop the /A action so the annotation is a degenerate
+							// but well-formed Link rect with no executable URL.
+							if ($this->mpdf->PDFUA && \Mpdf\Ua\UaPolicy::isPolicyBlockedHref($pl[4])) {
+								$this->ua->addWarning(
+									'PDF/UA-1: stripped /URI action with policy-blocked scheme: '
+									. \Mpdf\Ua\UaPolicy::formatHrefForMessage($pl[4])
+								);
+								$annot .= ' >>';
+							} else {
+								$annot .= ' /A <</S /URI /URI ' . $this->writer->string($pl[4]) . '>> >>';
+							}
 
 						} else {
 
@@ -597,6 +723,26 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						}
 
 						$this->writer->object();
+						$annotObjNum = $this->mpdf->n;
+
+						// PDF/UA-1 §7.18 — all annotations (except hidden, outside CropBox,
+						// or Popup subtype) must appear in the structure tree in reading order.
+						// This includes /FileAttachment annotations: when allowAnnotationFiles
+						// is true the annotation is written as a real PDF object and must also
+						// be tagged. ISO 14289-1 §7.18.1 (Matterhorn 02-001) — Text and
+						// FileAttachment annotations shall be nested within an Annot struct
+						// element. Previously this used Note (which is a footnote tag and
+						// requires an /ID per §7.9 / Matterhorn 09-006). Annot is the correct
+						// general-purpose container for non-Widget/Link/PrinterMark annots.
+						$noteStructElem = null;
+						$noteStructParent = null;
+						if ($this->mpdf->PDFUA) {
+							$this->ua->getStructureTree()->open('Annot', []);
+							$noteStructElem = $this->ua->getStructureTree()->getCurrent();
+							$this->ua->getStructureTree()->close();
+							$noteStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($noteStructElem);
+							$noteStructElem->addObjref($noteStructParent, $annotObjNum);
+						}
 
 						$annot = '';
 						$pl['opt'] = array_change_key_case($pl['opt'], CASE_LOWER);
@@ -655,7 +801,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						$annot .= ' /CreationDate ' . $this->writer->string('D:' . date('YmdHis'));
 						$annot .= ' /Border [0 0 0]';
 
-						if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+						if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
 							$annot .= ' /F 28';
 							$annot .= ' /CA 1';
 						} elseif ($pl['opt']['ca'] > 0) {
@@ -714,6 +860,14 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						}
 
 						$annot .= ' /P ' . $pl['pageobj'] . ' 0 R';
+
+						// PDF/UA-1 — /StructParent associates this annotation with
+						// the Note struct element in the structure tree (singular key,
+						// not the array-indexed /StructParents used on page dicts).
+						if ($noteStructParent !== null) {
+							$annot .= ' /StructParent ' . $noteStructParent;
+						}
+
 						$annot .= '>>';
 						$this->writer->write($annot);
 						$this->writer->write('endobj');
@@ -773,7 +927,42 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 				// Active Forms
 				if (count($this->form->forms) > 0) {
+					// PDF/UA-1 — pre-assign /StructParent integers for widget annotations
+					// on this page before _putFormItems() writes their dicts. The
+					// annotParentCounter is shared with sticky-note Note struct elements
+					// (allocated above) ensuring unique integers across all OBJR-keyed
+					// ParentTree entries.
+					if ($this->mpdf->PDFUA) {
+						foreach ($this->form->forms as $ref => $frm) {
+							if (isset($frm['page']) && $frm['page'] == $n) {
+								$this->form->forms[$ref]['structParent']
+									= $this->ua->getStructureTree()->reserveAnnotStructParent();
+							}
+						}
+					}
+
 					$this->form->_putFormItems($n, $hPt);
+
+					// PDF/UA-1 — after _putFormItems() has captured each widget's PDF
+					// object number into forms[$ref]['obj'], create a Form struct element
+					// as a child of the Document root and register it in the ParentTree.
+					// This must happen before StructureWriter::writeStructTree() runs.
+					if ($this->mpdf->PDFUA) {
+						foreach ($this->form->forms as $ref => $frm) {
+							if (isset($frm['page'], $frm['structParent'], $frm['obj'])
+								&& $frm['page'] == $n
+							) {
+								$this->ua->getStructureTree()->open('Form', []);
+								$formElem = $this->ua->getStructureTree()->getCurrent();
+								$this->ua->getStructureTree()->close();
+								$formElem->addObjref($frm['structParent'], $frm['obj']);
+								$this->ua->getStructureTree()->registerAnnotStructParent(
+									$frm['structParent'],
+									$formElem
+								);
+							}
+						}
+					}
 				}
 			}
 		}

@@ -406,6 +406,78 @@ class Td extends Tag
 		unset($c);
 		$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['s'] = 0;
 
+		// Push the TD struct element here (parse time) as a child of the current
+		// TR. _tableWrite() runs after the parse-time stack has unwound, so we
+		// stash a reference on the cell dict; addContentForElement() then attaches
+		// the MCID directly to the stored reference at render time.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		// ISO 14289-1:2014 §7.5 — table header associations (Matterhorn 09-004/005).
+		if ($this->mpdf->PDFUA) {
+			$tdAttrs = [];
+			if (!empty($attr['HEADERS'])) {
+				// Each token in /Headers must be byte-identical to the /ID value
+				// Th.php writes on the matching TH; HTML id values may contain
+				// characters illegal in PDF names (parens, slash, %, whitespace …)
+				// so we normalise via the same helper Th.php uses, otherwise AT
+				// cannot cross-reference TD-to-TH.
+				$rawHeaders = (string) $attr['HEADERS'];
+				if (strlen($rawHeaders) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH) {
+					// UA1 audit M-1 — bound the input the same way aria-* attributes are bounded.
+					$this->ua->addWarning(
+						'TD headers="" exceeded ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH
+						. ' bytes; ignored to prevent memory amplification (UA1 audit M-1).'
+					);
+				} else {
+					$ids = preg_split(
+						'/\s+/',
+						trim($rawHeaders),
+						\Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS + 1,
+						PREG_SPLIT_NO_EMPTY
+					);
+					if (is_array($ids) && !empty($ids)) {
+						if (count($ids) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS) {
+							$this->ua->addWarning(
+								'TD headers="" had more than ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS
+								. ' IDs; truncated (UA1 audit M-1).'
+							);
+							$ids = array_slice($ids, 0, \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS);
+						}
+						$sanitised = [];
+						foreach ($ids as $rawId) {
+							$sanitised[] = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($rawId);
+						}
+						$tdAttrs['Headers'] = $sanitised;
+					}
+				}
+			}
+			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the same
+			// number of columns once colspan and rowspan are taken into account.
+			// veraPDF reads /ColSpan and /RowSpan off TD/TH (defaulting to 1); a
+			// row using colspan="3" without /ColSpan is reported as 1-column wide
+			// and the row-equality check fails (§7.2 test 43).
+			if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
+				$tdAttrs['ColSpan'] = (int) $attr['COLSPAN'];
+			}
+			if (isset($attr['ROWSPAN']) && preg_match('/^\d+$/', $attr['ROWSPAN']) && $attr['ROWSPAN'] > 1) {
+				$tdAttrs['RowSpan'] = (int) $attr['ROWSPAN'];
+			}
+			$this->ua->getStructureTree()->open('TD', $tdAttrs);
+			$tdElem = $this->ua->getStructureTree()->getCurrent();
+			$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem'] = $tdElem;
+
+			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
+			if (!empty($attr['ID'])) {
+				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $tdElem);
+			}
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($tdElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
+		}
+
 		$cs = $rs = 1;
 		if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
 			$cs = $this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['colspan'] = $attr['COLSPAN'];
@@ -437,6 +509,14 @@ class Td extends Tag
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// Pop the TD pushed in open() to keep the parse-time struct stack balanced;
+		// _tableWrite() emits BDC/EMC against the stored pdfua_struct_elem reference.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->close();
+		}
+
 		if ($this->mpdf->tableLevel) {
 			$this->mpdf->lastoptionaltag = 'TR';
 			unset($this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl]);

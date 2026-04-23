@@ -1,0 +1,50 @@
+<style>
+table.bpmTopnTailC { border: 0.1mm solid #888888; border-collapse: collapse; }
+table.bpmTopnTailC th, table.bpmTopnTailC td { border: 0.1mm solid #888888; padding: 4pt; }
+table.bpmTopnTailC tr.headerrow { background-color: #DDDDDD; font-weight: bold; }
+table.bpmTopnTailC tr.oddrow { background-color: #FFFFFF; }
+table.bpmTopnTailC tr.evenrow { background-color: #F4F4F4; }
+</style>
+
+<h1>mPDF</h1>
+<h2>Justification</h2>
+
+<h4>Tables</h4>
+<p>Text can be justified in table cells using inline or stylesheet CSS.</p>
+<table class="bpmTopnTailC"><thead>
+<tr class="headerrow"><th id="col1">Col Header 1</th>
+<td><p>Second column header</p></td>
+<td>Third column header</td>
+</tr>
+</thead><tbody>
+<tr class="oddrow"><th id="row1">Row header 1</th>
+<td headers="col1 row1">This is data</td>
+<td headers="col1 row1">This is data</td>
+</tr>
+<tr class="evenrow"><th id="row2">Row header 2</th>
+<td headers="col1 row2"><p>This is data</p></td>
+<td headers="col1 row2"><p>This is data</p></td>
+</tr>
+<tr class="oddrow"><th id="row3">Row header 3</th>
+<td headers="col1 row3"><p>This is long data</p></td>
+<td headers="col1 row3">This is data</td>
+</tr>
+<tr class="evenrow"><th id="row4">Row header 4</th>
+<td headers="col1 row4" style="text-align:justify;"><p>Proin aliquet lorem id felis. Curabitur vel libero at mauris nonummy tincidunt. Donec imperdiet. Vestibulum sem sem, lacinia vel, molestie et, laoreet eget, urna.</p></td>
+<td headers="col1 row4"><p>This is data</p></td>
+</tr>
+</tbody></table>
+
+<h4>Justification with Long Words</h4>
+<h5>Should not split</h5>
+<p>Maecenas feugiat pede vel risus. Nulla et lectus eleifend <i>verylongwordthatwontsplit</i> neque sit amet erat</p>
+<p>Maecenas feugiat pede vel risus. Nulla et lectus eleifend et <i>verylongwordthatwontsplit</i> neque sit amet erat</p>
+
+<h5>Non-breaking Space</h5>
+<p>The next example has a non-breaking space between eleifend and the very long word.</p>
+<p>Maecenas feugiat pede vel risus. Nulla et lectus eleifend&nbsp;verylongwordthatwontsplitanywhere neque sit amet erat</p>
+
+<h4>Justification with Mixed Styles</h4>
+<p>This is <s>strikethrough</s> in <b><s>block</s></b> and <small>small <s>strikethrough</s> in <i>small span</i></small> and <big>big <s>strikethrough</s> in big span</big> and then <u>underline</u> but out of span again but <font color="#000088">blue</font> font and text.</p>
+
+<p>This is a <font color="#008800">green reference<sup>32-47</sup></font> and <u>underlined reference<sup>32-47</sup></u> then reference<sub>32-47</sub> and <u>underlined reference<sub>32-47</sub></u> then <s>Strikethrough reference<sup>32-47</sup></s> and <s>strikethrough reference<sub>32-47</sub></s> and then more text.</p>

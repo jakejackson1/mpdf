@@ -906,6 +906,174 @@ abstract class BlockTag extends Tag
 
 		$this->mpdf->x = $this->mpdf->lMargin + $currblk['outer_left_margin'];
 
+		// Push a struct element for this block onto the struct tree. The struct
+		// type is determined from the HTML tag and optional ROLE attribute.
+		// Float blocks default to Artifact (no accessible reading order); role or
+		// aria-label overrides this to produce a real struct element.
+		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
+			$structType = null;
+			// Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
+			if (!empty($attr['CLASS'])) {
+				foreach (explode(' ', strtolower($attr['CLASS'])) as $cls) {
+					$tocType = \Mpdf\Ua\StructType::fromCssClass($cls);
+					if ($tocType !== null) {
+						$structType = $tocType;
+						break;
+					}
+				}
+			}
+			if ($structType === null) {
+				$structType = \Mpdf\Ua\StructType::fromHtmlTag($tag, $attr);
+			}
+
+			// ROLE attribute ARIA overrides for block elements
+			if (!empty($attr['ROLE'])) {
+				$role = strtolower($attr['ROLE']);
+				if ($role === 'none' || $role === 'presentation' || $role === 'separator') {
+					$structType = '__artifact__';
+				} elseif ($role === 'heading') {
+					$level = isset($attr['ARIA-LEVEL']) ? (int) $attr['ARIA-LEVEL'] : 2;
+					$structType = 'H' . max(1, min(6, $level));
+				} else {
+					$ariaRoleMap = [
+						'list'           => 'L',
+						'listitem'       => 'LI',
+						'table'          => 'Table',
+						'grid'           => 'Table',
+						'row'            => 'TR',
+						'columnheader'   => 'TH',
+						'rowheader'      => 'TH',
+						'cell'           => 'TD',
+						'gridcell'       => 'TD',
+						'figure'         => 'Figure',
+						'img'            => 'Figure',
+						'note'           => 'Note',
+						'doc-footnote'   => 'Note',
+						'link'           => 'Link',
+						'article'        => 'Art',
+						'doc-chapter'    => 'Sect',
+						'region'         => 'Sect',
+						'navigation'     => 'Sect',
+						'main'           => 'Div',
+						'banner'         => 'Sect',
+						'complementary'  => 'Sect',
+						'contentinfo'    => 'Sect',
+						'group'          => 'Div',
+						'paragraph'      => 'P',
+						'term'           => 'Span',
+						'definition'     => 'Span',
+						// 'doc-title' is the document's primary heading (DPUB-ARIA).
+						// Map to H1 — the standard PDF struct type for a top-level
+						// heading — rather than the literal 'Title' which is NOT in
+						// ISO 32000-1 §14.8 Tables 333–335 and would throw via
+						// StructType::isValid() at StructureTree::open().
+						'doc-title'      => 'H1',
+					];
+					if (isset($ariaRoleMap[$role])) {
+						$structType = $ariaRoleMap[$role];
+					}
+				}
+			}
+
+			// Float blocks without explicit ARIA role → Artifact (reading order unknown)
+			$isFloat = isset($properties['FLOAT'])
+				&& in_array(strtoupper($properties['FLOAT']), ['LEFT', 'RIGHT']);
+			if ($isFloat && !isset($attr['ROLE']) && !isset($attr['ARIA-LABEL'])) {
+				$structType = '__artifact__';
+			}
+
+			// aria-hidden="true" → Artifact suppression context
+			if (isset($attr['ARIA-HIDDEN']) && strtolower($attr['ARIA-HIDDEN']) === 'true') {
+				$structType = '__artifact__';
+			}
+
+			// PDF/UA-1 §7.4.2 rule 1 — heading sequence enforcement.
+			// The first heading must be H1; descending sequences must not skip
+			// intervening levels (e.g. H1→H3 is invalid; auto-clamp to H1→H2).
+			// Only applies to struct types H1-H6 outside tables (tableLevel guard
+			// is already applied at the if ($this->mpdf->PDFUA …) gate above).
+			if ($structType !== null && $structType !== '__artifact__'
+				&& preg_match('/^H([1-6])$/', $structType, $hm)
+			) {
+				$requestedLevel = (int) $hm[1];
+				$lastLevel      = $this->ua->getLastHeadingLevel();
+
+				if ($lastLevel === 0 && $requestedLevel > 1) {
+					// First heading in the document is not H1 — violation.
+					if ($this->mpdf->PDFUAauto) {
+						$this->ua->addWarning(
+							'PDF/UA-1 §7.4.2: first heading must be H1; '
+							. $structType . ' auto-promoted to H1.'
+						);
+						$structType = 'H1';
+					} else {
+						throw new \Mpdf\MpdfException(
+							'PDF/UA-1 §7.4.2: first heading in the document must be H1; '
+							. $structType . ' found. Enable PDFUAauto to auto-correct.'
+						);
+					}
+				} elseif ($lastLevel > 0 && $requestedLevel > $lastLevel + 1) {
+					// Descending sequence skips a level — violation.
+					$clampedLevel = $lastLevel + 1;
+					if ($this->mpdf->PDFUAauto) {
+						$this->ua->addWarning(
+							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+							. ' to ' . $structType . '; auto-clamped to H' . $clampedLevel . '.'
+						);
+						$structType = 'H' . $clampedLevel;
+					} else {
+						throw new \Mpdf\MpdfException(
+							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+							. ' to ' . $structType . ' (skips H' . $clampedLevel . '). '
+							. 'Enable PDFUAauto to auto-correct.'
+						);
+					}
+				}
+
+				// Record the final assigned level (after any clamping).
+				if (preg_match('/^H([1-6])$/', $structType, $fm)) {
+					$this->ua->setLastHeadingLevel((int) $fm[1]);
+				}
+			}
+
+			if ($structType === '__artifact__') {
+				$this->ua->getStructureTree()->openArtifact();
+				$currblk['pdfua_artifact'] = true;
+				$currblk['pdfua_type']     = null;
+			} elseif ($structType !== null) {
+				$structAttrs = [];
+				if (isset($attr['LANG'])) {
+					$structAttrs['Lang'] = $attr['LANG'];
+				}
+				if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+					$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+				}
+				$this->ua->getStructureTree()->open($structType, $structAttrs);
+				$currblk['pdfua_type'] = $structType;
+				$currblk['pdfua_artifact'] = false;
+
+				// ARIA ID registration and deferred-reference queuing
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				// Capture the struct element reference so the per-page lazy opener
+				// (Mpdf::ensureBlockBdcOpen) can call addContentForElement() against
+				// THIS block element each time content emits on a new page. Mirrors
+				// Tag/Td.php:434.
+				$currblk['pdfua_struct_elem'] = $elem;
+				if (!empty($attr['ID'])) {
+					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+				}
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+						  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+					if (!empty($attr[$k])) {
+						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
+					}
+				}
+			} else {
+				$currblk['pdfua_type']     = null;
+				$currblk['pdfua_artifact'] = false;
+			}
+		}
+
 		/* -- BACKGROUNDS -- */
 		if (!empty($properties['BACKGROUND-IMAGE']) && !$this->mpdf->kwt && !$this->mpdf->ColActive && !$this->mpdf->keep_block_together) {
 			$ret = $this->mpdf->SetBackground($properties, $currblk['inner_width']);
@@ -1038,8 +1206,14 @@ abstract class BlockTag extends Tag
 
 			$this->mpdf->listitem = [];
 
-			// Listitem-type
-			$this->mpdf->_setListMarker($currblk['list_style_type'], $currblk['list_style_image'], $currblk['list_style_position']);
+			// Listitem-type — guard with isset() because a bare <li> outside a <ul>/<ol>
+			// may arrive here without the list_style_* keys being initialised (mPDF
+			// PHP-5.6-compatible null-coalesce with ternary; long-standing latent notice
+			// exposed by PHPUnit's strict error handler).
+			$listStyleType     = isset($currblk['list_style_type'])     ? $currblk['list_style_type']     : 'disc';
+			$listStyleImage    = isset($currblk['list_style_image'])    ? $currblk['list_style_image']    : 'none';
+			$listStylePosition = isset($currblk['list_style_position']) ? $currblk['list_style_position'] : 'outside';
+			$this->mpdf->_setListMarker($listStyleType, $listStyleImage, $listStylePosition);
 		}
 
 		// mPDF 6 Bidirectional formatting for block elements
@@ -1262,6 +1436,24 @@ abstract class BlockTag extends Tag
 				(isset($this->mpdf->blk[$this->mpdf->blklvl]['direction']) ? $this->mpdf->blk[$this->mpdf->blklvl]['direction'] : 'ltr')
 			);
 
+			// PDF/UA-1 — restore pdfua_struct_open/pdfua_artifact_open flags for empty
+			// blocks (same reasoning as printbuffer() — newFlowingBlock() resets them
+			// to false/false on every call).
+			if ($this->mpdf->PDFUA) {
+				$blk = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
+				if (!empty($blk['pdfua_type']) && empty($blk['pdfua_artifact'])) {
+					$this->mpdf->flowingBlockAttr['pdfua_struct_open'] = true;
+					$this->mpdf->flowingBlockAttr['pdfua_type']        = $blk['pdfua_type'];
+					// Restore the captured struct element ref so ensureBlockBdcOpen()
+					// can attach MCIDs per page.
+					$this->mpdf->flowingBlockAttr['pdfua_struct_elem'] = isset($blk['pdfua_struct_elem'])
+						? $blk['pdfua_struct_elem']
+						: null;
+				} elseif (!empty($blk['pdfua_artifact'])) {
+					$this->mpdf->flowingBlockAttr['pdfua_artifact_open'] = true;
+				}
+			}
+
 			$this->mpdf->finishFlowingBlock(true); // true = END of flowing block
 			$this->mpdf->PaintDivBB('', $blockstate);
 		} else {
@@ -1424,6 +1616,18 @@ abstract class BlockTag extends Tag
 				$this->mpdf->AddPage();
 			}
 			return;
+		}
+
+		// Pop the struct element from the tree. Must happen after the block content
+		// is flushed (printbuffer/finishFlowingBlock above) but before blklvl is
+		// decremented so pdfua_type is still accessible.
+		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
+			$blk = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
+			if (!empty($blk['pdfua_artifact'])) {
+				$this->ua->getStructureTree()->closeArtifact();
+			} elseif (!empty($blk['pdfua_type'])) {
+				$this->ua->getStructureTree()->close();
+			}
 		}
 
 		if ($this->mpdf->blklvl > 0) { // ==0 SHOULDN'T HAPPEN - NOT XHTML

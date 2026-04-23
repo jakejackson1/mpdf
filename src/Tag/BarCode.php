@@ -243,6 +243,19 @@ class BarCode extends Tag
 			$objattr['barcode_height'] = $h;
 			$objattr['barcode_width'] = $w;
 
+			// Carry id/aria-* through serialised $objattr because the Figure
+			// struct element wrapping the barcode is created at render time
+			// (printobjectbuffer), not at parse time.
+			if ($this->mpdf->PDFUA) {
+				$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+					'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+					if (!empty($attr[$ariaKey])) {
+						$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
+					}
+				}
+			}
+
 			/* -- CSS-IMAGE-FLOAT -- */
 			if (!$this->mpdf->ColActive && !$this->mpdf->tableLevel && !$this->mpdf->listlvl && !$this->mpdf->kwt) {
 				if (isset($properties['FLOAT']) && (strtoupper($properties['FLOAT']) === 'RIGHT' || strtoupper($properties['FLOAT']) === 'LEFT')) {

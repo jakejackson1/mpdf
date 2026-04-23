@@ -1,0 +1,49 @@
+<!--mpdf
+
+<htmlpageheader name="myHTMLHeader1">
+<table width="100%" style="border-bottom: 1px solid #000000; vertical-align: bottom; font-family: serif; font-size: 9pt; color: #000088;"><tr>
+<td width="50%">Left header p <span style="font-size:14pt;">{PAGENO}</span></td>
+<td width="50%" style="text-align: right;"><span style="font-weight: bold;">myHTMLHeader1</span></td>
+</tr></table>
+</htmlpageheader>
+
+<htmlpageheader name="myHTMLHeader1Even">
+<table width="100%" style="border-bottom: 1px solid #000000; vertical-align: bottom; font-family: serif; font-size: 9pt; color: #000088;"><tr>
+<td width="50%"><span style="font-weight: bold;">myHTMLHeader1Even</span></td>
+<td width="50%" style="text-align: right;">Inner header p <span style="font-size:14pt;">{PAGENO}</span></td>
+</tr></table>
+</htmlpageheader>
+
+<htmlpageheader name="myHTMLHeader2">
+<table width="100%" style="border-bottom: 1px solid #880000; vertical-align: bottom; font-family: sans; font-size: 9pt; color: #880000;"><tr>
+<td width="50%">myHTMLHeader2 p.<span style="font-size:14pt;">{PAGENO}</span></td>
+<td width="50%" style="text-align: right;"><span style="font-weight: bold;">myHTMLHeader2</span></td>
+</tr></table>
+</htmlpageheader>
+
+<htmlpageheader name="myHTMLHeader2Even">
+<table width="100%" style="border-bottom: 1px solid #880000; vertical-align: bottom; font-family: sans; font-size: 9pt; color: #880000;"><tr>
+<td width="50%"><span style="font-weight: bold;">myHTMLHeader2Even</span></td>
+<td width="50%" style="text-align: right;">Inner header p <span style="font-size:14pt;">{PAGENO}</span></td>
+</tr></table>
+</htmlpageheader>
+
+mpdf-->
+
+<!--mpdf
+<sethtmlpageheader name="myHTMLHeader1" page="O" value="on" show-this-page="1" />
+<sethtmlpageheader name="myHTMLHeader1Even" page="E" value="on" />
+mpdf-->
+
+<h1>mPDF</h1>
+<h2>Headers and Footers Method 4</h2>
+<p>Nulla felis erat, imperdiet eu, ullamcorper non, nonummy quis, elit. Suspendisse potenti. Ut a eros at ligula vehicula pretium. Maecenas feugiat pede vel risus. Nulla et lectus. Fusce eleifend neque sit amet erat. Integer consectetuer nulla non orci. Morbi feugiat pulvinar dolor. Cras odio. Donec mattis, nisi id euismod auctor, neque metus pellentesque risus, at eleifend lacus sapien et risus.</p>
+<pagebreak />
+
+<h2>Headers and Footers Method 4 (page 2)</h2>
+<p>Nulla felis erat, imperdiet eu, ullamcorper non, nonummy quis, elit. Suspendisse potenti. Ut a eros at ligula vehicula pretium. Maecenas feugiat pede vel risus. Nulla et lectus. Fusce eleifend neque sit amet erat. Integer consectetuer nulla non orci. Morbi feugiat pulvinar dolor. Cras odio. Donec mattis, nisi id euismod auctor, neque metus pellentesque risus, at eleifend lacus sapien et risus.</p>
+
+<pagebreak odd-header-name="html_myHTMLHeader2" odd-header-value="1" even-header-name="html_myHTMLHeader2Even" even-header-value="1" />
+
+<h2>Headers and Footers Method 4 (page 3)</h2>
+<p>Nulla felis erat, imperdiet eu, ullamcorper non, nonummy quis, elit. Suspendisse potenti. Ut a eros at ligula vehicula pretium. Maecenas feugiat pede vel risus. Nulla et lectus.</p>

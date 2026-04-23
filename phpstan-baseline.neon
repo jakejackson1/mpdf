@@ -283,19 +283,7 @@ parameters:
 			path: src/Mpdf.php
 
 		-
-			message: '#^Binary operation "\+" between string and \(float\|int\) results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 2
-			path: src/Mpdf.php
-
-		-
 			message: '#^Binary operation "\-" between int\<0, max\> and string results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Mpdf.php
-
-		-
-			message: '#^Binary operation "\-" between string and \(float\|int\) results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
 			path: src/Mpdf.php
