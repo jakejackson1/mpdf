@@ -51,11 +51,11 @@ private function getInvoiceHtml()
 }
 ```
 
-**Font mode**: PDF/UA tests must NOT use `mode='c'` (core fonts). Do not extend `BaseMpdfTest` directly (it defaults to `['mode' => 'c']`). Instead, create a `PdfUaTestCase` base class for the `Mpdf\Ua1` namespace that initialises mPDF with embedded TrueType fonts:
+**Font mode**: PDF/UA tests must NOT use `mode='c'` (core fonts). Do not extend `BaseMpdfTest` directly (it defaults to `['mode' => 'c']`). Instead, create a `PdfUaTestCase` base class for the `Mpdf\Ua` namespace that initialises mPDF with embedded TrueType fonts:
 
 ```php
-// tests/Mpdf/Ua1/PdfUaTestCase.php
-namespace Mpdf\Ua1;
+// tests/Mpdf/Ua/PdfUaTestCase.php
+namespace Mpdf\Ua;
 
 abstract class PdfUaTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
@@ -63,10 +63,10 @@ abstract class PdfUaTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
     {
         // NOTE: 'title' is NOT a ConfigVariables key — passing it in the config array
         // causes it to be silently dropped by array_intersect_key() in the constructor.
-        // Set $mpdf->title directly after construction instead.
+        // Call $mpdf->SetTitle(...) after construction instead.
         $defaults = ['PDFUA' => true];
         $mpdf = new \Mpdf\Mpdf(array_merge($defaults, $config));
-        $mpdf->title = 'Test Document';  // must be set as a property, not a config key
+        $mpdf->SetTitle('Test Document');  // use the setter — 'title' is not a ConfigVariables key
         return $mpdf;
     }
 
@@ -86,7 +86,7 @@ protected function makeMpdf(array $config = [])
     // NOTE: 'title' is NOT a ConfigVariables key and must NOT be in the config array.
     $defaults = ['PDFUA' => true];
     $mpdf = new \Mpdf\Mpdf(array_merge($defaults, $config));
-    $mpdf->title = 'Test Document';  // must be set as a property, not a config key
+    $mpdf->SetTitle('Test Document');  // use the setter — 'title' is not a ConfigVariables key
     $mpdf->compress = false;         // disable FlateDecode so content stream assertions work
     return $mpdf;
 }
@@ -109,15 +109,15 @@ XMP metadata streams are NOT compressed by default and remain string-matchable w
 
 | Class | Covers |
 |---|---|
-| `tests/Mpdf/Ua1/PdfUaTestCase.php` | Base class for all PDF/UA test classes (see above) |
-| `tests/Mpdf/Ua1/MetadataTest.php` | XMP, catalog, viewer prefs, font restrictions (Phases 1–2) |
-| `tests/Mpdf/Ua1/StructureTreeTest.php` | Pure unit tests for `StructureTree` and `StructureElement` (Phase 2) |
-| `tests/Mpdf/Ua1/ContentStreamTest.php` | BDC/EMC operators, balancing, artifact marking (Phases 3–4) |
-| `tests/Mpdf/Ua1/StructureElementsTest.php` | HTML → PDF struct element mapping (Phase 4) |
-| `tests/Mpdf/Ua1/IntegrationTest.php` | Full example-based integration tests (Phase 4) |
-| `tests/Mpdf/Ua1/ValidationTest.php` | Warnings and error throwing for violations (Phase 5) |
+| `tests/Mpdf/Ua/PdfUaTestCase.php` | Base class for all PDF/UA test classes (see above) |
+| `tests/Mpdf/Ua/MetadataTest.php` | XMP, catalog, viewer prefs, font restrictions (Phases 1–2) |
+| `tests/Mpdf/Ua/StructureTreeTest.php` | Pure unit tests for `StructureTree` and `StructureElement` (Phase 2) |
+| `tests/Mpdf/Ua/ContentStreamTest.php` | BDC/EMC operators, balancing, artifact marking (Phases 3–4) |
+| `tests/Mpdf/Ua/StructureElementsTest.php` | HTML → PDF struct element mapping (Phase 4) |
+| `tests/Mpdf/Ua/IntegrationTest.php` | Full example-based integration tests (Phase 4) |
+| `tests/Mpdf/Ua/ValidationTest.php` | Warnings and error throwing for violations (Phase 5) |
 
-All new test classes extend `PdfUaTestCase` in the `Mpdf\Ua1` namespace (matches the composer autoload-dev mapping `"Mpdf\\": "tests/Mpdf"` — files at `tests/Mpdf/Ua1/` resolve to `Mpdf\Ua1\`).
+All new test classes extend `PdfUaTestCase` in the `Mpdf\Ua` namespace (matches the composer autoload-dev mapping `"Mpdf\\": "tests/Mpdf"` — files at `tests/Mpdf/Ua/` resolve to `Mpdf\Ua\`).
 
 ---
 
@@ -125,7 +125,7 @@ All new test classes extend `PdfUaTestCase` in the `Mpdf\Ua1` namespace (matches
 
 PDF/UA-1 tagging requires two parallel systems operating during document generation:
 
-1. **Structure accumulator** — a new `Mpdf\Ua1\StructureTree` class that builds the logical structure in memory as HTML is parsed. Tag handlers push/pop structure elements onto a stack. Each content item gets an MCID (marked content ID integer) that cross-references to a structure element.
+1. **Structure accumulator** — a new `Mpdf\Ua\StructureTree` class that builds the logical structure in memory as HTML is parsed. Tag handlers push/pop structure elements onto a stack. Each content item gets an MCID (marked content ID integer) that cross-references to a structure element.
 
 2. **Content stream tagger** — modified page content emission that wraps each content item in `BDC`/`EMC` operators with its MCID, and wraps artifacts in `BMC`/`BDC`/`EMC` as appropriate.
 
@@ -170,7 +170,7 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
     $this->writer->write('/Metadata ' . $this->mpdf->MetadataRoot . ' 0 R');
 }
 // Required change (Phase 1):
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     $this->writer->write('/Metadata ' . $this->mpdf->MetadataRoot . ' 0 R');
 }
 ```
@@ -190,7 +190,7 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ICCProfile) {
 // Current:
 if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins) {
 // Required change (Phase 1):
-if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->ua->enabled) {
 ```
 
 Inside the block, `DisplayDocTitle` (line 426) is currently only set from `DisplayPreferences` string:
@@ -198,7 +198,7 @@ Inside the block, `DisplayDocTitle` (line 426) is currently only set from `Displ
 // Current:
 if (is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
 // Required change (Phase 1):
-if ($this->mpdf->ua1->enabled || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
+if ($this->mpdf->ua->enabled || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
     $this->writer->write('/DisplayDocTitle true');
 }
 ```
@@ -213,7 +213,7 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
     $annot .= ' /F 28';
 }
 // Required change (Phase 1h or Phase 4):
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     $annot .= ' /F 28';
 }
 ```
@@ -227,7 +227,7 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
     $annot .= ' /CA 1';   // force full opacity
 }
 // Required change (extend same condition for PDFUA):
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     $annot .= ' /F 28';
     $annot .= ' /CA 1';   // force full opacity for accessibility
 }
@@ -244,7 +244,7 @@ For **link annotations** (line 528–529), `/Contents` is currently commented ou
 ```
 Re-enable conditionally for PDFUA only (Phase 4), using captured link text (not the URL at `$pl[4]`):
 ```php
-if ($this->mpdf->ua1->enabled && isset($pl['txt'])) {
+if ($this->mpdf->ua->enabled && isset($pl['txt'])) {
     $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl['txt']);
 }
 ```
@@ -266,7 +266,7 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
     throw new \Mpdf\MpdfException('Core fonts are not allowed in PDF/A1-b or PDFX/1-a files...');
 }
 // Required change (Phase 1g):
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     throw new \Mpdf\MpdfException(
         'Core fonts cannot be used in PDF/UA-1 mode as they cannot be embedded ' .
         '(Times, Helvetica, Courier etc.) — use a TrueType/OpenType font instead.'
@@ -291,7 +291,7 @@ if ($this->PDFA || $this->PDFX) {
     $this->metadataWriter->writeMetadata();
 }
 // Required change (Phase 1d):
-if ($this->PDFA || $this->PDFX || $this->ua1->enabled) {
+if ($this->PDFA || $this->PDFX || $this->ua->enabled) {
     $this->metadataWriter->writeMetadata();
 }
 ```
@@ -324,16 +324,16 @@ if ($this->PDFA || $this->PDFX || $this->ua1->enabled) {
 | `src/Tag/A.php` | Emit Link struct element (href only, not name anchors); set `Contents` key on link annotations; call `structureTree->addObjref()` |
 | `src/Tag/Ul.php`, `Ol.php`, `Li.php` | Push L/LI/Lbl/LBody struct elements |
 | `src/Tag/Abbr.php` (verify exists) | Read `TITLE` attr → `/E` expansion on Span struct element |
-| `src/ServiceFactory.php` | Instantiate `Ua1State` and assign its collaborators (`markedContentHelper`, `structureTree`, `structureWriter`, `ariaIdResolver`, `ligatureActualTextWriter`, `fpdiStructMerger`) |
-| `src/Ua1/Ua1State.php` | **New** — facade holding all PDF/UA-1 state + collaborator references; only UA1 symbol on `Mpdf.php` |
-| `src/Ua1/MarkedContentHelper.php` | **New** — encapsulates BDC/EMC operator emission |
-| `src/Ua1/StructType.php` | **New** — single source of truth for HTML tag → PDF struct type mapping |
-| `src/Ua1/StructureTree.php` | **New** — core structure accumulator |
-| `src/Ua1/StructureElement.php` | **New** — node in the structure tree |
-| `src/Ua1/StructureWriter.php` | **New** — writes struct tree objects at close time |
-| `src/Ua1/AriaIdResolver.php` | **New** — two-pass resolver for ID-referencing ARIA attrs (added by D6) |
-| `src/Ua1/LigatureActualTextWriter.php` | **New** — wraps OTL-shaped runs with /Span /ActualText (added by D1) |
-| `src/Ua1/Import/FpdiStructMerger.php` | **New** — merges tagged-source struct subtrees from FPDI imports (added by D2) |
+| `src/ServiceFactory.php` | Instantiate `UaState` and assign its collaborators (`markedContentHelper`, `structureTree`, `structureWriter`, `ariaIdResolver`, `ligatureActualTextWriter`, `fpdiStructMerger`) |
+| `src/Ua/UaState.php` | **New** — facade holding all PDF/UA-1 state + collaborator references; only UA1 symbol on `Mpdf.php` |
+| `src/Ua/MarkedContentHelper.php` | **New** — encapsulates BDC/EMC operator emission |
+| `src/Ua/StructType.php` | **New** — single source of truth for HTML tag → PDF struct type mapping |
+| `src/Ua/StructureTree.php` | **New** — core structure accumulator |
+| `src/Ua/StructureElement.php` | **New** — node in the structure tree |
+| `src/Ua/StructureWriter.php` | **New** — writes struct tree objects at close time |
+| `src/Ua/AriaIdResolver.php` | **New** — two-pass resolver for ID-referencing ARIA attrs (added by D6) |
+| `src/Ua/LigatureActualTextWriter.php` | **New** — wraps OTL-shaped runs with /Span /ActualText (added by D1) |
+| `src/Ua/Import/FpdiStructMerger.php` | **New** — merges tagged-source struct subtrees from FPDI imports (added by D2) |
 
 ---
 
@@ -353,48 +353,48 @@ After the `'PDFAversion' => '1-B'` line, add:
 
 ### 1b. Property declarations (`src/Mpdf.php`, ~line 82)
 
-All PDF/UA-1 state and collaborators live on a single `\Mpdf\Ua1\Ua1State` facade object instead of being scattered as nine properties on `Mpdf.php`. **No new methods on `Mpdf.php`**, and only **one** new `var` declaration. The `Ua1State` class itself is defined in Phase 2 (see §2a' below).
+All PDF/UA-1 state and collaborators live on a single `\Mpdf\Ua\UaState` facade object instead of being scattered as nine properties on `Mpdf.php`. **No new methods on `Mpdf.php`**, and only **one** new `var` declaration. The `UaState` class itself is defined in Phase 2 (see §2a' below).
 
 Add after the existing `var $ICCProfile;` declaration:
 
 ```php
-var $ua1;   // \Mpdf\Ua1\Ua1State — all PDF/UA-1 state + collaborators
+var $ua;   // \Mpdf\Ua\UaState — all PDF/UA-1 state + collaborators
 ```
 
-Two transient config-intake properties are also declared to keep the existing `ConfigVariables` config-merge loop working without modification — these are read once in the constructor and copied into `$this->ua1`, then not used at runtime:
+Two transient config-intake properties are also declared to keep the existing `ConfigVariables` config-merge loop working without modification — these are read once in the constructor and copied into `$this->ua`, then not used at runtime:
 
 ```php
-var $PDFUA;      // transient — config intake only; read $this->ua1->enabled at runtime
-var $PDFUAauto;  // transient — config intake only; read $this->ua1->auto at runtime
+var $PDFUA;      // transient — config intake only; read $this->ua->enabled at runtime
+var $PDFUAauto;  // transient — config intake only; read $this->ua->auto at runtime
 ```
 
-Initialize in the constructor at the two existing `$this->PDFAXwarnings = [];` reset points (~lines 1134 and 1183) by wiring the injected `$ua1State` service and copying the intake flags:
+Initialize in the constructor at the two existing `$this->PDFAXwarnings = [];` reset points (~lines 1134 and 1183) by wiring the injected `$uaState` service and copying the intake flags:
 ```php
-$this->ua1          = $services['ua1State'];   // injected by ServiceFactory
-$this->ua1->enabled = (bool) $this->ua1->enabled;
-$this->ua1->auto    = (bool) $this->ua1->auto;
-// $this->ua1->warnings / ->structParentsCounter / ->structTreeRootObjNum /
-// ->openedImplicitLI are initialised by Ua1State's own property defaults
+$this->ua          = $services['uaState'];   // injected by ServiceFactory
+$this->ua->enabled = (bool) $this->ua->enabled;
+$this->ua->auto    = (bool) $this->ua->auto;
+// $this->ua->warnings / ->structParentsCounter / ->structTreeRootObjNum /
+// ->openedImplicitLI are initialised by UaState's own property defaults
 ```
 
 **Access pattern**:
 - Config-time: users pass `['PDFUA' => true, 'PDFUAauto' => true]` to the `Mpdf` constructor — unchanged, backwards-compatible.
-- Runtime: writer classes and tag handlers read `$this->mpdf->ua1->enabled`, `$this->mpdf->ua1->auto`, `$this->mpdf->ua1->warnings`, etc.
-- Code inside `Mpdf.php` reads `$this->ua1->enabled`.
-- Tag handlers call `$this->mpdf->ua1->markedContentHelper->begin(...)` / `->end()`.
-- The depth balance check in `_enddoc()` reads `$this->ua1->markedContentHelper->getDepth()`.
-- Warnings are recorded via `$this->mpdf->ua1->addWarning($msg)` (replaces the old `$this->mpdf->addPDFUAwarning($msg)`).
-- `/StructParents` allocation uses `$this->mpdf->ua1->nextStructParents()` (replaces the old `$this->mpdf->nextStructParents()`).
+- Runtime: writer classes and tag handlers read `$this->mpdf->ua->enabled`, `$this->mpdf->ua->auto`, `$this->mpdf->ua->warnings`, etc.
+- Code inside `Mpdf.php` reads `$this->ua->enabled`.
+- Tag handlers call `$this->mpdf->ua->markedContentHelper->begin(...)` / `->end()`.
+- The depth balance check in `_enddoc()` reads `$this->ua->markedContentHelper->getDepth()`.
+- Warnings are recorded via `$this->mpdf->ua->addWarning($msg)` (replaces the old `$this->mpdf->addPDFUAwarning($msg)`).
+- `/StructParents` allocation uses `$this->mpdf->ua->nextStructParents()` (replaces the old `$this->mpdf->nextStructParents()`).
 
 ### 1c. XMP metadata (`src/Writer/MetadataWriter.php`, after line 135)
 
 After the closing `}` of the `elseif ($this->mpdf->PDFA)` block, add a separate `if` (not `elseif` — UA and A can coexist):
 ```php
 // PDF/UA-1 XMP namespace
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     if (empty($this->mpdf->title)) {
-        if ($this->mpdf->ua1->auto) {
-            $this->mpdf->ua1->addWarning('PDF/UA-1 requires a document title. Set the \'title\' config option.');
+        if ($this->mpdf->ua->auto) {
+            $this->mpdf->ua->addWarning('PDF/UA-1 requires a document title. Set the \'title\' config option.');
         } else {
             throw new \Mpdf\MpdfException('PDF/UA-1 requires a document title. Set the \'title\' config option.');
         }
@@ -412,7 +412,7 @@ Note: `dc:title` is already written unconditionally from `$this->mpdf->title` on
 
 ```php
 // Before: if ($this->PDFA || $this->PDFX) {
-if ($this->PDFA || $this->PDFX || $this->ua1->enabled) {
+if ($this->PDFA || $this->PDFX || $this->ua->enabled) {
     $this->metadataWriter->writeMetadata();
 }
 ```
@@ -422,17 +422,17 @@ if ($this->PDFA || $this->PDFX || $this->ua1->enabled) {
 **Extend metadata reference (~line 381):**
 ```php
 // Before: if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     $this->writer->write('/Metadata ' . $this->mpdf->MetadataRoot . ' 0 R');
 }
 ```
 
 **Add MarkInfo and StructTreeRoot ref after that block:**
 ```php
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     $this->writer->write('/MarkInfo <</Marked true /Suspects false>>');
-    if ($this->mpdf->ua1->structTreeRootObjNum) {
-        $this->writer->write('/StructTreeRoot ' . $this->mpdf->ua1->structTreeRootObjNum . ' 0 R');
+    if ($this->mpdf->ua->structTreeRootObjNum) {
+        $this->writer->write('/StructTreeRoot ' . $this->mpdf->ua->structTreeRootObjNum . ' 0 R');
     }
 }
 ```
@@ -442,13 +442,13 @@ if ($this->mpdf->ua1->enabled) {
 Extend the ViewerPreferences block to always open for PDF/UA:
 ```php
 // Before: if ($this->mpdf->DisplayPreferences || ... || $this->mpdf->mirrorMargins) {
-if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->ua->enabled) {
 ```
 
 Inside the block, extend the `DisplayDocTitle` check:
 ```php
 // Before: if (is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
-if ($this->mpdf->ua1->enabled || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
+if ($this->mpdf->ua->enabled || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
     $this->writer->write('/DisplayDocTitle true');
 }
 ```
@@ -459,7 +459,7 @@ Core fonts (Times, Helvetica, Courier, etc.) are referenced by name in mPDF with
 
 ```php
 // Before: if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     throw new \Mpdf\MpdfException(
         'Core fonts cannot be used in PDF/UA-1 mode as they cannot be embedded ' .
         '(Times, Helvetica, Courier etc.) — use a TrueType/OpenType font instead.'
@@ -473,8 +473,8 @@ if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
 
 Inside the `for ($n = 1; $n <= $nb; $n++)` loop, just before the `$this->writer->write('/Contents ...')` line:
 ```php
-if ($this->mpdf->ua1->enabled) {
-    $structParents = $this->mpdf->ua1->nextStructParents();  // sequential 0-based integer
+if ($this->mpdf->ua->enabled) {
+    $structParents = $this->mpdf->ua->nextStructParents();  // sequential 0-based integer
     $this->mpdf->pageDim[$n]['structParents'] = $structParents;
     $this->writer->write('/StructParents ' . $structParents);
 }
@@ -484,8 +484,8 @@ The `pageDim[$n]['structParents']` value is stored so `StructureWriter` can buil
 
 `/Tabs /S` (tab order = structure order) — **required on every page dict** (Matterhorn 28-001), not just annotated pages. Write it unconditionally alongside `/StructParents`:
 ```php
-if ($this->mpdf->ua1->enabled) {
-    $structParents = $this->mpdf->ua1->nextStructParents();
+if ($this->mpdf->ua->enabled) {
+    $structParents = $this->mpdf->ua->nextStructParents();
     $this->mpdf->pageDim[$n]['structParents'] = $structParents;
     $this->writer->write('/StructParents ' . $structParents);
     $this->writer->write('/Tabs /S');
@@ -494,7 +494,7 @@ if ($this->mpdf->ua1->enabled) {
 
 **Common mistake to avoid**: the existing draft placed `/Tabs /S` inside the `if ($annotsnum || $formsnum)` block. This is wrong — veraPDF will fail on every non-annotated page.
 
-### Phase 1 Tests — `tests/Mpdf/Ua1/MetadataTest.php` (create)
+### Phase 1 Tests — `tests/Mpdf/Ua/MetadataTest.php` (create)
 
 Mirror the structure of `tests/Mpdf/PDFATest.php`. Use `['mode' => 'c']` only when core font testing is needed (see below).
 
@@ -504,8 +504,8 @@ Mirror the structure of `tests/Mpdf/PDFATest.php`. Use `['mode' => 'c']` only wh
 | `testCatalogContainsMarkInfo` | Output contains `/MarkInfo <</Marked true /Suspects false>>` |
 | `testCatalogContainsMetadataRef` | Output contains `/Metadata … 0 R` |
 | `testViewerPreferencesDisplayDocTitle` | Output contains `/DisplayDocTitle true` |
-| `testThrowsWhenTitleMissing` | `MpdfException` thrown when `title` unset and `PDFUAauto=false`. **Construction note**: must construct `Mpdf` directly (NOT via `makeMpdf()`) so the title property is NOT pre-set. Pass `['PDFUA' => true, 'PDFUAauto' => false]` to the constructor; do NOT assign `$mpdf->title` before calling `Output()`. |
-| `testWarnsWhenTitleMissingWithAuto` | No exception; `$mpdf->ua1->warnings` non-empty when `PDFUAauto=true`. Same direct-construction approach as `testThrowsWhenTitleMissing` — do not use `makeMpdf()`. |
+| `testThrowsWhenTitleMissing` | `MpdfException` thrown when `title` unset and `PDFUAauto=false`. **Construction note**: must construct `Mpdf` directly (NOT via `makeMpdf()`) so the title property is NOT pre-set. Pass `['PDFUA' => true, 'PDFUAauto' => false]` to the constructor; do NOT call `$mpdf->SetTitle()` before calling `Output()`. |
+| `testWarnsWhenTitleMissingWithAuto` | No exception; `$mpdf->ua->warnings` non-empty when `PDFUAauto=true`. Same direct-construction approach as `testThrowsWhenTitleMissing` — do not use `makeMpdf()`. |
 | `testCoreFontsNotAllowed` | Construction with `['PDFUA'=>true, 'mode'=>'c']` succeeds; calling `$mpdf->WriteHTML('<p>x</p>'); $mpdf->Output(null, 'S')` throws `MpdfException` — the check fires in `FontWriter::writeFonts()` at output time, not at `__construct`. |
 | `testTabsSOnEveryPage` | Output contains `/Tabs /S` in every page dict — including pages with no annotations |
 | `testStructParentsOnEveryPage` | Each page dict in the output contains `/StructParents` |
@@ -528,14 +528,14 @@ vendor/bin/phpunit --group=snapshot        # snapshot suite must stay green
 
 New classes that accumulate the logical document structure in memory during HTML parsing.
 
-### 2a0. `src/Ua1/Ua1State.php` (new) — facade holding all PDF/UA-1 state
+### 2a0. `src/Ua/UaState.php` (new) — facade holding all PDF/UA-1 state
 
-`Mpdf.php` holds exactly one UA1 property (`var $ua1;`). Everything else — the three config-like flags, the warning accumulator, the struct-parents counter, the `StructTreeRoot` object number, the implicit-LI flag, and references to all UA1 collaborators (`MarkedContentHelper`, `StructureTree`, `StructureWriter`, `AriaIdResolver`) — lives here. Public properties (same idiom as `StructureElement` / `StructureTree`); no `Strict` trait.
+`Mpdf.php` holds exactly one UA1 property (`var $ua;`). Everything else — the three config-like flags, the warning accumulator, the struct-parents counter, the `StructTreeRoot` object number, the implicit-LI flag, and references to all UA1 collaborators (`MarkedContentHelper`, `StructureTree`, `StructureWriter`, `AriaIdResolver`) — lives here. Public properties (same idiom as `StructureElement` / `StructureTree`); no `Strict` trait.
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
-class Ua1State
+class UaState
 {
     // --- config intake (copied from Mpdf->PDFUA / PDFUAauto by the constructor) ---
     public $enabled = false;                 // was Mpdf->$PDFUA
@@ -571,14 +571,14 @@ class Ua1State
 
 **No encapsulation discipline**: properties are public and writers mutate them directly — this matches the existing mPDF idiom (`$this->mpdf->PDFA`, `$this->mpdf->cssManager`, etc.) and keeps the `Strict` trait out of the picture for this class.
 
-**Why a facade and not nine `Mpdf.php` properties**: the diff `§2` rule "no new methods on `Mpdf.php`" is strengthened here to "one new property on `Mpdf.php`". Every UA1 symbol is discoverable under `Mpdf\Ua1\Ua1State`; removing PDF/UA-1 from mPDF becomes deleting `$ua1` + the `src/Ua1/` directory.
+**Why a facade and not nine `Mpdf.php` properties**: the diff `§2` rule "no new methods on `Mpdf.php`" is strengthened here to "one new property on `Mpdf.php`". Every UA1 symbol is discoverable under `Mpdf\Ua\UaState`; removing PDF/UA-1 from mPDF becomes deleting `$ua` + the `src/Ua/` directory.
 
-### 2a. `src/Ua1/StructureElement.php` (new)
+### 2a. `src/Ua/StructureElement.php` (new)
 
 All properties `protected`. No `Strict` trait (this class does not extend Mpdf or any Strict-using base).
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 class StructureElement
 {
@@ -640,12 +640,12 @@ class StructureElement
 
 `StructureElement::$mcids` stores `['page' => $structParentsIndex, 'mcid' => $mcid, 'pageRef' => $pageObjNum]` so `StructureWriter` can emit MCR dicts when a struct element spans pages. The `pageRef` (PDF object number for the page object) must be filled in at write time by looking up `$this->mpdf->offsets`.
 
-### 2b. `src/Ua1/StructureTree.php` (new)
+### 2b. `src/Ua/StructureTree.php` (new)
 
 All properties `protected`.
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 class StructureTree
 {
@@ -784,12 +784,12 @@ class StructureTree
 
 **`addRoleMapping($role, $standardType)` conflict behavior**: The **first registration wins** — duplicates with a different target type are silently ignored. This prevents conflicting RoleMap entries that veraPDF would reject.
 
-### 2c. `src/Ua1/StructType.php` (new) — HTML tag → PDF struct type mapping
+### 2c. `src/Ua/StructType.php` (new) — HTML tag → PDF struct type mapping
 
 Single source of truth for all mapping decisions. Replaces ad-hoc `strtoupper($tag)` calls and any static arrays scattered across tag handlers.
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 class StructType
 {
@@ -921,7 +921,7 @@ class StructType
 }
 ```
 
-**Integration in tag handlers:** Every call site that uses `strtoupper($tag)` to produce a struct type is replaced with `\Mpdf\Ua1\StructType::fromHtmlTag($tag, $attr)`. Tag handlers import `Mpdf\Ua1\StructType`.
+**Integration in tag handlers:** Every call site that uses `strtoupper($tag)` to produce a struct type is replaced with `\Mpdf\Ua\StructType::fromHtmlTag($tag, $attr)`. Tag handlers import `Mpdf\Ua\StructType`.
 
 **`<a>` tag — destination anchors vs. link anchors:** mPDF's `<a>` tag serves two distinct roles:
 
@@ -940,7 +940,7 @@ $hasName = !empty($attr['NAME']);
 
 if ($hasHref) {
     // Both external and internal hrefs create Link annotations → Link struct elem
-    $this->mpdf->ua1->structureTree->open('Link');
+    $this->mpdf->ua->structureTree->open('Link');
     // ... rest of existing href handling
 } elseif ($hasName) {
     // Pure destination anchor: register named destination, no struct element
@@ -958,37 +958,37 @@ as a kid of the Link struct element, alongside any MCIDs.
 
 ### 2d. Register in `ServiceFactory.php`
 
-Only the `Ua1State` facade is exposed as a sibling service on `Mpdf.php`. The individual collaborators (`MarkedContentHelper`, `StructureTree`, `StructureWriter`, `AriaIdResolver`, `LigatureActualTextWriter`, `FpdiStructMerger`) are held **inside** `Ua1State` and accessed via `$this->mpdf->ua1->structureTree`, etc.
+Only the `UaState` facade is exposed as a sibling service on `Mpdf.php`. The individual collaborators (`MarkedContentHelper`, `StructureTree`, `StructureWriter`, `AriaIdResolver`, `LigatureActualTextWriter`, `FpdiStructMerger`) are held **inside** `UaState` and accessed via `$this->mpdf->ua->structureTree`, etc.
 
-Construct `$ua1State` first, then every collaborator, then assign the collaborators back onto `$ua1State` before returning the service array. This happens after `$writer` (BaseWriter) is constructed:
+Construct `$uaState` first, then every collaborator, then assign the collaborators back onto `$uaState` before returning the service array. This happens after `$writer` (BaseWriter) is constructed:
 
 ```php
-$ua1State = new \Mpdf\Ua1\Ua1State();
+$uaState = new \Mpdf\Ua\UaState();
 
-$ua1State->markedContentHelper      = new \Mpdf\Ua1\MarkedContentHelper($mpdf, $writer);
-$ua1State->structureTree            = new \Mpdf\Ua1\StructureTree();
-$ua1State->structureWriter          = new \Mpdf\Ua1\StructureWriter($mpdf, $writer, $ua1State->structureTree);
-$ua1State->ariaIdResolver           = new \Mpdf\Ua1\AriaIdResolver($ua1State->structureTree);
-$ua1State->ligatureActualTextWriter = new \Mpdf\Ua1\LigatureActualTextWriter($mpdf, $writer);
-$ua1State->fpdiStructMerger         = new \Mpdf\Ua1\Import\FpdiStructMerger($mpdf, $ua1State->structureTree);
+$uaState->markedContentHelper      = new \Mpdf\Ua\MarkedContentHelper($mpdf, $writer);
+$uaState->structureTree            = new \Mpdf\Ua\StructureTree();
+$uaState->structureWriter          = new \Mpdf\Ua\StructureWriter($mpdf, $writer, $uaState->structureTree);
+$uaState->ariaIdResolver           = new \Mpdf\Ua\AriaIdResolver($uaState->structureTree);
+$uaState->ligatureActualTextWriter = new \Mpdf\Ua\LigatureActualTextWriter($mpdf, $writer);
+$uaState->fpdiStructMerger         = new \Mpdf\Ua\Import\FpdiStructMerger($mpdf, $uaState->structureTree);
 
 // In getServices() return array:
-'ua1State' => $ua1State,
+'uaState' => $uaState,
 
 // In getServiceIds():
-'ua1State',
+'uaState',
 ```
 
-`var $ua1;` is declared on `Mpdf.php` (matches existing `var $cssManager`, `var $writer`, etc.). **No getter methods needed** — `$this->mpdf->ua1` is public; nested collaborators are reached via `$this->mpdf->ua1->structureTree`, etc. `protected` would trigger a fatal `MpdfException` from the `Strict` trait's `__get()` when writer classes or tag handlers access the property directly.
+`var $ua;` is declared on `Mpdf.php` (matches existing `var $cssManager`, `var $writer`, etc.). **No getter methods needed** — `$this->mpdf->ua` is public; nested collaborators are reached via `$this->mpdf->ua->structureTree`, etc. `protected` would trigger a fatal `MpdfException` from the `Strict` trait's `__get()` when writer classes or tag handlers access the property directly.
 
-Instantiation is unconditional (cheap when `ua1->enabled` is false — the collaborators are simple PHP objects, no resource allocation).
+Instantiation is unconditional (cheap when `ua->enabled` is false — the collaborators are simple PHP objects, no resource allocation).
 
-### 2e. `src/Ua1/StructureWriter.php` (new)
+### 2e. `src/Ua/StructureWriter.php` (new)
 
-Called from `ResourceWriter::writeResources()` when `$this->mpdf->ua1->enabled` is true.
+Called from `ResourceWriter::writeResources()` when `$this->mpdf->ua->enabled` is true.
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 class StructureWriter
 {
@@ -1016,15 +1016,15 @@ class StructureWriter
         // 4. Write the /StructTreeRoot object:
         //    /Type /StructTreeRoot /K [<document root obj ref>]
         //    /ParentTree <numtree ref 0 R> /RoleMap <rolemap ref 0 R> (if present)
-        //    Store the resulting object number via $this->mpdf->ua1->structTreeRootObjNum = $n.
+        //    Store the resulting object number via $this->mpdf->ua->structTreeRootObjNum = $n.
     }
 }
 ```
 
 Hook into `ResourceWriter::writeResources()` after the resource dictionary:
 ```php
-if ($this->mpdf->ua1->enabled) {
-    $this->mpdf->ua1->structureWriter->writeStructTree();
+if ($this->mpdf->ua->enabled) {
+    $this->mpdf->ua->structureWriter->writeStructTree();
 }
 ```
 
@@ -1032,7 +1032,7 @@ Because `writeStructTree()` sets `structTreeRoot` via the setter, the catalog's 
 
 ### Phase 2 Tests
 
-**`tests/Mpdf/Ua1/StructTypeTest.php`** (new — pure static unit tests, no mPDF dependency):
+**`tests/Mpdf/Ua/StructTypeTest.php`** (new — pure static unit tests, no mPDF dependency):
 
 | Test method | Assertion |
 |---|---|
@@ -1052,7 +1052,7 @@ Because `writeStructTree()` sets `structTreeRoot` via the setter, the catalog's 
 | `testIsGroupingForGroupingTypes` | `isGrouping('TOC')`, `isGrouping('L')`, `isGrouping('Table')` return `true` |
 | `testIsGroupingForLeafTypes` | `isGrouping('P')`, `isGrouping('TD')`, `isGrouping('Span')` return `false` |
 
-**`tests/Mpdf/Ua1/StructureTreeTest.php`** (new — no mPDF dependency, pure unit tests):
+**`tests/Mpdf/Ua/StructureTreeTest.php`** (new — no mPDF dependency, pure unit tests):
 
 | Test method | Assertion |
 |---|---|
@@ -1074,7 +1074,7 @@ Because `writeStructTree()` sets `structTreeRoot` via the setter, the catalog's 
 | `testAddContentForElementInArtifactContextReturnsMinusOne` | `openArtifact()` then `addContentForElement($elem, 0)` returns `-1` and assigns no MCID entry to `$elem->getMcids()` |
 | `testAddRoleMappingDuplicateFirstWins` | `addRoleMapping('CustomBox', 'Div')` then `addRoleMapping('CustomBox', 'Sect')` — `getRoleMappings()['CustomBox']` returns `'Div'` (first registration wins) |
 
-**Extend `tests/Mpdf/Ua1/MetadataTest.php`**:
+**Extend `tests/Mpdf/Ua/MetadataTest.php`**:
 
 | Test method | Assertion |
 |---|---|
@@ -1100,12 +1100,12 @@ Architectural note: §3a (BDC/EMC helpers) and §3b (block-layout hook) are pure
 
 Struct element type names (P, H1, Figure, etc.) are assigned in Phase 4; Phase 3 tests validate only the infrastructure.
 
-### 3a. `src/Ua1/MarkedContentHelper.php` (new) — BDC/EMC encapsulation
+### 3a. `src/Ua/MarkedContentHelper.php` (new) — BDC/EMC encapsulation
 
-BDC/EMC operator emission is handled by a dedicated collaborator — **no new methods are added to `Mpdf.php`**. The `_beginMarkedContent()` / `_endMarkedContent()` methods from the original design do not exist; all call sites use `$this->mpdf->ua1->markedContentHelper->begin(...)` / `->end()` instead.
+BDC/EMC operator emission is handled by a dedicated collaborator — **no new methods are added to `Mpdf.php`**. The `_beginMarkedContent()` / `_endMarkedContent()` methods from the original design do not exist; all call sites use `$this->mpdf->ua->markedContentHelper->begin(...)` / `->end()` instead.
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 use Mpdf\Mpdf;
 use Mpdf\Writer\BaseWriter;
@@ -1167,13 +1167,13 @@ class MarkedContentHelper
 
 A direct `$this->pages[$this->page] .=` write bypasses all of these and places BDC/EMC in the wrong buffer in 4 out of 5 routing contexts — producing unbalanced operators that cause hard veraPDF failures.
 
-**Depth balance check in `_enddoc()`:** Read `$this->ua1->markedContentHelper->getDepth()` — no separate `pdfuaMarkedContentDepth` property:
+**Depth balance check in `_enddoc()`:** Read `$this->ua->markedContentHelper->getDepth()` — no separate `pdfuaMarkedContentDepth` property:
 ```php
-if ($this->ua1->enabled && $this->ua1->markedContentHelper->getDepth() !== 0) {
-    if ($this->ua1->auto) {
-        $this->ua1->addWarning('Unbalanced BDC/EMC depth at end of document: ' . $this->ua1->markedContentHelper->getDepth());
+if ($this->ua->enabled && $this->ua->markedContentHelper->getDepth() !== 0) {
+    if ($this->ua->auto) {
+        $this->ua->addWarning('Unbalanced BDC/EMC depth at end of document: ' . $this->ua->markedContentHelper->getDepth());
     } else {
-        throw new \Mpdf\MpdfException('PDF/UA-1: Unbalanced marked content operators (depth=' . $this->ua1->markedContentHelper->getDepth() . ')');
+        throw new \Mpdf\MpdfException('PDF/UA-1: Unbalanced marked content operators (depth=' . $this->ua->markedContentHelper->getDepth() . ')');
     }
 }
 ```
@@ -1193,19 +1193,19 @@ $this->flowingBlockAttr['pdfua_type'] = 'P';
 
 In `finishFlowingBlock()` (line 6460), just before the first `Cell()` call emits content:
 ```php
-if ($this->ua1->enabled && $this->flowingBlockAttr['pdfua_struct_open']) {
+if ($this->ua->enabled && $this->flowingBlockAttr['pdfua_struct_open']) {
     $structParents = isset($this->pageDim[$this->page]['structParents'])
         ? $this->pageDim[$this->page]['structParents']
         : 0;
-    $mcid = $this->ua1->structureTree->addContent($structParents);
-    $this->ua1->markedContentHelper->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
+    $mcid = $this->ua->structureTree->addContent($structParents);
+    $this->ua->markedContentHelper->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
 }
 ```
 
 After the last `Cell()` for the block (at `$endofblock === true`):
 ```php
-if ($this->ua1->enabled && $endofblock && $this->flowingBlockAttr['pdfua_struct_open']) {
-    $this->ua1->markedContentHelper->end();
+if ($this->ua->enabled && $endofblock && $this->flowingBlockAttr['pdfua_struct_open']) {
+    $this->ua->markedContentHelper->end();
 }
 ```
 
@@ -1225,31 +1225,31 @@ $objattr['pdfua_alt'] = $alt;
 
 During image rendering in `src/Mpdf.php` (where the `Do` operator is emitted), wrap. Use `isset()` pattern — **no `??` operator** (PHP 7.0+ only):
 ```php
-if ($this->ua1->enabled) {
+if ($this->ua->enabled) {
     $alt = isset($objattr['pdfua_alt']) ? $objattr['pdfua_alt'] : null;
     if ($alt === '') {
         // Explicitly empty alt = decorative, no property dict needed
-        $mcid = $this->ua1->structureTree->addArtifact();
+        $mcid = $this->ua->structureTree->addArtifact();
     } else {
         $figAlt = ($alt !== null) ? $alt : '';
-        $this->ua1->structureTree->open('Figure', ['Alt' => $figAlt]);
+        $this->ua->structureTree->open('Figure', ['Alt' => $figAlt]);
         $structParents = isset($this->pageDim[$this->page]['structParents'])
             ? $this->pageDim[$this->page]['structParents']
             : 0;
-        $mcid = $this->ua1->structureTree->addContent($structParents);
+        $mcid = $this->ua->structureTree->addContent($structParents);
     }
-    $this->ua1->markedContentHelper->begin('Figure', $mcid);
+    $this->ua->markedContentHelper->begin('Figure', $mcid);
 }
 // ... existing image Do operator ...
-if ($this->ua1->enabled) {
-    $this->ua1->markedContentHelper->end();
+if ($this->ua->enabled) {
+    $this->ua->markedContentHelper->end();
     if ($mcid !== -1) {
-        $this->ua1->structureTree->close();
+        $this->ua->structureTree->close();
     }
 }
 ```
 
-**Convention (W3C):** `alt=""` (explicitly empty) = decorative Artifact. `alt` absent = unknown; treat as decorative and add to `$this->mpdf->ua1->warnings` (via `->addWarning()`). `alt="text"` = Figure with `Alt` attribute.
+**Convention (W3C):** `alt=""` (explicitly empty) = decorative Artifact. `alt` absent = unknown; treat as decorative and add to `$this->mpdf->ua->warnings` (via `->addWarning()`). `alt="text"` = Figure with `Alt` attribute.
 
 ### 3d. Header/footer artifact marking
 
@@ -1278,10 +1278,10 @@ During `_puthtmlheaders()`, mPDF sets `$this->bufferoutput = true` before render
 
 ```php
 // _puthtmlheaders() — HEADER rendering block (after existing WriteHTML call):
-$this->ua1->structureTree->openArtifact();
+$this->ua->structureTree->openArtifact();
 $this->WriteHTML($html, HTMLParserMode::HTML_HEADER_BUFFER);
-$this->ua1->structureTree->closeArtifact();
-if ($this->ua1->enabled) {
+$this->ua->structureTree->closeArtifact();
+if ($this->ua->enabled) {
     // Wrap the accumulated headerbuffer content with Pagination artifact operators
     $this->headerbuffer = '/Artifact <</Type /Pagination /Subtype /Header>> BDC' . "\n"
         . $this->headerbuffer
@@ -1289,10 +1289,10 @@ if ($this->ua1->enabled) {
 }
 
 // _puthtmlheaders() — FOOTER rendering block (same pattern):
-$this->ua1->structureTree->openArtifact();
+$this->ua->structureTree->openArtifact();
 $this->WriteHTML($html, HTMLParserMode::HTML_HEADER_BUFFER);
-$this->ua1->structureTree->closeArtifact();
-if ($this->ua1->enabled) {
+$this->ua->structureTree->closeArtifact();
+if ($this->ua->enabled) {
     $this->headerbuffer = '/Artifact <</Type /Pagination /Subtype /Footer>> BDC' . "\n"
         . $this->headerbuffer
         . "\nEMC\n";
@@ -1334,7 +1334,7 @@ public function isInArtifact()
 All tag handlers and `finishFlowingBlock()` guard struct element creation:
 
 ```php
-if ($this->mpdf->ua1->enabled && !$this->mpdf->ua1->structureTree->isInArtifact()) {
+if ($this->mpdf->ua->enabled && !$this->mpdf->ua->structureTree->isInArtifact()) {
     // ... struct element push/pop, MCID assignment
 }
 ```
@@ -1353,24 +1353,24 @@ Page numbers (inline in body, not in headers): `/Artifact <</Type /Pagination>> 
 
 ### Phase 3 Tests
 
-**`tests/Mpdf/Ua1/ContentStreamTest.php`** (new):
+**`tests/Mpdf/Ua/ContentStreamTest.php`** (new):
 
 Phase 3 tests check the BDC/EMC *infrastructure* only — they do not assert structure element type names since those are wired in Phase 4.
 
 | Test method | Assertion |
 |---|---|
-| `testHelperWritesBdcToPageStream` | Calling `$mpdf->ua1->markedContentHelper->begin('P', 5)` appends `/P <</MCID 5>> BDC` to the page stream |
-| `testHelperWritesEmcToPageStream` | `$mpdf->ua1->markedContentHelper->end()` appends `EMC` to the page stream |
-| `testArtifactHelperWritesBmcNoDictToPageStream` | `$mpdf->ua1->markedContentHelper->begin('Artifact', -1)` appends `/Artifact BMC` (no dict) |
+| `testHelperWritesBdcToPageStream` | Calling `$mpdf->ua->markedContentHelper->begin('P', 5)` appends `/P <</MCID 5>> BDC` to the page stream |
+| `testHelperWritesEmcToPageStream` | `$mpdf->ua->markedContentHelper->end()` appends `EMC` to the page stream |
+| `testArtifactHelperWritesBmcNoDictToPageStream` | `$mpdf->ua->markedContentHelper->begin('Artifact', -1)` appends `/Artifact BMC` (no dict) |
 | `testHelperTracksDepth` | After `begin()` depth is 1; after `end()` depth is 0; `end()` when depth is 0 is no-op |
 | `testHeaderArtifactUsesBdcNotBmc` | Page stream for doc with HTML header contains `/Artifact <</Type /Pagination /Subtype /Header>> BDC` |
 | `testFooterArtifactUsesBdcNotBmc` | Page stream contains `/Artifact <</Type /Pagination /Subtype /Footer>> BDC` |
 | `testImageWithEmptyAltProducesArtifactBmc` | Image with `alt=""` produces `/Artifact BMC` (no dict — BMC is correct here) |
 | `testBdcEmcBalancedSimple` | In the page content stream for a simple `<p>Hello</p>` document, count of `BDC` + `BMC` occurrences equals count of `EMC` occurrences. Scope the regex to tokens emitted by mPDF's PDFUA code only (match lines ending in `BDC` or `BMC` only when preceded by a known tag name or `/Artifact`) to avoid picking up existing Optional Content Group operators |
 | `testBdcEmcBalancedWithHeaders` | Same balance assertion applied to `example12_paging_html.php` HTML which includes HTML headers and footers — validates that header/footer BDC/EMC pairs close correctly |
-| `testEndMarkedContentWhenDepthIsZeroIsNoop` | Calling `$mpdf->ua1->markedContentHelper->end()` when depth is already 0 does NOT write `EMC` to the stream and does NOT make the counter negative — the depth remains 0 |
-| `testUnbalancedMarkedContentDepthPositiveThrows` | If `$mpdf->ua1->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=false`, an `MpdfException` is thrown |
-| `testUnbalancedMarkedContentDepthPositiveWarns` | If `$mpdf->ua1->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=true`, no exception is thrown but `$mpdf->ua1->warnings` is non-empty |
+| `testEndMarkedContentWhenDepthIsZeroIsNoop` | Calling `$mpdf->ua->markedContentHelper->end()` when depth is already 0 does NOT write `EMC` to the stream and does NOT make the counter negative — the depth remains 0 |
+| `testUnbalancedMarkedContentDepthPositiveThrows` | If `$mpdf->ua->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=false`, an `MpdfException` is thrown |
+| `testUnbalancedMarkedContentDepthPositiveWarns` | If `$mpdf->ua->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=true`, no exception is thrown but `$mpdf->ua->warnings` is non-empty |
 | `testHeaderContentIsArtifactWrapped` | Page content stream for a doc with an HTML header contains the header text inside an `/Artifact <</Type /Pagination /Subtype /Header>> BDC … EMC` block |
 | `testFooterContentIsArtifactWrapped` | Page content stream for a doc with an HTML footer contains footer text inside an `/Artifact <</Type /Pagination /Subtype /Footer>> BDC … EMC` block |
 | `testEncryptedOutputHasXmpNotEncrypted` | With `PDFUA=true` and `SetProtection()` active, the raw PDF output contains plaintext XMP namespace declarations (`pdfuaid:part`) — the XMP stream is not encrypted |
@@ -1386,19 +1386,19 @@ vendor/bin/phpunit --group=snapshot        # snapshot suite must stay green
 
 ## Phase 4: Element-by-Element Structure Tagging
 
-All tag handlers guard their structure tree calls with `if ($this->mpdf->ua1->enabled)`. MCID assignment happens in `finishFlowingBlock()` (wired in Phase 3) — tag handlers only push/pop struct elements onto the StructureTree stack and set `flowingBlockAttr['pdfua_struct_open'] = true`.
+All tag handlers guard their structure tree calls with `if ($this->mpdf->ua->enabled)`. MCID assignment happens in `finishFlowingBlock()` (wired in Phase 3) — tag handlers only push/pop struct elements onto the StructureTree stack and set `flowingBlockAttr['pdfua_struct_open'] = true`.
 
 ### Headings and paragraphs (`src/Tag/BlockTag.php`)
 
 **`open()` method** — after CSS is resolved, before `newFlowingBlock()` is called:
 
 ```php
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     // Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
     $structType = null;
     if (!empty($attr['CLASS'])) {
         foreach (explode(' ', strtolower($attr['CLASS'])) as $cls) {
-            $tocType = \Mpdf\Ua1\StructType::fromCssClass($cls);
+            $tocType = \Mpdf\Ua\StructType::fromCssClass($cls);
             if ($tocType !== null) {
                 $structType = $tocType;
                 break;
@@ -1406,17 +1406,17 @@ if ($this->mpdf->ua1->enabled) {
         }
     }
     if ($structType === null) {
-        $structType = \Mpdf\Ua1\StructType::fromHtmlTag($tag, $attr);
+        $structType = \Mpdf\Ua\StructType::fromHtmlTag($tag, $attr);
     }
     if ($structType !== null) {
-        $this->mpdf->ua1->structureTree->open($structType);
+        $this->mpdf->ua->structureTree->open($structType);
     }
 }
 ```
 
 After `newFlowingBlock()`:
 ```php
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     $this->mpdf->flowingBlockAttr['pdfua_struct_open'] = true;
     $this->mpdf->flowingBlockAttr['pdfua_type'] = $structType;
 }
@@ -1424,8 +1424,8 @@ if ($this->mpdf->ua1->enabled) {
 
 **`close()` method** — after `finishFlowingBlock()`:
 ```php
-if ($this->mpdf->ua1->enabled) {
-    $this->mpdf->ua1->structureTree->close();
+if ($this->mpdf->ua->enabled) {
+    $this->mpdf->ua->structureTree->close();
 }
 ```
 
@@ -1459,12 +1459,12 @@ For normal blocks, `finishFlowingBlock()` fires during RENDERING (the struct ele
 
 At parse time, `Td::open()` / `Th::open()` store a reference to the newly created TD/TH struct element on the cell dict:
 ```php
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     $attrs = [/* colspan, rowspan, scope */];
-    $this->mpdf->ua1->structureTree->open('TD', $attrs);
+    $this->mpdf->ua->structureTree->open('TD', $attrs);
     // Store reference to the struct element BEFORE it's popped
     $this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem']
-        = $this->mpdf->ua1->structureTree->getCurrent();
+        = $this->mpdf->ua->structureTree->getCurrent();
 }
 ```
 
@@ -1476,17 +1476,17 @@ In `_tableWrite()` (~line 21912), before and after processing `cell['textbuffer'
 ```php
 // Before cell content rendering:
 $pdfuaElem = isset($cell['pdfua_struct_elem']) ? $cell['pdfua_struct_elem'] : null;
-if ($this->ua1->enabled && $pdfuaElem) {
+if ($this->ua->enabled && $pdfuaElem) {
     $structParents = isset($this->pageDim[$this->page]['structParents'])
         ? $this->pageDim[$this->page]['structParents']
         : 0;
-    $mcid = $this->ua1->structureTree->addContentForElement($pdfuaElem, $structParents);
-    $this->ua1->markedContentHelper->begin($pdfuaElem->getType(), $mcid);
+    $mcid = $this->ua->structureTree->addContentForElement($pdfuaElem, $structParents);
+    $this->ua->markedContentHelper->begin($pdfuaElem->getType(), $mcid);
 }
 // ... existing cell rendering ...
 // After cell content rendering:
-if ($this->ua1->enabled && $pdfuaElem) {
-    $this->ua1->markedContentHelper->end();
+if ($this->ua->enabled && $pdfuaElem) {
+    $this->ua->markedContentHelper->end();
 }
 ```
 
@@ -1515,7 +1515,7 @@ Add `addContentForElement(StructureElement $elem, $structParentsIndex)` to `Stru
   // BEFORE (commented out — causes issues in Chrome PDF viewer):
   // $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl[4]);
   // AFTER (enable conditionally for PDFUA):
-  if ($this->mpdf->ua1->enabled && isset($pl['txt'])) {
+  if ($this->mpdf->ua->enabled && isset($pl['txt'])) {
       $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl['txt']);
   }
   ```
@@ -1529,7 +1529,7 @@ PDF/UA-1 §7.18 requires ALL annotation types (except Link which uses the struct
 
 The `content` attribute already provides the text for the popup. In `MetadataWriter::writeAnnotations()` (~line 603+), when writing `PageAnnots` entries, add `/Contents` for PDFUA:
 ```php
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl['opt']['content']);
 }
 ```
@@ -1537,7 +1537,7 @@ if ($this->mpdf->ua1->enabled) {
 **Annotation `/F` flags**: The existing code adds `/F 28` for PDFA/PDFX. Extend to include PDFUA:
 ```php
 // Before: if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua1->enabled) {
+if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->ua->enabled) {
     $annot .= ' /F 28';
 }
 ```
@@ -1592,13 +1592,13 @@ mPDF supports HTML form fields (text, password, checkbox, radio, select/listbox,
 
 **Step 1**: In `PageWriter::writePages()`, after `$this->form->countPageForms($n, $totaladdnum)` (lines ~77-79), pre-assign struct parent indices for form widgets on page `$n`:
 ```php
-if ($this->mpdf->ua1->enabled && count($this->form->forms) > 0) {
+if ($this->mpdf->ua->enabled && count($this->form->forms) > 0) {
     foreach ($this->form->forms as $ref => $frm) {
         if ($frm['page'] == $n) {
             // Pre-assign by creating a placeholder element to register with nextAnnotStructParent
             // (actual Form struct element creation happens in StructureWriter)
             $this->form->forms[$ref]['structParent']
-                = $this->mpdf->ua1->structureTree->annotParentCounter++;
+                = $this->mpdf->ua->structureTree->annotParentCounter++;
         }
     }
 }
@@ -1606,7 +1606,7 @@ if ($this->mpdf->ua1->enabled && count($this->form->forms) > 0) {
 
 **Step 2**: In `Form.php::_putform_tx()`, `_putform_ch()`, `_putform_bt()` (lines ~1768, ~1686, ~1409), add after writing `/TU`:
 ```php
-if ($this->mpdf->ua1->enabled && isset($form['structParent'])) {
+if ($this->mpdf->ua->enabled && isset($form['structParent'])) {
     $this->writer->write('/StructParent ' . $form['structParent']);
 }
 ```
@@ -1618,8 +1618,8 @@ foreach ($this->mpdf->form->forms as $frm) {
         $formElem = new StructureElement('Form', ['TU' => $frm['TU']]);
         $formElem->objrefs[] = ['structParent' => $frm['structParent'], 'obj' => $frm['obj']];
         // $frm['obj'] is assigned during _putform_* and stored on the forms array
-        $this->mpdf->ua1->structureTree->getRoot()->children[] = $formElem;
-        $this->mpdf->ua1->structureTree->annotParentTree[$frm['structParent']] = $formElem;
+        $this->mpdf->ua->structureTree->getRoot()->children[] = $formElem;
+        $this->mpdf->ua->structureTree->annotParentTree[$frm['structParent']] = $formElem;
     }
 }
 ```
@@ -1638,18 +1638,18 @@ foreach ($this->mpdf->form->forms as $frm) {
 
 **Implementation** — at lines 7414–7510 in Mpdf.php, before the WriteBarcode/WriteBarcode2/QR render call:
 ```php
-if ($this->ua1->enabled) {
+if ($this->ua->enabled) {
     $altText = 'Barcode: ' . $objattr['code'];
-    $this->ua1->structureTree->open('Figure', ['Alt' => $altText]);
+    $this->ua->structureTree->open('Figure', ['Alt' => $altText]);
     $structParents = isset($this->pageDim[$this->page]['structParents'])
         ? $this->pageDim[$this->page]['structParents'] : 0;
-    $mcid = $this->ua1->structureTree->addContent($structParents);
-    $this->ua1->markedContentHelper->begin('Figure', $mcid);
+    $mcid = $this->ua->structureTree->addContent($structParents);
+    $this->ua->markedContentHelper->begin('Figure', $mcid);
 }
 // ... existing WriteBarcode() / WriteBarcode2() / QR render call ...
-if ($this->ua1->enabled) {
-    $this->ua1->markedContentHelper->end();
-    $this->ua1->structureTree->close();
+if ($this->ua->enabled) {
+    $this->ua->markedContentHelper->end();
+    $this->ua->structureTree->close();
 }
 ```
 
@@ -1673,11 +1673,11 @@ if ($this->ua1->enabled) {
 
 **Injection for text watermarks** — in `watermark()`:
 ```php
-if ($this->ua1->enabled) {
+if ($this->ua->enabled) {
     $this->pages[$this->page] .= '/Artifact <</Type /Background>> BDC' . "\n";
 }
 // ... existing rotation + Text() call ...
-if ($this->ua1->enabled) {
+if ($this->ua->enabled) {
     $this->pages[$this->page] .= 'EMC' . "\n";
 }
 ```
@@ -1687,8 +1687,8 @@ if ($this->ua1->enabled) {
 **Injection for image watermarks (`watermarkImgBehind=true`)** — the content is injected via `preg_replace()` before the `___BACKGROUND___PATTERNS` marker. Include BDC/EMC in the replacement string:
 ```php
 // Wrap the image content with Artifact BDC/EMC in the preg_replace insertion
-$pdfuaPrefix = $this->ua1->enabled ? '/Artifact <</Type /Background>> BDC' . "\n" : '';
-$pdfuaSuffix = $this->ua1->enabled ? "\nEMC" : '';
+$pdfuaPrefix = $this->ua->enabled ? '/Artifact <</Type /Background>> BDC' . "\n" : '';
+$pdfuaSuffix = $this->ua->enabled ? "\nEMC" : '';
 $this->pages[$this->page] = preg_replace(
     '/(\s*___BACKGROUND___PATTERNS' . $this->uniqstr . '\s*)/',
     "\n" . $pdfuaPrefix . $imageContent . $pdfuaSuffix . "\n$1",
@@ -1709,14 +1709,14 @@ $this->pages[$this->page] = preg_replace(
 **Implementation**: At `Mpdf.php` lines 7524–7551 (where textcircle objects are processed from the textbuffer), when `PDFUA=true`:
 ```php
 // Push a Span struct element for the textcircle
-$this->ua1->structureTree->open('Span', ['ActualText' => $topText . $divider . $bottomText]);
+$this->ua->structureTree->open('Span', ['ActualText' => $topText . $divider . $bottomText]);
 $structParents = isset($this->pageDim[$this->page]['structParents'])
     ? $this->pageDim[$this->page]['structParents'] : 0;
-$mcid = $this->ua1->structureTree->addContent($structParents);
-$this->ua1->markedContentHelper->begin('Span', $mcid);
+$mcid = $this->ua->structureTree->addContent($structParents);
+$this->ua->markedContentHelper->begin('Span', $mcid);
 // ... call DirectWrite::CircularText() ...
-$this->ua1->markedContentHelper->end();
-$this->ua1->structureTree->close();
+$this->ua->markedContentHelper->end();
+$this->ua->structureTree->close();
 ```
 
 The `ActualText` attribute value in `StructureWriter` should be output as a UTF-16BE PDF string.
@@ -1758,8 +1758,8 @@ Inject around the existing `$this->writer->write($outstring)` at line 9074:
 ```php
 // --- PDF/UA tagging for Image() ---
 $pdfuaTagOpened = false;
-if ($this->ua1->enabled && !$watermark) {
-    $inArtifactScope = $this->ua1->structureTree->isInArtifact() || $this->ColActive;
+if ($this->ua->enabled && !$watermark) {
+    $inArtifactScope = $this->ua->structureTree->isInArtifact() || $this->ColActive;
     if ($inArtifactScope) {
         // Inside header/footer or column region — suppress inner BDC/EMC entirely.
         // The enclosing Pagination BDC (headers) or Artifact BMC (columns) already covers it.
@@ -1771,13 +1771,13 @@ if ($this->ua1->enabled && !$watermark) {
         // Meaningful image — create Figure struct element
         $structParents = isset($this->pageDim[$this->page]['structParents'])
             ? $this->pageDim[$this->page]['structParents'] : 0;
-        $this->ua1->structureTree->open('Figure', ['Alt' => $alt]);
-        $mcid = $this->ua1->structureTree->addContent($structParents);
+        $this->ua->structureTree->open('Figure', ['Alt' => $alt]);
+        $mcid = $this->ua->structureTree->addContent($structParents);
         $this->writer->write('/Figure <</MCID ' . $mcid . '>> BDC');
         $pdfuaTagOpened = 'figure';
     } else {
         // null — caller did not provide alt text; warn and treat as Artifact
-        $this->ua1->warnings[] = 'Image() called without $alt in PDFUA mode — treating as decorative: ' . $file;
+        $this->ua->warnings[] = 'Image() called without $alt in PDFUA mode — treating as decorative: ' . $file;
         $this->writer->write('/Artifact BMC');
         $pdfuaTagOpened = 'artifact';
     }
@@ -1788,7 +1788,7 @@ if ($this->ua1->enabled && !$watermark) {
 if ($pdfuaTagOpened) {
     $this->writer->write('EMC');
     if ($pdfuaTagOpened === 'figure') {
-        $this->ua1->structureTree->close();
+        $this->ua->structureTree->close();
     }
 }
 ```
@@ -1803,7 +1803,7 @@ if ($pdfuaTagOpened) {
 
 | `$alt` value | PDF/UA treatment |
 |---|---|
-| `null` (not passed) | Warning added to `$mpdf->ua1->warnings`; emit `/Artifact BMC` |
+| `null` (not passed) | Warning added to `$mpdf->ua->warnings`; emit `/Artifact BMC` |
 | `''` (empty string) | Decorative; emit `/Artifact BMC` (no dict — BMC is correct) |
 | `'text'` (non-empty) | Meaningful; emit `/Figure <</MCID N>> BDC`; create Figure struct element with `/Alt` |
 
@@ -1813,7 +1813,7 @@ if ($pdfuaTagOpened) {
 
 **Test**: `testImageMethodWithEmptyAlt` — `$mpdf->Image(..., $alt='')` produces `/Artifact BMC … Do … Q … EMC`; no struct element.
 
-**Test**: `testImageMethodWithoutAlt` — `$mpdf->Image(...)` (no `$alt`) adds an entry to `$mpdf->ua1->warnings` and emits `/Artifact BMC`.
+**Test**: `testImageMethodWithoutAlt` — `$mpdf->Image(...)` (no `$alt`) adds an entry to `$mpdf->ua->warnings` and emits `/Artifact BMC`.
 
 ### `AutosizeText()` Direct PHP Method
 
@@ -1828,13 +1828,13 @@ if ($pdfuaTagOpened) {
 ```php
 // Before Cell() call:
 $pdfuaTagOpened = false;
-if ($this->ua1->enabled) {
-    $inArtifactScope = $this->ua1->structureTree->isInArtifact() || $this->ColActive;
+if ($this->ua->enabled) {
+    $inArtifactScope = $this->ua->structureTree->isInArtifact() || $this->ColActive;
     if (!$inArtifactScope) {
         $structParents = isset($this->pageDim[$this->page]['structParents'])
             ? $this->pageDim[$this->page]['structParents'] : 0;
-        $this->ua1->structureTree->open('Span');
-        $mcid = $this->ua1->structureTree->addContent($structParents);
+        $this->ua->structureTree->open('Span');
+        $mcid = $this->ua->structureTree->addContent($structParents);
         $this->writer->write('/Span <</MCID ' . $mcid . '>> BDC');
         $pdfuaTagOpened = true;
     }
@@ -1845,7 +1845,7 @@ $this->Cell($w, 0, $text, 0, 0, 'C', 0, '', 0, 0, 0, 'M', 0, false, $OTLdata, $t
 // After Cell() call:
 if ($pdfuaTagOpened) {
     $this->writer->write('EMC');
-    $this->ua1->structureTree->close();
+    $this->ua->structureTree->close();
 }
 ```
 
@@ -1902,7 +1902,7 @@ Poorly formed HTML can be improved for tagging using WAI-ARIA attributes. mPDF n
 **`aria-hidden="true"`** — the element and all its descendants are decorative. Push an artifact suppression context:
 ```php
 if (isset($attr['ARIA-HIDDEN']) && strtolower($attr['ARIA-HIDDEN']) === 'true') {
-    $this->mpdf->ua1->structureTree->openArtifact();
+    $this->mpdf->ua->structureTree->openArtifact();
     // element renders normally; all addContent() calls will return -1
 }
 ```
@@ -1958,14 +1958,14 @@ if (isset($attr['ROLE'])) {
     } else {
         // Unmapped custom role: record in RoleMap for StructureWriter to emit.
         // Map to a safe standard type (Div) and let the RoleMap resolve it.
-        $this->mpdf->ua1->structureTree->addRoleMapping($role, $structType);
+        $this->mpdf->ua->structureTree->addRoleMapping($role, $structType);
     }
 }
 ```
 
 Custom role values not in the standard set must be recorded in the StructTreeRoot's `/RoleMap` dict. `StructureTree::addRoleMapping($role, $standardType)` stores these for `StructureWriter` to emit.
 
-**ID-referencing ARIA attributes — resolved via two-pass `AriaIdResolver`** (`src/Ua1/AriaIdResolver.php`, Phase 4):
+**ID-referencing ARIA attributes — resolved via two-pass `AriaIdResolver`** (`src/Ua/AriaIdResolver.php`, Phase 4):
 
 The following attributes reference another element by ID and are supported despite mPDF's sequential streaming HTML parsing:
 
@@ -1974,10 +1974,10 @@ The following attributes reference another element by ID and are supported despi
 
 mPDF's parser is sequential, so the target element for a forward reference may not be known yet when the referencing element's struct dict is built. The resolver runs a deferred second pass at `_enddoc()` time — safe because `/Alt`, `/E`, and relationship kids live on the in-memory `StructureElement` (not in the already-flushed page content stream), and `_enddoc()` post-processes pages BEFORE `StructureWriter::writeStructTree()` serialises the struct tree (`src/Mpdf.php:10014` → `ResourceWriter::writeResources()` → `structureWriter->writeStructTree()`).
 
-**Resolver API (`src/Ua1/AriaIdResolver.php`)**:
+**Resolver API (`src/Ua/AriaIdResolver.php`)**:
 
 ```php
-namespace Mpdf\Ua1;
+namespace Mpdf\Ua;
 
 class AriaIdResolver
 {
@@ -2008,11 +2008,11 @@ class AriaIdResolver
     }
 
     /** Call once from _enddoc() before StructureWriter::writeStructTree(). */
-    public function resolveAll(Ua1State $ua1)
+    public function resolveAll(UaState $ua)
     {
         foreach ($this->pending as list($elem, $attr, $id)) {
             if (!isset($this->idMap[$id])) {
-                $ua1->addWarning("Unresolved ARIA reference: $attr=\"$id\" has no matching id=\"$id\" in the document");
+                $ua->addWarning("Unresolved ARIA reference: $attr=\"$id\" has no matching id=\"$id\" in the document");
                 continue;
             }
             $target = $this->idMap[$id];
@@ -2047,15 +2047,15 @@ class AriaIdResolver
 
 ```php
 // After opening a struct element:
-if ($this->mpdf->ua1->enabled) {
-    $elem = $this->mpdf->ua1->structureTree->getCurrent();
+if ($this->mpdf->ua->enabled) {
+    $elem = $this->mpdf->ua->structureTree->getCurrent();
     if (!empty($attr['ID'])) {
-        $this->mpdf->ua1->ariaIdResolver->registerId($attr['ID'], $elem);
+        $this->mpdf->ua->ariaIdResolver->registerId($attr['ID'], $elem);
     }
     foreach (['ARIA-LABELLEDBY','ARIA-DESCRIBEDBY','ARIA-DETAILS',
               'ARIA-CONTROLS','ARIA-OWNS','ARIA-FLOWTO','ARIA-ACTIVEDESCENDANT'] as $k) {
         if (!empty($attr[$k])) {
-            $this->mpdf->ua1->ariaIdResolver->queue($elem, strtolower($k), $attr[$k]);
+            $this->mpdf->ua->ariaIdResolver->queue($elem, strtolower($k), $attr[$k]);
         }
     }
 }
@@ -2065,15 +2065,15 @@ if ($this->mpdf->ua1->enabled) {
 - `addRelationship($ariaAttr, StructureElement $target)` — stores `['attr'=>..., 'target'=>...]` for `StructureWriter` to emit as an OBJR kid or `/Ref` UserProperty.
 - `setAttribute($key, $value)` — mutates the `$attributes` array.
 
-**`Mpdf::_enddoc()` hook** (insert immediately before the existing OCG-layer post-processing, and before the call to `$this->mpdf->ua1->structureWriter->writeStructTree()` inside `ResourceWriter::writeResources()`):
+**`Mpdf::_enddoc()` hook** (insert immediately before the existing OCG-layer post-processing, and before the call to `$this->mpdf->ua->structureWriter->writeStructTree()` inside `ResourceWriter::writeResources()`):
 
 ```php
-if ($this->ua1->enabled) {
-    $this->ua1->ariaIdResolver->resolveAll($this->ua1);
+if ($this->ua->enabled) {
+    $this->ua->ariaIdResolver->resolveAll($this->ua);
 }
 ```
 
-**Tests** (`tests/Mpdf/Ua1/AriaIdResolverTest.php`):
+**Tests** (`tests/Mpdf/Ua/AriaIdResolverTest.php`):
 
 | Test | Assertion |
 |---|---|
@@ -2081,7 +2081,7 @@ if ($this->ua1->enabled) {
 | `testAriaDescribedbyFillsExpansionE` | `<abbr aria-describedby="d">HTTP</abbr><span id="d">Hypertext Transfer Protocol</span>` produces a `Span` with `/E (Hypertext Transfer Protocol)` |
 | `testAriaControlsAddsRelationship` | `<button aria-controls="panel">` + `<div id="panel">` — the button's struct element carries a relationship entry referencing the panel's struct element |
 | `testForwardReferenceResolves` | Reference appears BEFORE the target in source order; resolver still fills the attribute because resolution runs at `_enddoc()` |
-| `testUnresolvedReferenceWarns` | `aria-labelledby="missing"` with no matching id produces an entry in `$mpdf->ua1->warnings` |
+| `testUnresolvedReferenceWarns` | `aria-labelledby="missing"` with no matching id produces an entry in `$mpdf->ua->warnings` |
 | `testDuplicateIdFirstWins` | Two elements with `id="x"`; only the first is registered |
 
 **Removed from plan**: the interactive-state ARIA attributes (`aria-live`, `aria-atomic`, `aria-busy`, `aria-relevant`, `aria-checked`, `aria-selected`, `aria-pressed`, `aria-expanded`, `aria-sort`) are runtime-DOM concepts without a static-PDF analog and are not discussed in this plan.
@@ -2097,7 +2097,7 @@ if (isset($attr['LANG'])) {
     $structAttrs['Lang'] = $attr['LANG'];
 }
 // ... then:
-$this->mpdf->ua1->structureTree->open($structType, $structAttrs);
+$this->mpdf->ua->structureTree->open($structType, $structAttrs);
 ```
 
 `StructureWriter` emits `/Lang (xx-YY)` in the struct element object when `Lang` is in the element's attributes.
@@ -2109,7 +2109,7 @@ PDF/UA-1 §7.1 recommends providing expansion text for abbreviations. The HTML `
 if (isset($attr['TITLE']) && $attr['TITLE'] !== '') {
     $structAttrs['E'] = $attr['TITLE'];
 }
-$this->mpdf->ua1->structureTree->open('Span', $structAttrs);
+$this->mpdf->ua->structureTree->open('Span', $structAttrs);
 ```
 
 `StructureWriter` emits `/E <UTF-16BE title string>` in the struct element.
@@ -2129,7 +2129,7 @@ If a user calls `SetProtection([])` (no permissions) with PDFUA enabled, bit 10 
 ```php
 function SetProtection($permissions = [], $user_pass = '', $owner_pass = null, $length = 40)
 {
-    if ($this->ua1->enabled && !in_array('extract', $permissions)) {
+    if ($this->ua->enabled && !in_array('extract', $permissions)) {
         $permissions[] = 'extract';
     }
     $this->encrypted = $this->protection->setProtection($permissions, $user_pass, $owner_pass, $length);
@@ -2156,7 +2156,7 @@ Two-part change:
 **Part 1** — Add `/Filter` + `/DecodeParms` to the metadata stream dict in `MetadataWriter::writeMetadata()`:
 
 ```php
-if ($this->mpdf->ua1->enabled && $this->mpdf->encrypted) {
+if ($this->mpdf->ua->enabled && $this->mpdf->encrypted) {
     // Declare Identity crypt filter so readers know not to decrypt this stream
     $this->writer->write('<</Type/Metadata/Subtype/XML'
         . '/Filter[/Crypt]'
@@ -2182,7 +2182,7 @@ public function stream($s, $encrypt = true)
 ```
 
 ```php
-$this->writer->stream($m, !($this->mpdf->ua1->enabled && $this->mpdf->encrypted));
+$this->writer->stream($m, !($this->mpdf->ua->enabled && $this->mpdf->encrypted));
 ```
 
 Both parts are required. The Identity crypt filter declares the intent; skipping RC4 delivers on it. Without Part 1, readers will attempt to decrypt; without Part 2, the bytes will be RC4-encrypted despite the Identity filter declaration.
@@ -2228,7 +2228,7 @@ Why each concern is a non-issue:
 ```php
 function OverWrite($file_in, $search, $replacement, $dest = Destination::DOWNLOAD, $file_out = 'mpdf')
 {
-    if ($this->ua1->enabled) {
+    if ($this->ua->enabled) {
         throw new \Mpdf\MpdfException(
             'OverWrite() is not compatible with PDF/UA-1 mode. Binary string replacement ' .
             'cannot maintain the logical structure tree required for accessibility. ' .
@@ -2301,7 +2301,7 @@ The seam is where `svgText()` return value is captured into `$this->textoutput` 
 
 ```php
 // In Svg.php, before: $this->textoutput .= $p_cmd;
-if ($this->mpdf->ua1->enabled && !$is_svg_font) {
+if ($this->mpdf->ua->enabled && !$is_svg_font) {
     $mcid = $this->svgNextMcid++;
     $this->svgMcids[] = $mcid;  // track for ParentTree
     $p_cmd = '/Span <</MCID ' . $mcid . '>> BDC' . "\n" . $p_cmd . "\nEMC\n";
@@ -2315,7 +2315,7 @@ For **SVG-font text** (inside `svgText()` around line 2480): the source Unicode 
 
 ```php
 // Inside svgText(), after building $subpath_cmd for all glyphs of the run:
-if ($this->mpdf->ua1->enabled && $is_svg_font) {
+if ($this->mpdf->ua->enabled && $is_svg_font) {
     $mcid = $this->svgNextMcid++;
     $this->svgMcids[] = $mcid;
     $hex = bin2hex("\xFE\xFF" . mb_convert_encoding($txt, 'UTF-16BE', 'UTF-8'));
@@ -2345,8 +2345,8 @@ When `PDFUA=true` and the Form XObject has internal MCIDs, assign a struct paren
 
 ```php
 // FormWriter::writeFormObjects(), after line 35 ($this->mpdf->formobjects[$file]['n'] = $this->mpdf->n):
-if ($this->mpdf->ua1->enabled && !empty($info['svgMcids'])) {
-    $structParents = $this->mpdf->ua1->nextStructParents();
+if ($this->mpdf->ua->enabled && !empty($info['svgMcids'])) {
+    $structParents = $this->mpdf->ua->nextStructParents();
     $this->mpdf->formobjects[$file]['structParents'] = $structParents;
     $this->writer->write('/StructParents ' . $structParents);
 }
@@ -2380,7 +2380,7 @@ SVG-font text is rendered as PDF path operators (`m l f`) rather than text (`Tj`
 When `PDFUA=true`, many settings must be forced regardless of what the user configured. Rather than throwing exceptions for every misconfiguration, a companion `PDFUAauto=true` flag (analogous to the existing `PDFAauto`) switches violations from exceptions to warnings + auto-correction.
 
 **`PDFUAauto=false` (default, strict mode)**: violations throw `MpdfException` early.
-**`PDFUAauto=true` (permissive mode)**: violations add to `$this->ua1->warnings[]` and are auto-corrected where possible.
+**`PDFUAauto=true` (permissive mode)**: violations add to `$this->ua->warnings[]` and are auto-corrected where possible.
 
 #### Complete auto-adjustment specification
 
@@ -2414,7 +2414,7 @@ The following are mode-dependent:
 veraPDF performs a hard check that PDF/UA-1 documents are PDF 1.7 or higher. mPDF's default is `'1.4'`. Add to the constructor (or at the start of Phase 1 config processing):
 
 ```php
-if ($this->ua1->enabled && version_compare($this->pdf_version, '1.7', '<')) {
+if ($this->ua->enabled && version_compare($this->pdf_version, '1.7', '<')) {
     $this->pdf_version = '1.7';
 }
 ```
@@ -2429,14 +2429,14 @@ The PDFUA-specific requirement is only to **validate** that a non-empty language
 
 ```php
 // In MetadataWriter or at the Phase 5 validation hook:
-if ($this->mpdf->ua1->enabled) {
+if ($this->mpdf->ua->enabled) {
     $lang = $this->mpdf->currentLang;
     if (!is_string($lang) || $lang === '') {
         $lang = $this->mpdf->default_lang;
     }
     if (!is_string($lang) || $lang === '') {
-        if ($this->mpdf->ua1->auto) {
-            $this->mpdf->ua1->addWarning('PDF/UA-1 requires a document language. Set <html lang="xx"> or the currentLang property. The /Lang entry will be absent from the catalog.');
+        if ($this->mpdf->ua->auto) {
+            $this->mpdf->ua->addWarning('PDF/UA-1 requires a document language. Set <html lang="xx"> or the currentLang property. The /Lang entry will be absent from the catalog.');
         } else {
             throw new \Mpdf\MpdfException(
                 'PDF/UA-1 requires a document language. Set <html lang="xx"> or the currentLang property.'
@@ -2472,11 +2472,11 @@ Note: `BookmarkWriter` writes `/Type /BMoutlines` (line 133) which should be `/T
 - If the element has `role="region"` or `aria-label` (indicating it's a labelled content region), treat it as a `Sect` or `Div` struct element instead, placed at the correct logical position in the structure tree. The MCID is emitted after the main flow MCIDs, but the struct element can reference its page via an MCR dict — PDF/UA does not require stream order to match structure tree order (ISO 32000-1 §14.7.4).
 - **Implementation**: Add a PDFUA check at the top of `WriteFixedPosHTML()`:
   ```php
-  if ($this->ua1->enabled) {
+  if ($this->ua->enabled) {
       $this->writer->write('/Artifact BMC');
   }
   // ... existing rendering ...
-  if ($this->ua1->enabled) {
+  if ($this->ua->enabled) {
       $this->writer->write('EMC');
   }
   ```
@@ -2492,10 +2492,10 @@ Note: `BookmarkWriter` writes `/Type /BMoutlines` (line 133) which should be `/T
 - **Block floats** (`<div style="float:right">` containing text/markup): These are structurally ambiguous — the content appears before surrounding text in the stream, but semantically may be a sidebar that reads after the main paragraph. **Default to Artifact** for block floats unless the element has a role (e.g., `role="complementary"` → `Sect` or `role="figure"` → `Figure`).
 - **Implementation**: In `BlockTag::open()`, when a float is detected, check whether it's a meaningful content element:
   ```php
-  if ($this->mpdf->ua1->enabled && isset($p['FLOAT']) && $p['FLOAT']) {
+  if ($this->mpdf->ua->enabled && isset($p['FLOAT']) && $p['FLOAT']) {
       $isContent = isset($attr['ROLE']) || isset($attr['ARIA-LABEL']);
       if (!$isContent) {
-          $this->mpdf->ua1->structureTree->openArtifact();
+          $this->mpdf->ua->structureTree->openArtifact();
           $this->mpdf->blk[$blklvl]['pdfua_artifact'] = true;
       }
   }
@@ -2539,9 +2539,9 @@ The `rel_y` assignment loop in `printcolumnbuffer()` (lines 24495–24511) skips
 In the final output loop of `printcolumnbuffer()` (lines ~24730 and ~24901), expand sentinels:
 
 ```php
-if ($s['s'] === '__PDFUA_BDC__' && $this->ua1->enabled) {
+if ($s['s'] === '__PDFUA_BDC__' && $this->ua->enabled) {
     $out = '/' . $s['pdfua_type'] . ' <</MCID ' . $s['pdfua_mcid'] . '>> BDC' . "\n";
-} elseif ($s['s'] === '__PDFUA_EMC__' && $this->ua1->enabled) {
+} elseif ($s['s'] === '__PDFUA_EMC__' && $this->ua->enabled) {
     $out = 'EMC' . "\n";
 } else {
     $out = $columnAdjustedString . "\n";
@@ -2643,27 +2643,27 @@ into the page content stream. The Form XObject contains the original page's cont
 
 **Tier 1 — Source PDF is untagged** (no `StructTreeRoot` in its catalog): Wrap the `Do` call as Artifact in `src/FpdiTrait.php::useTemplate()`:
 ```php
-if ($this->ua1->enabled && !$sourceIsTagged) {
+if ($this->ua->enabled && !$sourceIsTagged) {
     $this->writer->write('/Artifact <</Type /Layout>> BDC');
-    $this->ua1->addWarning('Imported PDF page (untagged source) marked as Artifact.');
+    $this->ua->addWarning('Imported PDF page (untagged source) marked as Artifact.');
 }
 $this->fpdiUseImportedPage($tpl, $x, $y, $width, $height, $adjustPageSize);
-if ($this->ua1->enabled && !$sourceIsTagged) {
+if ($this->ua->enabled && !$sourceIsTagged) {
     $this->writer->write('EMC');
 }
 ```
 Use `$this->writer->write()` (routes through `BaseWriter::endPage()` → `columnbuffer` in column mode).
 
-**Tier 2 — Source PDF is tagged** (source catalog has `/StructTreeRoot`): Merge the source's struct subtree for the imported page into the host document's `StructTreeRoot`. Implemented by `\Mpdf\Ua1\Import\FpdiStructMerger`:
+**Tier 2 — Source PDF is tagged** (source catalog has `/StructTreeRoot`): Merge the source's struct subtree for the imported page into the host document's `StructTreeRoot`. Implemented by `\Mpdf\Ua\Import\FpdiStructMerger`:
 
-**Class `src/Ua1/Import/FpdiStructMerger.php`** (new, Phase 4):
+**Class `src/Ua/Import/FpdiStructMerger.php`** (new, Phase 4):
 
 ```php
-namespace Mpdf\Ua1\Import;
+namespace Mpdf\Ua\Import;
 
 use Mpdf\Mpdf;
-use Mpdf\Ua1\StructureTree;
-use Mpdf\Ua1\StructureElement;
+use Mpdf\Ua\StructureTree;
+use Mpdf\Ua\StructureElement;
 
 class FpdiStructMerger
 {
@@ -2725,13 +2725,13 @@ class FpdiStructMerger
 **Hook in `src/FpdiTrait.php::useTemplate()`** (replaces the old Tier-1-only Artifact wrap):
 
 ```php
-$sourceIsTagged = $this->ua1->fpdiStructMerger->sourceIsTagged($this->currentReaderId);
+$sourceIsTagged = $this->ua->fpdiStructMerger->sourceIsTagged($this->currentReaderId);
 
-if ($this->ua1->enabled && $sourceIsTagged) {
-    $structParents = $this->ua1->nextStructParents();
+if ($this->ua->enabled && $sourceIsTagged) {
+    $structParents = $this->ua->nextStructParents();
     // Wrap the Do as a content container — Method 2 from SVG handling. The Do stays
     // bare (no BDC/EMC wrap on the page); the Form XObject carries /StructParents.
-    $this->ua1->fpdiStructMerger->mergePageStructSubtree(
+    $this->ua->fpdiStructMerger->mergePageStructSubtree(
         $tpl,
         $this->importedPages[$tpl]['objectNumber'],
         $this->getCurrentPageObjNum()
@@ -2740,10 +2740,10 @@ if ($this->ua1->enabled && $sourceIsTagged) {
 
 $newSize = $this->fpdiUseImportedPage($tpl, $x, $y, $width, $height, $adjustPageSize);
 
-if ($this->ua1->enabled && !$sourceIsTagged) {
+if ($this->ua->enabled && !$sourceIsTagged) {
     // Legacy Artifact wrap for genuinely untagged sources only
     $this->writer->write('/Artifact <</Type /Layout>> BDC');
-    $this->ua1->addWarning('Imported PDF page (untagged source) marked as Artifact.');
+    $this->ua->addWarning('Imported PDF page (untagged source) marked as Artifact.');
     $this->writer->write('EMC');
 }
 ```
@@ -2762,7 +2762,7 @@ if ($this->ua1->enabled && !$sourceIsTagged) {
 
 ### Phase 4 Tests
 
-**`tests/Mpdf/Ua1/ContentStreamTest.php`** (extend with structure-type assertions, now that Phase 4 wires them):
+**`tests/Mpdf/Ua/ContentStreamTest.php`** (extend with structure-type assertions, now that Phase 4 wires them):
 
 | Test method | Assertion |
 |---|---|
@@ -2771,7 +2771,7 @@ if ($this->ua1->enabled && !$sourceIsTagged) {
 | `testAriaHiddenProducesArtifactBmc` | Element with `aria-hidden="true"` produces `/Artifact BMC`, no struct element in tree |
 | `testBdcEmcBalanceWithOcgLayers` | `$mpdf->BeginLayer(1)` wrapping a `<p>` paragraph → BDC+BMC count equals EMC count across the full page stream |
 
-**`tests/Mpdf/Ua1/StructureElementsTest.php`** (new):
+**`tests/Mpdf/Ua/StructureElementsTest.php`** (new):
 
 | Test method | Assertion |
 |---|---|
@@ -2820,7 +2820,7 @@ if ($this->ua1->enabled && !$sourceIsTagged) {
 | `testAutosizeTextProducesSpanStructElement` | `$mpdf->AutosizeText('Hello', 50, 'DejaVuSans', '')` → `/S /Span` struct element; page stream has `/Span <</MCID N>> BDC … BT … ET … EMC`; BDC/EMC balanced |
 | `testImageMethodWithAlt` | `$mpdf->Image('img.jpg', 10, 10, 50, 50, '', '', true, true, false, true, true, 'Logo')` → `/S /Figure` struct element; page stream contains `/Figure <</MCID N>> BDC … Do … EMC`; BDC/EMC balanced |
 | `testImageMethodWithEmptyAlt` | `$mpdf->Image(..., $alt='')` → `/Artifact BMC … Do … Q … EMC`; no struct element created |
-| `testImageMethodWithoutAlt` | `$mpdf->Image(...)` (no `$alt`) → entry added to `$mpdf->ua1->warnings`; `/Artifact BMC` emitted |
+| `testImageMethodWithoutAlt` | `$mpdf->Image(...)` (no `$alt`) → entry added to `$mpdf->ua->warnings`; `/Artifact BMC` emitted |
 | `testLayerContentIsTagged` | `$mpdf->BeginLayer(1)` around a paragraph then `$mpdf->EndLayer()` → `/P` struct element with MCID; page stream has `/OC /ZI1 BDC … /P <</MCID N>> BDC … EMC … EMC`; BDC/EMC balanced |
 | `testSetVisibilityContentIsTagged` | `$mpdf->SetVisibility('print')` around a paragraph → `/P` struct element with MCID; stream has `/OC /OC1 BDC … /P <</MCID N>> BDC … EMC … EMC`; BDC/EMC balanced |
 | `testEncryptionForcesExtractPermission` | `SetProtection([], '', 'pass')` with PDFUA=true → `/P` value in encryption dict has bit 10 set |
@@ -2842,7 +2842,7 @@ if ($this->ua1->enabled && !$sourceIsTagged) {
 | `testSvgInlineFontTextIsArtifact` | Text inside an inline SVG stream is content of the Figure Form XObject and is NOT separately tagged — no additional MCID assigned inside the Form XObject stream |
 | `testSvgWithAltTextHasAltOnFigure` | SVG via `<img alt="Logo">` maps the alt text to the Figure struct element's `/Alt` entry, not to any internal SVG element |
 
-### Integration Tests — `tests/Mpdf/Ua1/IntegrationTest.php` (new in Phase 4)
+### Integration Tests — `tests/Mpdf/Ua/IntegrationTest.php` (new in Phase 4)
 
 These tests render complete real-world HTML (extracted from the mpdf-examples repository) with `PDFUA=true` and assert structural correctness. HTML is embedded inline in the test file — no network or filesystem dependency.
 
@@ -2872,18 +2872,18 @@ For every integration test the following *invariant assertions* are made uncondi
 | `testMethod2HeadersAreArtifactTagged` | `example16_headers_method_2.php` HTML copied into a PHPUnit test with `mode='c'` **removed** (PDF/UA forbids core fonts; use `PdfUaTestCase::makeMpdf()` so embedded TrueType fonts are selected) | Page content stream contains `/Artifact <</Type /Pagination /Subtype /Header>> BDC … EMC` wrapping the Method-2 header text AND `/Artifact <</Type /Pagination /Subtype /Footer>> BDC … EMC` wrapping the footer; struct tree contains NO struct elements for header/footer content; BDC/EMC balanced |
 
 (The core-font exception is covered by `testCoreFontsNotAllowed` in Phase 1's `MetadataTest.php` — see §"Phase 1 Tests" above. No duplicate test needed in Phase 5.)
-| `testEncryptionAccessibilityBit` | `example64_protected_document.php` HTML copied into a PHPUnit test with `mode='c'` **removed** (PDF/UA forbids core fonts; use `PdfUaTestCase::makeMpdf()` so embedded TrueType fonts are selected). Test scenario: `setProtection(['print'])` omits the `'extract'` permission | In strict mode (`PDFUAauto=false`): `MpdfException` thrown. In auto mode (`PDFUAauto=true`): `$mpdf->ua1->warnings` non-empty AND the emitted `/P` permissions integer in the `/Encrypt` dict has bit 10 set (accessibility permission force-added by Phase 1). Separately: assert the XMP metadata stream remains unencrypted (raw output contains plaintext `pdfuaid:part`) per Phase 3 Constraint 2 |
+| `testEncryptionAccessibilityBit` | `example64_protected_document.php` HTML copied into a PHPUnit test with `mode='c'` **removed** (PDF/UA forbids core fonts; use `PdfUaTestCase::makeMpdf()` so embedded TrueType fonts are selected). Test scenario: `setProtection(['print'])` omits the `'extract'` permission | In strict mode (`PDFUAauto=false`): `MpdfException` thrown. In auto mode (`PDFUAauto=true`): `$mpdf->ua->warnings` non-empty AND the emitted `/P` permissions integer in the `/Encrypt` dict has bit 10 set (accessibility permission force-added by Phase 1). Separately: assert the XMP metadata stream remains unencrypted (raw output contains plaintext `pdfuaid:part`) per Phase 3 Constraint 2 |
 | `testIndexFeatureRendersWithoutErrors` | `<indexentry content="foo">` + `<indexinsert>` HTML | No PHP errors; BDC/EMC balanced; index divs produce Div/P struct elements; `<indexentry>` produces no BDC/EMC of its own |
 | `testIndexEntryProducesNoBdcEmc` | Document with only `<indexentry content="foo">` (no indexinsert) | Page stream contains no BDC or EMC from the indexentry itself |
 | `testTocRendersWithStructElements` | `example14_page_numbers_ToC_Index_Bookmarks.php` HTML | No PHP errors; BDC/EMC balanced after `MovePages`; ToC divs produce Div struct elements; `<tocentry>` produces no BDC/EMC; ToC links produce Link struct elements |
 | `testTocEntryProducesNoBdcEmc` | Document with only `<tocentry content="foo">` (no toc) | Page stream contains no BDC or EMC from the tocentry itself |
-| `testUntaggedImportedPageIsArtifact` | FPDI import of untagged PDF with PDFUA=true | Page stream contains `/Artifact <</Type /Layout>> BDC … Do … EMC`; `$mpdf->ua1->warnings` non-empty; BDC/EMC balanced |
+| `testUntaggedImportedPageIsArtifact` | FPDI import of untagged PDF with PDFUA=true | Page stream contains `/Artifact <</Type /Layout>> BDC … Do … EMC`; `$mpdf->ua->warnings` non-empty; BDC/EMC balanced |
 | `testTaggedImportedPagePreservesStructTree` | FPDI import of a tagged PDF page with PDFUA=true | Form XObject dict contains `/StructParents N`; output contains `/S` struct elements reconstructed from source; MCR dicts contain both `/Pg <hostPage>` and `/Stm <foXObject>`; BDC/EMC balanced (no Artifact wrapping in outer stream); RoleMap merged from source (host-wins on conflicts). Required gate — no `@group deferred` skip. |
 | `testFpdiTemplateReusedAcrossPagesHasPerPageMcr` | Source-tagged PDF used via `SetPageTemplate()` on 3 host pages | One struct subtree is emitted; three MCR kids differing only by `/Pg`; struct elements are NOT physically duplicated (single object number per source struct element) |
-| `testFpdiUntaggedSourceStillArtifactWrapped` | Untagged source PDF imported with PDFUA=true | `Do` is wrapped `/Artifact <</Type /Layout>> BDC … EMC`; `$mpdf->ua1->warnings` contains the untagged-import message |
+| `testFpdiUntaggedSourceStillArtifactWrapped` | Untagged source PDF imported with PDFUA=true | `Do` is wrapped `/Artifact <</Type /Layout>> BDC … EMC`; `$mpdf->ua->warnings` contains the untagged-import message |
 | `testImportedPageWithoutPdfuaNoWrapping` | FPDI import with PDFUA=false | Page stream does NOT contain BDC or EMC around the `Do` operator |
 
-**`tests/Mpdf/Ua1/DecorativePathsTest.php`** (new — Matterhorn 04-001: untagged path operators):
+**`tests/Mpdf/Ua/DecorativePathsTest.php`** (new — Matterhorn 04-001: untagged path operators):
 
 All decorative path operators (`re f`, `m l S`, border strokes, background fills) must be Artifact-wrapped. This class tests the M-4 requirement, which is called "Critical" in the Matterhorn section. This is a dedicated class because M-4 affects every table, `<hr>`, and block with a border — a regression here silently breaks veraPDF on almost all documents.
 
@@ -2911,29 +2911,29 @@ When `PDFUA = true` and `PDFUAauto = false`, throw `MpdfException` for hard viol
 - `title` config not set (Phase 1 already handles this)
 - Image with no `ALT` attribute — unknown intent; throw when `PDFUAauto=false`
 
-When `PDFUAauto = true`, append to `$this->mpdf->ua1->warnings` via `->addWarning()` instead of throwing.
+When `PDFUAauto = true`, append to `$this->mpdf->ua->warnings` via `->addWarning()` instead of throwing.
 
 Additional checks:
-- `.notdef` glyph referenced — detect during font subsetting when a character maps to glyph 0; add to `$this->mpdf->ua1->warnings`
+- `.notdef` glyph referenced — detect during font subsetting when a character maps to glyph 0; add to `$this->mpdf->ua->warnings`
 - **Encryption bit 10**: If `Protection` is enabled, the "extract text and graphics" permission (bit 10) must remain true. PDF/UA-1 §7.6 — assistive technology must always be able to read content. Check after `Protection` is applied in `BaseWriter`; throw or warn if bit 10 is cleared.
 
-**Ligature ActualText (Matterhorn 24-001)** — see Appendix A6 for the full implementation. Phase 5 activates `\Mpdf\Ua1\LigatureActualTextWriter` which wraps OTL-substituted glyph clusters with `/Span <</ActualText …>> BDC … EMC` at emit time.
+**Ligature ActualText (Matterhorn 24-001)** — see Appendix A6 for the full implementation. Phase 5 activates `\Mpdf\Ua\LigatureActualTextWriter` which wraps OTL-substituted glyph clusters with `/Span <</ActualText …>> BDC … EMC` at emit time.
 
-Warnings are accessible via `$mpdf->ua1->warnings` (array of strings).
+Warnings are accessible via `$mpdf->ua->warnings` (array of strings).
 
 ### Phase 5 Tests
 
-**`tests/Mpdf/Ua1/ValidationTest.php`** (new):
+**`tests/Mpdf/Ua/ValidationTest.php`** (new):
 
 | Test method | Assertion |
 |---|---|
-| `testImageMissingAltAddsWarning` | Image with no `alt` populates `$mpdf->ua1->warnings` when `PDFUAauto=true` |
+| `testImageMissingAltAddsWarning` | Image with no `alt` populates `$mpdf->ua->warnings` when `PDFUAauto=true` |
 | `testImageMissingAltThrowsWhenStrict` | Image with no `alt` throws `MpdfException` when `PDFUAauto=false` |
 | `testEncryptionBit10MustRemainSet` | `setProtection([])` + `PDFUA=true` throws or warns about accessibility permission bit (based on `example64_protected_document.php` HTML, but with `mode='c'` removed — use `PdfUaTestCase::makeMpdf()` for embedded TrueType fonts; the purpose is to exercise the encryption / permission-bit path, not the core-font exception) |
-| `testSetColumnsProducesTaggedColumnContent` | `SetColumns(2)` followed by `<p>Column body</p>` with `PDFUA=true` (either mode) produces real `/P <</MCID N>> BDC … EMC` inside the column content (via the sentinel expansion in `printcolumnbuffer()`). No `/Artifact` markers around column body content. `$mpdf->ua1->structureTree` contains a `P` child. Works in both strict and auto modes — column tagging is always on. |
+| `testSetColumnsProducesTaggedColumnContent` | `SetColumns(2)` followed by `<p>Column body</p>` with `PDFUA=true` (either mode) produces real `/P <</MCID N>> BDC … EMC` inside the column content (via the sentinel expansion in `printcolumnbuffer()`). No `/Artifact` markers around column body content. `$mpdf->ua->structureTree` contains a `P` child. Works in both strict and auto modes — column tagging is always on. |
 | `testIndexInColumnsProducesTaggedStructElements` | `SetColumns(2)` + `<indexinsert>` produces `Div`/`P`/`Link` struct elements inside the column region; BDC/EMC balanced; no `/Artifact` wrappers around index entries |
 | `testColumnSentinelsSurviveReorder` | Column balancing moves `rel_y`-sorted entries across columns; sentinel `__PDFUA_BDC__` / `__PDFUA_EMC__` stay adjacent to their content; final output has matched BDC/EMC pairs |
-| `testHeadingLevelSkipAddsWarning` | `<h1>A</h1><h3>B</h3>` (skipping H2) with `PDFUAauto=true` adds a warning to `$mpdf->ua1->warnings`; with `PDFUAauto=false` throws `MpdfException` (Matterhorn 14-003) |
+| `testHeadingLevelSkipAddsWarning` | `<h1>A</h1><h3>B</h3>` (skipping H2) with `PDFUAauto=true` adds a warning to `$mpdf->ua->warnings`; with `PDFUAauto=false` throws `MpdfException` (Matterhorn 14-003) |
 | `testOverWriteThrowsInPdfuaMode` | Calling `OverWrite()` when `PDFUA=true` throws `MpdfException` regardless of `PDFUAauto` — overwriting invalidates struct tree object references which cannot be repaired |
 | `testJavaScriptEmbedAddsWarning` | `<script>` or `$mpdf->SetJS()` with `PDFUA=true, PDFUAauto=true` adds a `PDFUAwarning`; with `PDFUAauto=false` throws `MpdfException` |
 | `testFontSubsetToUnicodeCoverage` | Every font used in PDFUA output has a `/ToUnicode` CMap stream — assert each font object in the PDF contains `/ToUnicode` when `PDFUA=true` |
@@ -2942,7 +2942,7 @@ Warnings are accessible via `$mpdf->ua1->warnings` (array of strings).
 **veraPDF conformance gate** (part of Phase 5): Once veraPDF is available in the CI environment, add:
 
 ```
-# tests/Mpdf/Ua1/VeraPdfValidationTest.php
+# tests/Mpdf/Ua/VeraPdfValidationTest.php
 # @group verapdf — excluded from default 'composer test' run
 # Skipped unless VERAPDF_BIN env is set
 testAllExamplesPassVeraPdfWithUa1Flavour
@@ -3003,14 +3003,14 @@ The tag handler for `DT` must open an implicit `LI` parent before opening `Lbl` 
 
 ```php
 // In DT/DD open handler, when PDFUA active:
-if ($this->mpdf->ua1->structureTree->getCurrent()->getType() === 'L') {
-    $this->mpdf->ua1->structureTree->open('LI');
-    $this->mpdf->ua1->openedImplicitLI = true;
+if ($this->mpdf->ua->structureTree->getCurrent()->getType() === 'L') {
+    $this->mpdf->ua->structureTree->open('LI');
+    $this->mpdf->ua->openedImplicitLI = true;
 }
-$this->mpdf->ua1->structureTree->open('Lbl');  // for DT, or 'LBody' for DD
+$this->mpdf->ua->structureTree->open('Lbl');  // for DT, or 'LBody' for DD
 ```
 
-The `$this->mpdf->ua1->openedImplicitLI` flag tracks whether an implicit `LI` was opened (closed on the next sibling `DT`/`DD` or on `/DL`).
+The `$this->mpdf->ua->openedImplicitLI` flag tracks whether an implicit `LI` was opened (closed on the next sibling `DT`/`DD` or on `/DL`).
 
 ### Items confirmed correct by spec review
 
@@ -3048,7 +3048,7 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 
 - **PHP 5.6 compat**: No typed properties, arrow functions, named args, `??` operator, `match`, or nullsafe `?->` in `src/`. Use `isset($x) ? $x : $default` instead of `$x ?? $default`. Use `var $foo;` for all new Mpdf properties (matches existing `var $PDFA;` at line 79); use `var $foo;` in new standalone classes too (they don't use Strict).
 - **Strict trait**: All new properties on `Mpdf` must be declared — dynamic assignment throws `MpdfException`. New collaborator classes (StructureTree, StructureElement) do NOT use Strict.
-- **`var` properties are public**: Writer code accesses `$this->mpdf->ua1->enabled` directly — same pattern as `$this->mpdf->PDFA`. Do NOT use `getPDFUA()` — no such getter exists. The only helper methods added live on `\Mpdf\Ua1\Ua1State`: `addWarning($msg)` and `nextStructParents()`. `Mpdf.php` itself gains zero new methods.
+- **`var` properties are public**: Writer code accesses `$this->mpdf->ua->enabled` directly — same pattern as `$this->mpdf->PDFA`. Do NOT use `getPDFUA()` — no such getter exists. The only helper methods added live on `\Mpdf\Ua\UaState`: `addWarning($msg)` and `nextStructParents()`. `Mpdf.php` itself gains zero new methods.
 - **New config options must be in `ConfigVariables.php`** — constructor merges config using that class as the defaults source.
 - **New services in `ServiceFactory`** must appear in both `getServices()` return array and `getServiceIds()` array.
 - **MCID assignment in `finishFlowingBlock()`** — not at tag-open time. Tag `open()` pushes the struct element; `finishFlowingBlock()` assigns the MCID using the page's `/StructParents` integer. One MCID per page per struct element.
@@ -3064,20 +3064,20 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 - **P/H/etc inside table cells**: these struct elements exist as children of TD in the struct tree but share the TD's single MCID in Phase 4. This is valid PDF/UA-1. Per-paragraph MCIDs within cells are a future enhancement.
 - **`ALT` attribute is entirely absent** from `src/Tag/Img.php` — there is no existing parsing to build on.
 - **`aria-*` attributes arrive uppercased** — check `$attr['ARIA-HIDDEN']`, `$attr['ARIA-LABEL']`, `$attr['ARIA-LEVEL']`, `$attr['ARIA-COLSPAN']`, `$attr['ARIA-ROWSPAN']`, `$attr['ROLE']`, `$attr['LANG']`.
-- **`aria-labelledby`, `aria-describedby`, `aria-details`, `aria-controls`, `aria-owns`, `aria-flowto`, `aria-activedescendant`** — resolved by `\Mpdf\Ua1\AriaIdResolver` in a deferred second pass at `_enddoc()` time (before `StructureWriter::writeStructTree()` runs). `/Alt`, `/E`, and relationship kids mutate in-memory `StructureElement` objects only — no content-stream rewrite required. Forward references resolve correctly.
+- **`aria-labelledby`, `aria-describedby`, `aria-details`, `aria-controls`, `aria-owns`, `aria-flowto`, `aria-activedescendant`** — resolved by `\Mpdf\Ua\AriaIdResolver` in a deferred second pass at `_enddoc()` time (before `StructureWriter::writeStructTree()` runs). `/Alt`, `/E`, and relationship kids mutate in-memory `StructureElement` objects only — no content-stream rewrite required. Forward references resolve correctly.
 - **Fixed-position blocks**: Buffered and rendered after normal flow via `WriteFixedPosHTML()` (~line 13935 in `Mpdf.php`). Default to Artifact. The BDC/EMC hook belongs inside `WriteFixedPosHTML()`, not at the `BlockTag::open()` detection point (because content is not rendered at parse time).
 - **Floated blocks**: Content rendered before surrounding text in the content stream. Block floats default to Artifact (stream-order mismatch); image floats tagged as Figure (stream order usually matches reading order). Float detection is in `BlockTag::open()` (~line 582-712); metadata in `$this->floatDivs[]`. Image float buffer via `printfloatbuffer()` (~line 25378).
 - **`inFixedPosBlock`** flag on `Mpdf` — while this is `true`, tag handlers must not emit struct elements or BDC/EMC operators since the content is being buffered, not rendered.
-- **Barcodes**: Rendered as vector graphics (PDF path operators `re f`) via `WriteBarcode()` / `WriteBarcode2()` / `mpdf/qrcode` package. Tag as `Figure` with `Alt = 'Barcode: ' . $code` (or `aria-label` override). MCID + BDC/EMC injected at textbuffer processing point (Mpdf.php ~line 7414), wrapping the entire render call including human-readable text. Use `$this->ua1->markedContentHelper->begin('Figure', $mcid)` / `->end()`.
+- **Barcodes**: Rendered as vector graphics (PDF path operators `re f`) via `WriteBarcode()` / `WriteBarcode2()` / `mpdf/qrcode` package. Tag as `Figure` with `Alt = 'Barcode: ' . $code` (or `aria-label` override). MCID + BDC/EMC injected at textbuffer processing point (Mpdf.php ~line 7414), wrapping the entire render call including human-readable text. Use `$this->ua->markedContentHelper->begin('Figure', $mcid)` / `->end()`.
 - **Watermarks**: Rendered in `Footer()` (processingFooter=true) → direct `pages[$page]` write, column buffer bypassed. Tag as `/Artifact <</Type /Background>> BDC … EMC`. Behind-content images injected via `preg_replace()` — include BDC/EMC in replacement string. Text: wrap in `watermark()` method. Image (front): wrap `Image()` call in `watermarkImg()`. Use `/Type /Background` artifact subtype, not Pagination.
 - **`<textcircle>`**: Uses real `Cell()` calls → actual PDF text, not graphics. Tag as `Span` with `ActualText` = concatenated `top-text + divider + bottom-text`. MCID and BDC/EMC injected at the textbuffer processing point (~line 7524 in `Mpdf.php`), NOT inside `DirectWrite::CircularText()`.
-- **FPDI imported pages**: `enableImports=false` by default. **When enabled**: the source catalog is inspected for `/StructTreeRoot`. Untagged sources are Artifact-wrapped (`/Artifact <</Type /Layout>> BDC … EMC` around the `Do`) with an `$this->mpdf->ua1->addWarning()` call. Tagged sources flow through `\Mpdf\Ua1\Import\FpdiStructMerger` — the source struct subtree is queued onto `objectsToCopy` (FPDI's existing indirect-ref rewriter handles object-number remapping), MCR dicts get `/Pg <hostPageObjNum> /Stm <foXObjectObjNum>`, RoleMap is merged first-wins. `SetPageTemplate()` reuse emits one struct subtree with N MCR kids (one per reuse), not N subtree copies. Both paths use `$this->writer->write()` (routes through `BaseWriter::endPage()`).
+- **FPDI imported pages**: `enableImports=false` by default. **When enabled**: the source catalog is inspected for `/StructTreeRoot`. Untagged sources are Artifact-wrapped (`/Artifact <</Type /Layout>> BDC … EMC` around the `Do`) with an `$this->mpdf->ua->addWarning()` call. Tagged sources flow through `\Mpdf\Ua\Import\FpdiStructMerger` — the source struct subtree is queued onto `objectsToCopy` (FPDI's existing indirect-ref rewriter handles object-number remapping), MCR dicts get `/Pg <hostPageObjNum> /Stm <foXObjectObjNum>`, RoleMap is merged first-wins. `SetPageTemplate()` reuse emits one struct subtree with N MCR kids (one per reuse), not N subtree copies. Both paths use `$this->writer->write()` (routes through `BaseWriter::endPage()`).
 - **Form Widget `/TU` already present**: `Form.php` always writes `/TU` from HTML `title`/`alt`. No change needed. Add `/StructParent M` (singular, not `/StructParents`) to Widget annotation dicts and create `Form` struct elements with OBJR dicts in `StructureWriter`. Radio buttons: pre-assign per kid Widget, not per group parent. Store assigned PDF object number in `$this->form->forms[$ref]['obj']` immediately after `$this->writer->object()` call in each `_putform_*()` method.
 - **`<indexentry>` and `<tocentry>` produce no content stream output** — they only record `$this->Reference[]` / `$this->tableOfContents->_toc[]` entries with zero-width, zero-height object markers. No BDC/EMC or struct element should be emitted for either. `<indexinsert>` and `<toc>`/`<tocpagebreak>` render via `WriteHTML()` and are tagged normally by Phase 4 block element handlers. Index and ToC page-reference numbers are content text, NOT pagination Artifacts.
 - **`MovePages()` for ToC pages**: Reorders the logical page list but does NOT renumber PDF objects — `/Pg N 0 R` references in MCR dicts remain valid after `insertTOC()` moves pages. No special handling needed.
 - **`ColActive` flag and column buffer routing**: When `$this->ColActive === 1`, `BaseWriter::endPage()` routes ALL content to `$this->columnbuffer[]` instead of `$this->pages[$this->page]`. Tag handlers do NOT call `markedContentHelper->begin()`/`->end()` during column collection. Instead they write `__PDFUA_BDC__` / `__PDFUA_EMC__` sentinel entries to `columnbuffer[]` (see §6 sentinel strategy). These sentinels are expanded to real BDC/EMC operators in the final output loop of `printcolumnbuffer()`, after column reordering. `structureTree->open()`, `addContent()`, and `close()` are called normally during collection — only BDC/EMC emission is deferred.
 - **`AutosizeText()` direct method needs BDC/EMC around its single `Cell()` call** (line 25476): tag as `Span`; no new parameter needed (text content IS the accessible representation); same suppression guards as `Image()` — `isInArtifact()` and `ColActive`.
-- **`Image()` direct method has its own BDC/EMC injection point**: HTML `<img>` tags emit BDC/EMC in `printobjectbuffer()` (~line 7381); direct `Image()` PHP API calls emit BDC/EMC inside `Image()` itself at line ~9074, immediately around `$this->writer->write($outstring)`. Add `$alt = null` as the final parameter. Three suppression guards: `$watermark=true` (watermark path handles its own tagging), `$this->ua1->structureTree->isInArtifact()` (header/footer scope), `$this->ColActive` (column buffer reordering makes BDC/EMC unsafe). **Watermark + alt conflict**: When `$watermark=true` AND `$alt` is a non-null, non-empty string, the `$alt` value is silently discarded (the watermark suppression guard fires first). This is correct behavior — watermarks are always Artifact regardless of the alt argument — but callers passing both `$watermark=true` and a non-empty `$alt` likely have a logical error. When `PDFUA=true`, add a `PDFUAwarning` in this case: `"Image() called with watermark=true and non-empty alt — alt text is ignored for watermark images"`. **No unit test** — covered by the documented behavior note; test would require mocking the warning collection. **Subclass compatibility**: Any `Mpdf` subclass that overrides `Image()` with the original 12-parameter signature will silently lose the `$alt` argument — the parent's PDFUA branch will never receive it, leaving the struct tree unpopulated without any visible error. Document in CHANGELOG and UPGRADING.md that subclasses overriding `Image()` must update their signature. Do not describe this as "backward-compatible" — it is source-compatible for callers but not for overriders. **No unit test for subclass override** — this is a documented-only caveat; verifying it would require creating an anonymous subclass, which adds significant test complexity for marginal benefit.
+- **`Image()` direct method has its own BDC/EMC injection point**: HTML `<img>` tags emit BDC/EMC in `printobjectbuffer()` (~line 7381); direct `Image()` PHP API calls emit BDC/EMC inside `Image()` itself at line ~9074, immediately around `$this->writer->write($outstring)`. Add `$alt = null` as the final parameter. Three suppression guards: `$watermark=true` (watermark path handles its own tagging), `$this->ua->structureTree->isInArtifact()` (header/footer scope), `$this->ColActive` (column buffer reordering makes BDC/EMC unsafe). **Watermark + alt conflict**: When `$watermark=true` AND `$alt` is a non-null, non-empty string, the `$alt` value is silently discarded (the watermark suppression guard fires first). This is correct behavior — watermarks are always Artifact regardless of the alt argument — but callers passing both `$watermark=true` and a non-empty `$alt` likely have a logical error. When `PDFUA=true`, add a `PDFUAwarning` in this case: `"Image() called with watermark=true and non-empty alt — alt text is ignored for watermark images"`. **No unit test** — covered by the documented behavior note; test would require mocking the warning collection. **Subclass compatibility**: Any `Mpdf` subclass that overrides `Image()` with the original 12-parameter signature will silently lose the `$alt` argument — the parent's PDFUA branch will never receive it, leaving the struct tree unpopulated without any visible error. Document in CHANGELOG and UPGRADING.md that subclasses overriding `Image()` must update their signature. Do not describe this as "backward-compatible" — it is source-compatible for callers but not for overriders. **No unit test for subclass override** — this is a documented-only caveat; verifying it would require creating an anonymous subclass, which adds significant test complexity for marginal benefit.
 - **Layers (OCGs) are permitted in PDF/UA**: Do NOT add PDFUA to the `BeginLayer()` PDFA/PDFX guard. Tag content inside layers normally — MCID BDC/EMC nests inside layer BDC/EMC; the nesting is valid per ISO 32000-1 §14.6. Layer content reordering at `_enddoc()` (lines 10065–10066) extracts and re-appends entire layer blocks, preserving inner MCID BDC/EMC pairs. Struct tree references are by MCID number, not stream position — reordering does not invalidate them. `SetVisibility()` BDC/EMC is not reordered and is also transparent to the tagging logic. Tag content inside visibility groups normally.
 - **`bufferoutput=true` and header/footer BDC/EMC routing**: During `_puthtmlheaders()`, mPDF sets `$this->bufferoutput = true`, causing `BaseWriter::endPage()` to route all `$this->writer->write()` output to `$this->headerbuffer` instead of `$this->pages[$this->page]`. The `headerbuffer` is later spliced into the page stream at `___HEADER___MARKER___` by `PageWriter::writePages()`. **Never write BDC/EMC for headers/footers directly to `$this->pages[$this->page]`** — that bypasses `bufferoutput` routing and places operators outside the header section, producing a malformed stream. Always use `$this->writer->write()`. All four header/footer types (PHP `SetHTMLHeader/Footer()`, `SetHeader/Footer()`, HTML `<htmlpageheader/footer>`, HTML `<pageheader/footer>`) converge on `_puthtmlheaders()` — one injection point covers all four.
 - **`openArtifact()` / `closeArtifact()` in `StructureTree`**: An internal `$artifactDepth` counter on `StructureTree` (not a boolean flag) that, when `> 0`, causes all tag handlers and `finishFlowingBlock()` to skip struct element creation and MCID assignment. A counter is required (not a boolean) so nested artifact scopes work correctly (e.g., `openArtifact()` called for header rendering, then watermark inside header also calls `openArtifact()` — the inner `closeArtifact()` must not prematurely exit the outer scope). Required whenever rendering enters a context that is semantically a single Artifact: headers/footers (content is Pagination Artifact), column regions (entire column block is Artifact in Phase 4), fixed-position blocks, watermarks. Without this, HTML markup inside a header (e.g., `<h1>Company Name</h1>`) would create `/H1` struct elements in the document structure tree — semantically wrong and invalid PDF/UA.
@@ -3085,9 +3085,9 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 - **`<abbr title="...">` / `<acronym title="...">`** — the `title` attribute value maps to `/E` (expansion) on the Span struct element. Verify whether mPDF has an `Abbr` tag handler; if not, add one.
 - **RoleMap**: Custom `role=` values not in the standard struct type set must be recorded in StructTreeRoot's `/RoleMap` dict. `StructureTree::addRoleMapping()` collects them for `StructureWriter`.
 - **`Note` struct elements** must have a globally unique `/ID` string (Matterhorn 09-004). Generate a UUID or document-scoped counter string for each Note.
-- **`StructureTree::open()` return value**: `open()` pushes the new element onto the stack and returns `void`. Callers that need a reference to the new element must call `$this->mpdf->ua1->structureTree->getCurrent()` immediately after `open()`. Do NOT rely on `open()` returning the element — it does not. This convention must be consistent across all call sites (tag handlers, watermark, FPDI).
+- **`StructureTree::open()` return value**: `open()` pushes the new element onto the stack and returns `void`. Callers that need a reference to the new element must call `$this->mpdf->ua->structureTree->getCurrent()` immediately after `open()`. Do NOT rely on `open()` returning the element — it does not. This convention must be consistent across all call sites (tag handlers, watermark, FPDI).
 - **`$this->headerbuffer` resets before each header render**: `_puthtmlheaders()` renders each header (odd/even/first, header/footer) in a separate `WriteHTML()` call. Verify that `$this->headerbuffer` is reset to `''` at the start of each header render block before calling `WriteHTML()`. If it accumulates across iterations, the BDC/EMC wrapping at §3d would enclose stale content from previous pages inside the current header's artifact block. Check the existing `_puthtmlheaders()` flow — `headerbuffer` should already reset; confirm in code before Phase 3d is marked complete.
-- **`/StructParents N` integer allocation contract** (consolidated): Page dicts receive `/StructParents N` integers assigned sequentially by `PageWriter::writePages()`. The counter is `$this->mpdf->ua1->structParentsCounter` (incremented by `nextStructParents()`). Annotation pre-assignment in the same function uses `StructureTree::$annotParentCounter` (via `nextAnnotStructParent()`). Form XObject `/StructParents` (SVG, FPDI tagged pages) uses `nextStructParents()` from the same counter. `StructureWriter::writeStructTree()` emits `/ParentTreeNextKey` = `$this->mpdf->ua1->structParentsCounter` (its value after all pages are processed equals one more than the highest key used). The `ParentTree` NumTree has one entry per integer: pages → dense array of struct elem refs ordered by MCID; annotations/XObjects → single struct elem ref.
+- **`/StructParents N` integer allocation contract** (consolidated): Page dicts receive `/StructParents N` integers assigned sequentially by `PageWriter::writePages()`. The counter is `$this->mpdf->ua->structParentsCounter` (incremented by `nextStructParents()`). Annotation pre-assignment in the same function uses `StructureTree::$annotParentCounter` (via `nextAnnotStructParent()`). Form XObject `/StructParents` (SVG, FPDI tagged pages) uses `nextStructParents()` from the same counter. `StructureWriter::writeStructTree()` emits `/ParentTreeNextKey` = `$this->mpdf->ua->structParentsCounter` (its value after all pages are processed equals one more than the highest key used). The `ParentTree` NumTree has one entry per integer: pages → dense array of struct elem refs ordered by MCID; annotations/XObjects → single struct elem ref.
 - **Long-term target architecture**: The current design has `MarkedContentHelper` centralizing BDC/EMC emission with routing through `$this->writer->write()`. Any new buffer context (e.g., a new "sticky layout" buffer) requires only that `BaseWriter::write()` knows about it — no per-injection-site changes. New code must always route through `markedContentHelper->begin()`/`->end()`, never write BDC/EMC directly to buffers (except in column sentinel expansion inside `printcolumnbuffer()`, which is a special deferred-emission path).
 - **Encryption: PDF/UA allows it; PDF/A and PDF/X do not**: Do NOT extend the `if (($this->PDFA || $this->PDFX) && $this->encrypted)` exception guard to include PDFUA. Two changes are required when PDFUA + encryption coexist: (1) force-add `'extract'` (bit 10, accessibility permission) to the permissions array in `SetProtection()` silently; (2) pass `$encrypt = false` to `BaseWriter::stream()` for the XMP metadata stream — PDF spec §14.3.2 mandates XMP is NOT encrypted. All other objects (page content, struct tree dicts) are handled correctly by existing behaviour.
 - **`PDFUA` and `PDFA` can coexist** — the PDFUA XMP block is a separate `if` (not `elseif`) after the `elseif ($this->mpdf->PDFA)` block in `writeMetadata()`. PDFX and PDFA are mutually exclusive via `if/elseif`; PDFUA is independent. PDFUA does NOT need `/OutputIntents` (leave line 386 unchanged). Do not add PDFUA to the `PrintScaling` / `Duplex` / `/Subj` PDFA/PDFX exclusions — PDF/UA is based on PDF 1.7 and allows these. The `/F 28` and `/CA 1` annotation flags and the `/Metadata` catalog reference DO need PDFUA added.
@@ -3104,7 +3104,7 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 - **`/Tabs /S` on every page** (Matterhorn 28-001): Write `/Tabs /S` unconditionally alongside `/StructParents N` in the page dict loop — NOT only inside the `if ($annotsnum || $formsnum)` block. Annotated and non-annotated pages both require it.
 - **`/Lang` in catalog** (Matterhorn 23-001): ISO 14289-1 §7.2 requires `/Lang` in the document catalog. `MetadataWriter::writeCatalog()` already writes `/Lang` at lines 333–337 from `currentLang`/`default_lang`. No new write is needed. The PDFUA addition is a validation check: throw (strict) or warn (auto) when both language properties are empty/null.
 - **Decorative path operators must be Artifact-wrapped** (Matterhorn 04-001): `re f`, `m l S`, and other PDF path operators for table borders, `<hr>`, block borders, and page backgrounds are untagged content operators. All must be wrapped in `/Artifact BMC … EMC`. Failure to do so causes veraPDF to flag every table border and horizontal rule as untagged real content.
-- **HTML tag → PDF struct type mapping required in `BlockTag.php`**: `strtoupper($tag)` does NOT produce valid struct types for most HTML5 elements. Use `\Mpdf\Ua1\StructType::fromHtmlTag($tag, $attr)` which maps BLOCKQUOTE→BlockQuote, PRE→Code, SECTION→Sect, FIGURE→Figure, FIGCAPTION→Caption, ARTICLE→Art, ASIDE→Sect, NAV→Sect, MAIN→Div, HEADER→Div, FOOTER→Div, ADDRESS→P, MARK/DEL/INS/S/SUB/SUP/SMALL→Span, Q→Quote, DL→L, DT→Lbl, DD→LBody. Unknown tags return `null` — callers decide the fallback (usually Div with a RoleMap entry).
+- **HTML tag → PDF struct type mapping required in `BlockTag.php`**: `strtoupper($tag)` does NOT produce valid struct types for most HTML5 elements. Use `\Mpdf\Ua\StructType::fromHtmlTag($tag, $attr)` which maps BLOCKQUOTE→BlockQuote, PRE→Code, SECTION→Sect, FIGURE→Figure, FIGCAPTION→Caption, ARTICLE→Art, ASIDE→Sect, NAV→Sect, MAIN→Div, HEADER→Div, FOOTER→Div, ADDRESS→P, MARK/DEL/INS/S/SUB/SUP/SMALL→Span, Q→Quote, DL→L, DT→Lbl, DD→LBody. Unknown tags return `null` — callers decide the fallback (usually Div with a RoleMap entry).
 - **SVG images**: Treated identically to raster images from PDF/UA perspective — the entire SVG Form XObject is content of a `Figure` struct element. Alt text from `<img alt="...">` is the accessible representation. Do NOT add `/StructParents` to SVG Form XObject dicts (unlike FPDI imported tagged pages). SVG internal text operators are inside the opaque Form XObject stream and cannot be addressed by page-level MCIDs. **SVG test coverage** — three tests named in SVG prose are NOT in any table yet and must be added to `StructureElementsTest.php`: `testSvgImageTaggedAsFigureAtPageLevel` (SVG via `<img src="...svg">` produces a Figure struct element at the page level), `testSvgInlineFontTextIsArtifact` (text inside inline SVG XML in the page stream is not separately tagged — it is content of the Figure Form XObject; no MCID is assigned to SVG-internal text), and `testSvgWithAltTextHasAltOnFigure` (SVG `<img alt="...">` maps the alt text to the Figure struct element's `/Alt` entry, not to any internal SVG element).
 - **`testBdcEmcBalanced`**: Scope the regex to lines containing known PDF/UA tag names (P, H1–H6, Figure, L, LI, LBody, Lbl, TR, TD, TH, Table, Link, Note, Artifact) to avoid counting existing Optional Content Group BDC/EMC operators.
 
@@ -3119,7 +3119,7 @@ A full audit of the plan against the Matterhorn Protocol 1.1 (136 failure condit
 **M-1: PDF version not forced to 1.7 (Matterhorn 01-001)**
 Add to `__construct()` immediately after config merge:
 ```php
-if ($this->ua1->enabled && version_compare($this->pdf_version, '1.7', '<')) {
+if ($this->ua->enabled && version_compare($this->pdf_version, '1.7', '<')) {
     $this->pdf_version = '1.7';
 }
 ```
@@ -3217,7 +3217,7 @@ Phase 3c creates a Figure struct element and sets `['Alt' => '']` even when `alt
 `src/Tag/Footnote.php` places footnote text at the bottom of the page. Add struct element handling in the tag handler and/or rendering point: `structureTree->open('Note', ['ID' => 'footnote-' . $this->footnoteCounter++])`. Note struct elements require unique `/ID` per Matterhorn 09-002 (already in plan for other Note types). Add test `testFootnoteTagProducesNoteStructElement`.
 
 **M-12: `Lbl` struct element injection point not specified (Matterhorn 07-003)**
-The plan mentions `Lbl` for list bullets but gives only a vague reference to `BlockTag ~line 354`. Specify: in `BlockTag.php`, when rendering the bullet/number string for an `<li>` element, the bullet `Cell()` call must be preceded by `structureTree->open('Lbl')` + MCID assignment + `$this->ua1->markedContentHelper->begin('Lbl', $mcid)`, and followed by `$this->ua1->markedContentHelper->end()` + `structureTree->close()`. The remaining `<li>` content flows into `LBody`. This is the most granular injection in the list tagging path.
+The plan mentions `Lbl` for list bullets but gives only a vague reference to `BlockTag ~line 354`. Specify: in `BlockTag.php`, when rendering the bullet/number string for an `<li>` element, the bullet `Cell()` call must be preceded by `structureTree->open('Lbl')` + MCID assignment + `$this->ua->markedContentHelper->begin('Lbl', $mcid)`, and followed by `$this->ua->markedContentHelper->end()` + `structureTree->close()`. The remaining `<li>` content flows into `LBody`. This is the most granular injection in the list tagging path.
 
 **M-13: Embedded file attachment accessibility (Matterhorn 11-001, 11-002, 18-001, 18-002)**
 File attachment annotations (from `<annotation>` tags with file type) need:
@@ -3229,8 +3229,8 @@ File attachment annotations (from `<annotation>` tags with file type) need:
 **M-14: JavaScript warning (Matterhorn 19-001)**
 In `JavaScriptWriter.php` (or wherever JS is accepted for embedding), add:
 ```php
-if ($this->mpdf->ua1->enabled) {
-    $this->mpdf->ua1->addWarning('JavaScript embedded in PDF/UA-1 document may alter content or structure — verify conformance manually.');
+if ($this->mpdf->ua->enabled) {
+    $this->mpdf->ua->addWarning('JavaScript embedded in PDF/UA-1 document may alter content or structure — verify conformance manually.');
 }
 ```
 
@@ -3255,8 +3255,11 @@ composer test
 vendor/bin/phpunit --group=snapshot        # requires imagick + ghostscript; diffs written to tmp/artifacts/
 
 # Quick metadata check after Phase 1
+# NOTE: 'title' is NOT a ConfigVariables key and is silently dropped by the
+# constructor's array_intersect_key() merge — always call SetTitle() afterwards.
 php -r "
-\$mpdf = new Mpdf\Mpdf(['title'=>'Test','PDFUA'=>true]);
+\$mpdf = new Mpdf\Mpdf(['PDFUA'=>true]);
+\$mpdf->SetTitle('Test');
 \$mpdf->WriteHTML('<h1>Hello</h1><p>World</p>');
 echo \$mpdf->Output('', 'S');
 " | grep -a 'pdfuaid\|MarkInfo\|DisplayDocTitle\|StructParents'
@@ -3342,10 +3345,10 @@ Confirmed by PDF 32000-1:2008 §7.6.5 review. Simply skipping RC4 without declar
 
 Matterhorn 24-001 fires when a glyph resulting from OpenType ligature substitution has no corresponding 1:1 Unicode entry in the font's `ToUnicode` CMap. mPDF's `Otl` class substitutes ligature glyphs; the resulting CID codes may not decode 1:1 to Unicode — the classic case is `fi` (U+0066 U+0069) → single glyph CID.
 
-**Implementation (in-scope)** — add `src/Ua1/LigatureActualTextWriter.php` in Phase 5:
+**Implementation (in-scope)** — add `src/Ua/LigatureActualTextWriter.php` in Phase 5:
 
 - **Otl instrumentation**: extend `Otl` so that every substitution it performs is appended to a per-run log keyed by the output glyph cluster: `[outputGlyphId => originalUnicodeCharacters]`. The log is stored on the `$GPOSinfo` / `$useOTL` metadata that `Otl` already attaches to the text buffer entry.
-- **Emit-time wrapping**: `Cell()` and `finishFlowingBlock()` check the log for the current run. When a glyph cluster has more than one source character (ligature), the run is split and each ligature sub-run is wrapped via `$this->mpdf->ua1->markedContentHelper`:
+- **Emit-time wrapping**: `Cell()` and `finishFlowingBlock()` check the log for the current run. When a glyph cluster has more than one source character (ligature), the run is split and each ligature sub-run is wrapped via `$this->mpdf->ua->markedContentHelper`:
   ```
   /Span <</ActualText <FEFF 00 66 00 69>>> BDC
     BT /F1 12 Tf 100 700 Td <1ED> Tj ET   % fi glyph
@@ -3356,7 +3359,7 @@ Matterhorn 24-001 fires when a glyph resulting from OpenType ligature substituti
 - **Skip when ToUnicode covers it**: `FontWriter::writeFonts()` emits `/ToUnicode` CMaps. The `LigatureActualTextWriter` first checks the emitted CMap — if the glyph-cluster → original-string mapping is already covered (`beginbfchar` entry present with the multi-char `dstString`), skip the ActualText wrapper. Many fonts already include this; the wrapper is only needed as a fallback.
 - **StructureElement support**: `StructureElement::$attributes['ActualText']` already exists (used by `textcircle` elsewhere in the plan). The Phase 5 writer reuses the same attribute emission path.
 
-**Tests** — add to `tests/Mpdf/Ua1/LigatureActualTextTest.php`:
+**Tests** — add to `tests/Mpdf/Ua/LigatureActualTextTest.php`:
 
 | Test | Assertion |
 |---|---|
@@ -3373,8 +3376,8 @@ Matterhorn 24-001 fires when a glyph resulting from OpenType ligature substituti
 
 Matterhorn 01-007 (a PDF claiming PDF/UA-1 conformance must not contain untagged real content) is satisfied by the two-tier treatment in the §"Imported PDFs via FPDI" section:
 
-- **Tagged source**: `\Mpdf\Ua1\Import\FpdiStructMerger` (Phase 4) reads the source catalog's `/StructTreeRoot`, queues the struct subtree for the imported page onto FPDI's `objectsToCopy` (so FPDI's existing `writePdfType()` rewriter at `src/FpdiTrait.php:344–395` handles object-number remapping), rewrites MCR `/Pg` to the host page and adds `/Stm` pointing at the Form XObject. `SetPageTemplate()` reuse on N host pages emits N MCR kids under a single struct subtree.
-- **Untagged source**: the `Do` is wrapped as `/Artifact <</Type /Layout>> BDC … EMC` and a warning is appended to `$this->mpdf->ua1->warnings` via `->addWarning()`.
+- **Tagged source**: `\Mpdf\Ua\Import\FpdiStructMerger` (Phase 4) reads the source catalog's `/StructTreeRoot`, queues the struct subtree for the imported page onto FPDI's `objectsToCopy` (so FPDI's existing `writePdfType()` rewriter at `src/FpdiTrait.php:344–395` handles object-number remapping), rewrites MCR `/Pg` to the host page and adds `/Stm` pointing at the Form XObject. `SetPageTemplate()` reuse on N host pages emits N MCR kids under a single struct subtree.
+- **Untagged source**: the `Do` is wrapped as `/Artifact <</Type /Layout>> BDC … EMC` and a warning is appended to `$this->mpdf->ua->warnings` via `->addWarning()`.
 
 Both paths are in-scope in Phase 4; no future work or plan gaps remain here.
 
@@ -3417,7 +3420,7 @@ The plan says "verify `src/Tag/Abbr.php` exists." It does not. Create it (mirror
 
 ### A12. `StructureWriter` service registration
 
-Under the `Ua1State` facade (D10), `ServiceFactory` no longer registers `markedContentHelper`, `structureTree`, `structureWriter` as top-level services — it registers a single `'ua1State'` service that references all of them. `ResourceWriter::writeResources()` reaches the struct writer via `$this->mpdf->ua1->structureWriter->writeStructTree()` — no new constructor parameter needed on `ResourceWriter` because it already receives `$mpdf`.
+Under the `UaState` facade (D10), `ServiceFactory` no longer registers `markedContentHelper`, `structureTree`, `structureWriter` as top-level services — it registers a single `'uaState'` service that references all of them. `ResourceWriter::writeResources()` reaches the struct writer via `$this->mpdf->ua->structureWriter->writeStructTree()` — no new constructor parameter needed on `ResourceWriter` because it already receives `$mpdf`.
 
 ---
 
@@ -3426,10 +3429,10 @@ Under the `Ua1State` facade (D10), `ServiceFactory` no longer registers `markedC
 ISO 32000-1 Table 322 lists `/ParentTreeNextKey` as a required entry on the StructTreeRoot dict: "An integer greater than any key in the parent tree, to be used as a key for the next entry added to the tree." `StructureWriter::writeStructTree()` must emit this after all ParentTree entries are written:
 
 ```php
-$this->writer->write('/ParentTreeNextKey ' . $this->mpdf->ua1->structParentsCounter);
+$this->writer->write('/ParentTreeNextKey ' . $this->mpdf->ua->structParentsCounter);
 ```
 
-Since `nextStructParents()` increments the counter and returns the previous value, `$this->mpdf->ua1->structParentsCounter` after all pages and Form XObjects are processed equals one more than the highest key used — exactly the value required.
+Since `nextStructParents()` increments the counter and returns the previous value, `$this->mpdf->ua->structParentsCounter` after all pages and Form XObjects are processed equals one more than the highest key used — exactly the value required.
 
 ---
 
