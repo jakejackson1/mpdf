@@ -5,6 +5,7 @@ namespace Mpdf\Writer;
 use Mpdf\Strict;
 use Mpdf\Mpdf;
 use Mpdf\Form;
+use Mpdf\Ua\UaState;
 
 final class PageWriter
 {
@@ -31,12 +32,18 @@ final class PageWriter
 	 */
 	private $metadataWriter;
 
-	public function __construct(Mpdf $mpdf, Form $form, BaseWriter $writer, MetadataWriter $metadataWriter)
+	/**
+	 * @var \Mpdf\Ua\UaState
+	 */
+	private $ua;
+
+	public function __construct(Mpdf $mpdf, Form $form, BaseWriter $writer, MetadataWriter $metadataWriter, UaState $ua)
 	{
 		$this->mpdf = $mpdf;
 		$this->form = $form;
 		$this->writer = $writer;
 		$this->metadataWriter = $metadataWriter;
+		$this->ua = $ua;
 	}
 
 	public function writePages() // _putpages
@@ -142,6 +149,9 @@ final class PageWriter
 
 			// Page
 			$this->writer->object();
+			// ISO 32000-1:2008 §14.7.4.4 — StructureWriter::buildPageRefMap() looks up
+			// $mpdf->pageDim[$n]['n'] to resolve /Pg object numbers for MCR dicts.
+			$this->mpdf->pageDim[$n]['n'] = $this->mpdf->n;
 			$this->writer->write('<</Type /Page');
 			$this->writer->write('/Parent 1 0 R');
 
@@ -249,6 +259,27 @@ final class PageWriter
 
 				$s .= '] ';
 				$this->writer->write($s);
+			}
+
+			// ISO 32000-1:2008 §14.7.4.4 — /StructParents integer key indexes into the
+			// ParentTree NumTree and must be present on every page dict when the document
+			// has a StructTreeRoot (Matterhorn Protocol 1.1 condition 28-002).
+			// /Tabs /S (structure order) is required on every page dict by ISO 14289-1:2014 §7.1
+			// (Matterhorn Protocol 1.1 condition 28-001) — NOT only on annotated pages.
+			//
+			// PDF/UA-1 §A14 — Mpdf::_beginpage() pre-allocates pageDim[$n]['structParents']
+			// at page creation time so the value is available to addContentForElement()
+			// during HTML rendering. We read it back here. Fallback to nextStructParents()
+			// preserves behaviour for pages created via legacy paths that bypass _beginpage.
+			if ($this->mpdf->PDFUA) {
+				if (isset($this->mpdf->pageDim[$n]['structParents'])) {
+					$structParents = $this->mpdf->pageDim[$n]['structParents'];
+				} else {
+					$structParents = $this->ua->nextStructParents();
+					$this->mpdf->pageDim[$n]['structParents'] = $structParents;
+				}
+				$this->writer->write('/StructParents ' . $structParents);
+				$this->writer->write('/Tabs /S');
 			}
 
 			$this->writer->write('/Contents ' . ($this->mpdf->n + 1) . ' 0 R>>');

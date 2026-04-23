@@ -7,6 +7,30 @@ use Mpdf\Color\ColorConverter;
 use Mpdf\Writer\BaseWriter;
 use Mpdf\Writer\FormWriter;
 
+/**
+ * AcroForm widget rendering and legacy drawn-chrome rendering for HTML form
+ * elements (`<input>`, `<textarea>`, `<select>`, `<button>`, checkbox, radio,
+ * image-button). Each `print_ob_*` method has two branches:
+ *
+ *   - useActiveForms=true  — emits a real AcroForm widget annotation. Under
+ *     PDFUA the widget is referenced by an /OBJR struct kid (see the
+ *     `if ($this->mpdf->PDFUA)` blocks in _putform_*).
+ *   - useActiveForms=false — draws inert chrome (Cell, Rect, glyphs)
+ *     directly into the page content stream. There is no AcroForm field
+ *     behind it; the visual is non-interactive. Under PDFUA each else-
+ *     branch brackets its drawing in `/Artifact BMC ... EMC` per ISO
+ *     32000-1 §14.8.2.2 so the chrome is classified as an artifact and
+ *     ISO 14289-1 §7.1 / Matterhorn 01-006 (no untagged real content) is
+ *     satisfied. The bracket is gated on
+ *     `MarkedContentHelper::getDepth() === 0` because Matterhorn 01-001
+ *     and 01-002 forbid nesting Artifact inside tagged content; when the
+ *     widget is rendered inside an open `<p>`/list-item BDC the chrome
+ *     simply flows as part of the enclosing tag's content, which is itself
+ *     a conformant disposition.
+ *
+ * See .claude/plans/2026-04-30-ua1-legacy-form-artifact-tagging.md for the
+ * full rationale of the legacy-mode artifact wrap.
+ */
 class Form
 {
 
@@ -115,7 +139,10 @@ class Form
 		$this->formSelectDefaultOption = true; // for Select drop down box; if no option is explicitly maked as selected,
 		// this determines whether to select 1st option (as per browser)
 		// - affects whether "required" attribute is relevant
-		$this->formUseZapD = true;  // Determine whether to use ZapfDingbat icons for radio/checkboxes
+		// PDF/UA-1, PDF/A, and PDF/X all require all fonts to be embedded. ZapfDingbats
+		// is a core font that cannot be embedded, so it must not be used in any of these
+		// modes. Disable it here — radio/checkbox appearance streams will use drawn paths.
+		$this->formUseZapD = !($mpdf->PDFUA || $mpdf->PDFA || $mpdf->PDFX);  // Determine whether to use ZapfDingbat icons for radio/checkboxes
 		// FORM STYLES
 		// These can alternatively use a 4 number string to represent CMYK colours
 		$this->form_border_color = '0.6 0.6 0.72';   // RGB
@@ -222,6 +249,19 @@ class Form
 
 		} else {
 
+			// PDF/UA-1 §7.1: every byte in the content stream must be either
+			// real content (tagged via BDC/MCID) or an artifact. Legacy
+			// non-active form chrome is non-interactive decoration, so wrap
+			// it in /Artifact BMC ... EMC per ISO 32000-1 §14.8.2.2 and open
+			// a StructureTree artifact-suppression scope so any nested Cell
+			// or Rect call does not try to allocate an MCID.
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$w -= $this->form_element_spacing['input']['outer']['h'] * 2 / $k;
 			$h -= $this->form_element_spacing['input']['outer']['v'] * 2 / $k;
 			$this->mpdf->x += $this->form_element_spacing['input']['outer']['h'] / $k;
@@ -261,6 +301,11 @@ class Form
 			$this->mpdf->Cell($w, $h, $texto, 1, 0, $rtlalign, 1, '', 0, $this->form_element_spacing['input']['inner']['h'] / $k, $this->form_element_spacing['input']['inner']['h'] / $k, 'M', 0, false, $OTLdata);
 			$this->mpdf->SetFColor($this->colorConverter->convert(255, $this->mpdf->PDFAXwarnings));
 			$this->mpdf->SetTColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -333,6 +378,14 @@ class Form
 
 		} else {
 
+			// Legacy <textarea> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$w -= $this->form_element_spacing['textarea']['outer']['h'] * 2 / $k;
 			$h -= $this->form_element_spacing['textarea']['outer']['v'] * 2 / $k;
 
@@ -367,6 +420,11 @@ class Form
 			$this->writer->write('Q');
 			$this->mpdf->SetFColor($this->colorConverter->convert(255, $this->mpdf->PDFAXwarnings));
 			$this->mpdf->SetTColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -434,6 +492,14 @@ class Form
 			$this->mpdf->SetTColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
 
 		} else {
+			// Legacy <select> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$this->mpdf->SetLineWidth(0.2 / $k);
 			if (!empty($objattr['disabled'])) {
 				$this->mpdf->SetFColor($this->colorConverter->convert(225, $this->mpdf->PDFAXwarnings));
@@ -458,7 +524,10 @@ class Form
 			$this->mpdf->SetFColor($this->colorConverter->convert(190, $this->mpdf->PDFAXwarnings));
 			$save_font = $this->mpdf->FontFamily;
 			$save_currentfont = $this->mpdf->currentfontfamily;
-			if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+			if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
+				// PDF/UA-1 §7.21 / Matterhorn 14-002 — core fonts cannot be
+				// embedded, so substitute the Unicode down-arrow glyph from
+				// the active font instead of the ZapfDingbats core font.
 				if (($this->mpdf->PDFA && !$this->mpdf->PDFAauto) || ($this->mpdf->PDFX && !$this->mpdf->PDFXauto)) {
 					$this->mpdf->PDFAXwarnings[] = 'Core Adobe font Zapfdingbats cannot be embedded in mPDF - used in Form element: Select - which is required for PDFA1-b or PDFX/1-a. (Different character/font will be substituted.)';
 				}
@@ -477,6 +546,11 @@ class Form
 			$this->mpdf->currentfontfamily = $save_currentfont;
 			$this->mpdf->SetFColor($this->colorConverter->convert(255, $this->mpdf->PDFAXwarnings));
 			$this->mpdf->SetTColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -496,10 +570,23 @@ class Form
 			}
 			$this->SetJSButton($w, $h, $objattr['fieldname'], (isset($objattr['value']) ? $objattr['value'] : ''), $js, $objattr['ID'], $objattr['title'], $flags, (isset($objattr['Indexed']) ? $objattr['Indexed'] : false));
 		} else {
+			// Legacy <input type=image> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$this->mpdf->y = $objattr['INNER-Y'];
 			$this->writer->write(sprintf('q %.3F 0 0 %.3F %.3F %.3F cm /I%d Do Q', $objattr['INNER-WIDTH'] * Mpdf::SCALE, $objattr['INNER-HEIGHT'] * Mpdf::SCALE, $objattr['INNER-X'] * Mpdf::SCALE, ($this->mpdf->h - ($objattr['INNER-Y'] + $objattr['INNER-HEIGHT'] )) * Mpdf::SCALE, $objattr['ID']));
 			if (!empty($objattr['BORDER-WIDTH'])) {
 				$this->mpdf->PaintImgBorder($objattr, $is_table);
+			}
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
 			}
 		}
 	}
@@ -543,6 +630,14 @@ class Form
 
 		} else {
 
+			// Legacy <button>/<input type=submit> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$this->mpdf->SetLineWidth(0.2 / $k);
 			$this->mpdf->SetFColor($this->colorConverter->convert(190, $this->mpdf->PDFAXwarnings));
 
@@ -574,6 +669,11 @@ class Form
 
 			$this->mpdf->Cell($w, $h, $texto, '', 0, 'C', 0, '', 0, 0, 0, 'M', 0, false, $OTLdata);
 			$this->mpdf->SetFColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -601,6 +701,14 @@ class Form
 				$this->mpdf->currentfontfamily = $save_currentfont;
 			}
 		} else {
+			// Legacy <input type=checkbox> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$iw = $w * 0.7;
 			$ih = $h * 0.7;
 			$lx = $x + (($w - $iw) / 2);
@@ -626,6 +734,11 @@ class Form
 			}
 			$this->mpdf->SetFColor($this->colorConverter->convert(255, $this->mpdf->PDFAXwarnings));
 			$this->mpdf->SetDColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -653,6 +766,14 @@ class Form
 				$this->mpdf->currentfontfamily = $save_currentfont;
 			}
 		} else {
+			// Legacy <input type=radio> chrome — wrap as artifact (see print_ob_text comment).
+			$wrapArtifact = $this->mpdf->PDFUA
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaStructureTree()->openArtifact();
+				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
+			}
+
 			$this->mpdf->SetLineWidth(0.2 / $k);
 			$radius = $this->mpdf->FontSize * 0.35;
 			$cx = $x + ($w / 2);
@@ -674,6 +795,11 @@ class Form
 			}
 			$this->mpdf->SetFColor($this->colorConverter->convert(255, $this->mpdf->PDFAXwarnings));
 			$this->mpdf->SetDColor($this->colorConverter->convert(0, $this->mpdf->PDFAXwarnings));
+
+			if ($wrapArtifact) {
+				$this->mpdf->getPdfUaMarkedContentHelper()->end();
+				$this->mpdf->getPdfUaStructureTree()->closeArtifact();
+			}
 		}
 	}
 
@@ -802,6 +928,18 @@ class Form
 			$this->writer->write('/V /' . $state . ' ');
 			$this->writer->write('/DV /' . $state . ' ');
 			$this->writer->write('/T ' . $this->writer->string($name) . ' ');
+			// PDF/UA-1 §7.18.1 / Matterhorn 19-003 — every form field must have
+			// a non-empty /TU (alternate description). Radio groups inherit no
+			// title from per-kid widgets, so emit /TU explicitly here. Falls back
+			// to the field name when no explicit TU was supplied (matching the
+			// fallback in _putform_tx / _putform_bt / _putform_ch).
+			if ($this->mpdf->PDFUA) {
+				$tu = isset($frg['TU']) ? $frg['TU'] : '';
+				if (strlen($tu) === 0 || $tu === "\xFE\xFF") {
+					$tu = $this->writer->utf8ToUtf16BigEndian($name);
+				}
+				$this->writer->write('/TU ' . $this->writer->string($tu));
+			}
 			$this->writer->write('>>');
 			$this->writer->write('endobj');
 		}
@@ -1435,7 +1573,20 @@ class Form
 			$this->writer->write('/T ' . $this->writer->string($form['T']));
 		}
 
-		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
+		// PDF/UA-1 §7.18.1 — fall back to field name when /TU is empty
+		// (BOM-only treated as empty — see _putform_tx for the rationale).
+		$tu = isset($form['TU']) ? $form['TU'] : '';
+		if ($this->mpdf->PDFUA && (strlen($tu) === 0 || $tu === "\xFE\xFF")) {
+			$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T']
+				: ($form['subtype'] === 'radio' ? 'Radio button' : 'Button');
+			$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+		}
+		$this->writer->write('/TU ' . $this->writer->string($tu));
+
+		// PDF/UA-1 — associate this button/checkbox widget annotation with its Form struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
+		}
 
 		if (isset($this->form_button_icon[$form['T']])) {
 			$form['BS_W'] = 0;
@@ -1714,6 +1865,18 @@ f Q ';
 		$this->writer->write('/M ' . $this->writer->string('D:' . date('YmdHis')));
 
 		$this->writer->write('/T ' . $this->writer->string($form['T']));
+		// PDF/UA-1 §7.18.1 (Matterhorn 11-002) — choice/select widgets must
+		// carry /TU. Fall back to the field name when no tooltip was supplied.
+		// $form['TU'] is normalised to UTF-16BE-with-BOM at intake; the 2-byte
+		// BOM means "empty" — see _putform_tx for the rationale.
+		if ($this->mpdf->PDFUA) {
+			$tu = isset($form['TU']) ? $form['TU'] : '';
+			if (strlen($tu) === 0 || $tu === "\xFE\xFF") {
+				$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T'] : 'Choice field';
+				$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+			}
+			$this->writer->write('/TU ' . $this->writer->string($tu));
+		}
 		$this->writer->write('/DA (/F' . $this->mpdf->fonts[$form['style']['font']]['i'] . ' ' . $form['style']['fontsize'] . ' Tf ' . $form['style']['fontcolor'] . ')');
 
 		$opt = '';
@@ -1750,6 +1913,11 @@ f Q ';
 		if (isset($this->array_form_choice_js[$form['T']])) {
 			$this->writer->write('/AA << /V ' . ($this->mpdf->n + 1) . ' 0 R >>');
 			$put_js = 1;
+		}
+
+		// PDF/UA-1 — associate this choice widget annotation with its Form struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
 		}
 
 		$this->writer->write('>>');
@@ -1802,7 +1970,26 @@ f Q ';
 		$this->writer->write('/MK <<' . $temp . ' >>');
 
 		$this->writer->write('/T ' . $this->writer->string($form['T']));
-		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
+		// PDF/UA-1 §7.18.1 (Matterhorn 11-002) — every form-widget annotation
+		// must carry a non-empty /TU (alternate description / tooltip) so AT
+		// can announce the field. mPDF normalises $form['TU'] to UTF-16BE with
+		// a BOM at intake (line 913 above), so an "empty" value is the 2-byte
+		// BOM `\xFE\xFF`. Treat strings ≤ 2 bytes as empty for the fallback
+		// check, then re-encode the field name through utf8ToUtf16BigEndian to
+		// preserve the same string format used for `T`.
+		$tu = isset($form['TU']) ? $form['TU'] : '';
+		if ($this->mpdf->PDFUA && (strlen($tu) === 0 || $tu === "\xFE\xFF")) {
+			$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T'] : 'Form field';
+			$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+		}
+		$this->writer->write('/TU ' . $this->writer->string($tu));
+
+		// PDF/UA-1 — associate this widget annotation with its Form struct element.
+		// /StructParent (singular) indexes the ParentTree to the owning struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
+		}
+
 		if ($form['V'] || $form['V'] === '0') {
 			$this->writer->write('/V ' . $this->writer->string($form['V']));
 		}

@@ -10,6 +10,14 @@ class Img extends Tag
 	public function open($attr, &$ahtml, &$ihtml)
 	{
 		$this->mpdf->ignorefollowingspaces = false;
+
+		// PDF/UA-1 §3c — Capture the alt attribute early so it can be stored on
+		// $objattr and carried through to printobjectbuffer() where the Do operator
+		// is emitted. null means the attribute is entirely absent (unknown intent);
+		// '' (empty string) means the author declared the image decorative (W3C convention).
+		// ISO 32000-1 §14.7.2 Table 322 — /Alt is a StructElem key, not a BDC prop-dict entry.
+		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
+
 		$objattr = [];
 		$objattr['margin_top'] = 0;
 		$objattr['margin_bottom'] = 0;
@@ -405,6 +413,32 @@ class Img extends Tag
 			// mPDF 5.7.3 TRANSFORMS
 			if (isset($properties['TRANSFORM']) && !$this->mpdf->ColActive && !$this->mpdf->kwt) {
 				$objattr['transform'] = $properties['TRANSFORM'];
+			}
+
+			// PDF/UA-1 §3c — Carry the alt value through serialization so
+			// printobjectbuffer() can emit the correct BDC/BMC wrap around the Do operator.
+			$objattr['pdfua_alt'] = $alt;
+
+			// PDF/UA-1 M3 — capture <img usemap="#name"> so printobjectbuffer()
+			// can resolve the corresponding <map> entry from the ImageMapRegistry
+			// and emit one Link annotation + Link struct element per <area>.
+			// HTML5 §4.8.13 — usemap value is "#" + map name; the leading "#"
+			// is optional in some browsers but always allowed.
+			if (isset($attr['USEMAP']) && $attr['USEMAP'] !== '') {
+				$um = ltrim($attr['USEMAP'], '#');
+				$objattr['pdfua_image_map_name'] = strtolower($um);
+			}
+
+			// PDF/UA-1 ARIA — carry the HTML id and aria-* attributes through to the
+			// render-time struct-element creation in printobjectbuffer(), where
+			// AriaIdResolver::registerId() and ::queue() are called against the
+			// freshly-created Figure struct element.
+			$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
+				}
 			}
 
 			$e = Mpdf::OBJECT_IDENTIFIER . "type=image,objattr=" . serialize($objattr) . Mpdf::OBJECT_IDENTIFIER;

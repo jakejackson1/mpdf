@@ -134,8 +134,11 @@ class FontWriter
 				// Standard font
 				$this->mpdf->fonts[$k]['n'] = $this->mpdf->n + 1;
 
-				if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-					throw new \Mpdf\MpdfException('Core fonts are not allowed in PDF/A1-b or PDFX/1-a files (Times, Helvetica, Courier etc.)');
+				// ISO 14289-1:2014 §7.21 (Matterhorn Protocol 1.1 condition 14-002) — all fonts used
+			// for rendering must be embedded. Core Type 1 fonts have no embeddable font program
+			// in mPDF and therefore cannot be used in PDF/UA-1 mode.
+				if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
+					throw new \Mpdf\MpdfException('Core fonts cannot be used in PDF/UA-1, PDF/A-1b, or PDF/X-1a mode as they cannot be embedded (Times, Helvetica, Courier etc.) — use a TrueType/OpenType font instead.');
 				}
 
 				$this->writer->object();
@@ -295,6 +298,111 @@ class FontWriter
 					$fontname = $font['name'];
 				}
 
+				// Build ToUnicode CMap content before writing objects.
+				//
+				// With /Encoding /Identity-H the 2-byte CID in the content stream IS the Unicode
+				// codepoint (the CIDToGIDMap then maps CID to glyph index). A ToUnicode CMap
+				// therefore maps each used CID to the same Unicode value (identity per codepoint).
+				//
+				// The old "<0000> <FFFF> <0000>" bfrange was invalid per ISO 32000-1 §9.10.3.2
+				// (high byte of srcCodeLo must equal high byte of srcCodeHi in a bfrange, so a
+				// single range spanning 0x0000-0xFFFF is malformed). veraPDF rejects it as
+				// unusable and raises §7.21.7 test 1 for every glyph — especially visible for RTL
+				// Arabic fonts (154 failed checks on example26) where OTL-shaped glyphs sit at
+				// arbitrary codepoints outside the range where the sequential identity assumption
+				// accidentally worked for Latin.
+				$toUniCids = [];
+				if ($asSubset) {
+					// $font['subset'] is keyed by Unicode codepoint (value == key, identity map).
+					foreach ($font['subset'] as $toUniU => $toUniDummy) {
+						if ($toUniU > 0) {
+							$toUniCids[] = $toUniU;
+						}
+					}
+				} else {
+					// Non-subset: derive codepoint list from full charToGlyph map. Load it here so
+					// it can be reused for the CIDToGIDMap object below (avoids a second parse).
+					$charToGlyphFull = [];
+					if (!$this->fontCache->has($font['fontkey'] . '.cgm')) {
+						$ttfFull = new TTFontFile($this->fontCache, $this->fontDescriptor);
+						$charToGlyphFull = $ttfFull->getCTG($font['ttffile'], $font['TTCfontID'], $this->mpdf->debugfonts, $font['useOTL']);
+						unset($ttfFull);
+						foreach ($charToGlyphFull as $toUniU => $toUniG) {
+							if ($toUniU > 0) {
+								$toUniCids[] = $toUniU;
+							}
+						}
+					} elseif (!empty($font['subset'])) {
+						// CIDToGIDMap already cached — fall back to subset list if available.
+						foreach ($font['subset'] as $toUniU => $toUniDummy) {
+							if ($toUniU > 0) {
+								$toUniCids[] = $toUniU;
+							}
+						}
+					}
+				}
+
+				// Encode each codepoint as a bfchar entry: CID (2-byte hex) -> Unicode (UTF-16BE).
+				// beginbfchar blocks are limited to 100 entries each (ISO 32000-1 §9.10.3).
+				$toUniBfcharChunks = '';
+				$toUniChunkLines = '';
+				$toUniChunkCount = 0;
+				foreach ($toUniCids as $toUniU) {
+					if ($toUniU > 0xFFFF) {
+						// Supplementary plane: encode as UTF-16BE surrogate pair
+						$toUniUtf8 = chr(($toUniU >> 18) + 240)
+							. chr((($toUniU >> 12) & 63) + 128)
+							. chr((($toUniU >> 6) & 63) + 128)
+							. chr(($toUniU & 63) + 128);
+						$toUniUtf16 = mb_convert_encoding($toUniUtf8, 'UTF-16BE', 'UTF-8');
+						$toUniUHex = sprintf(
+							'%02X%02X%02X%02X',
+							ord($toUniUtf16[0]),
+							ord($toUniUtf16[1]),
+							ord($toUniUtf16[2]),
+							ord($toUniUtf16[3])
+						);
+					} else {
+						$toUniUHex = sprintf('%04X', $toUniU);
+					}
+					$toUniCidHex = sprintf('%04X', $toUniU);
+					$toUniChunkLines .= '<' . $toUniCidHex . '> <' . $toUniUHex . ">\n";
+					$toUniChunkCount++;
+					if ($toUniChunkCount === 100) {
+						$toUniBfcharChunks .= $toUniChunkCount . " beginbfchar\n" . $toUniChunkLines . "endbfchar\n";
+						$toUniChunkLines = '';
+						$toUniChunkCount = 0;
+					}
+				}
+				if ($toUniChunkCount > 0) {
+					$toUniBfcharChunks .= $toUniChunkCount . " beginbfchar\n" . $toUniChunkLines . "endbfchar\n";
+				}
+
+				$toUni = "/CIDInit /ProcSet findresource begin\n";
+				$toUni .= "12 dict begin\n";
+				$toUni .= "begincmap\n";
+				$toUni .= "/CIDSystemInfo\n";
+				$toUni .= "<</Registry (Adobe)\n";
+				$toUni .= "/Ordering (UCS)\n";
+				$toUni .= "/Supplement 0\n";
+				$toUni .= ">> def\n";
+				$toUni .= "/CMapName /Adobe-Identity-UCS def\n";
+				$toUni .= "/CMapType 2 def\n";
+				$toUni .= "1 begincodespacerange\n";
+				$toUni .= "<0000> <FFFF>\n";
+				$toUni .= "endcodespacerange\n";
+				if ($toUniBfcharChunks !== '') {
+					$toUni .= $toUniBfcharChunks;
+				} else {
+					// No used codepoints found — emit a minimal valid empty bfchar block so
+					// the stream is structurally correct and veraPDF does not flag it as malformed.
+					$toUni .= "0 beginbfchar\nendbfchar\n";
+				}
+				$toUni .= "endcmap\n";
+				$toUni .= "CMapName currentdict /CMap defineresource pop\n";
+				$toUni .= "end\n";
+				$toUni .= "end\n";
+
 				// Type0 Font
 				// A composite font - a font composed of other fonts, organized hierarchically
 				$this->writer->object();
@@ -333,27 +441,6 @@ class FontWriter
 
 				// ToUnicode
 				$this->writer->object();
-				$toUni = "/CIDInit /ProcSet findresource begin\n";
-				$toUni .= "12 dict begin\n";
-				$toUni .= "begincmap\n";
-				$toUni .= "/CIDSystemInfo\n";
-				$toUni .= "<</Registry (Adobe)\n";
-				$toUni .= "/Ordering (UCS)\n";
-				$toUni .= "/Supplement 0\n";
-				$toUni .= ">> def\n";
-				$toUni .= "/CMapName /Adobe-Identity-UCS def\n";
-				$toUni .= "/CMapType 2 def\n";
-				$toUni .= "1 begincodespacerange\n";
-				$toUni .= "<0000> <FFFF>\n";
-				$toUni .= "endcodespacerange\n";
-				$toUni .= "1 beginbfrange\n";
-				$toUni .= "<0000> <FFFF> <0000>\n";
-				$toUni .= "endbfrange\n";
-				$toUni .= "endcmap\n";
-				$toUni .= "CMapName currentdict /CMap defineresource pop\n";
-				$toUni .= "end\n";
-				$toUni .= "end\n";
-
 				$this->writer->write('<</Length ' . strlen($toUni) . '>>');
 				$this->writer->stream($toUni);
 				$this->writer->write('endobj');
@@ -407,16 +494,15 @@ class FontWriter
 					if ($this->fontCache->has($font['fontkey'] . '.cgm')) {
 						$cidtogidmap = $this->fontCache->load($font['fontkey'] . '.cgm');
 					} else {
-						$ttf = new TTFontFile($this->fontCache, $this->fontDescriptor);
-						$charToGlyph = $ttf->getCTG($font['ttffile'], $font['TTCfontID'], $this->mpdf->debugfonts, $font['useOTL']);
+						// $charToGlyphFull was already computed above for the ToUnicode CMap
 						$cidtogidmap = str_pad('', 256 * 256 * 2, "\x00");
-						foreach ($charToGlyph as $cc => $glyph) {
+						foreach ($charToGlyphFull as $cc => $glyph) {
 							$cidtogidmap[$cc * 2] = chr($glyph >> 8);
 							$cidtogidmap[$cc * 2 + 1] = chr($glyph & 0xFF);
 						}
-						unset($ttf);
 						$cidtogidmap = gzcompress($cidtogidmap);
 						$this->fontCache->binaryWrite($font['fontkey'] . '.cgm', $cidtogidmap);
+						unset($charToGlyphFull);
 					}
 				}
 				$this->writer->object();

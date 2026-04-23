@@ -174,6 +174,71 @@ abstract class InlineTag extends Tag
 			}
 			$this->mpdf->biDirectional = true;
 		}
+
+		// PDF/UA-1 — propagate inline lang= and aria-label= as a Span struct
+		// element with /Lang and /Alt attributes. ISO 14289-1:2014 §7.2 / Matterhorn
+		// 11-001/11-002 — every text fragment whose natural language differs from
+		// the document default must carry a /Lang entry.
+		// The InlineStructStack stores the *number* of struct elements that
+		// open() pushed, so close() pops the same number. Subclasses (e.g. Abbr
+		// for /E expansion text) call self::pushInlineUaStructDepth() after
+		// parent::open() to layer additional struct elements onto the same frame.
+		// $ua may be null when Tag instances are constructed directly in unit
+		// tests outside the UA pipeline; skip the bracket bookkeeping in that case.
+		if ($this->ua !== null) {
+			$this->ua->getInlineStructStack()->pushFrame($tag, $this->openInlineUaStruct($attr) ? 1 : 0);
+		}
+	}
+
+	/**
+	 * Open a Span struct element with /Lang and /Alt when PDFUA + (lang | aria-label)
+	 * is present. Returns true if a struct element was pushed (so close() pops it).
+	 *
+	 * @param  array $attr  uppercase-keyed tag attributes
+	 * @return bool
+	 */
+	protected function openInlineUaStruct($attr)
+	{
+		if (!$this->mpdf->PDFUA) {
+			return false;
+		}
+		$structAttrs = [];
+		if (isset($attr['LANG']) && $attr['LANG'] !== '') {
+			$structAttrs['Lang'] = $attr['LANG'];
+		}
+		if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+			$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+		}
+		if (empty($structAttrs)) {
+			return false;
+		}
+		$this->ua->getStructureTree()->open('Span', $structAttrs);
+		// ARIA: register HTML id (if any) and queue cross-references.
+		$elem = $this->ua->getStructureTree()->getCurrent();
+		if (!empty($attr['ID'])) {
+			$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+		}
+		foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+			'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+			if (!empty($attr[$ariaKey])) {
+				$this->ua->getAriaIdResolver()->queue($elem, strtolower($ariaKey), $attr[$ariaKey]);
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Subclass hook: increase the inline Span depth recorded for this tag so close()
+	 * pops the matching number of struct elements. Call after parent::open().
+	 *
+	 * @param  int $count  number of struct elements pushed by the subclass
+	 */
+	protected function pushInlineUaStructDepth($count)
+	{
+		if ($this->ua === null) {
+			return;
+		}
+		$this->ua->getInlineStructStack()->addToTopFrame($this->getTagName(), $count);
 	}
 
 	public function close(&$ahtml, &$ihtml)
@@ -227,6 +292,19 @@ abstract class InlineTag extends Tag
 				$this->mpdf->_saveCellTextBuffer($popf);
 			} else {
 				$this->mpdf->_saveTextBuffer($popf);
+			}
+		}
+
+		// PDF/UA-1 — pop the Span struct bracket(s) that open() pushed when this
+		// tag had a lang= or aria-label= attribute (and any subclass-pushed
+		// extras such as Abbr's /E Span). Stack is per-tag because HTML allows
+		// nested same-name tags (<span><span lang=fr>…</span></span>).
+		// $ua may be null when Tag instances are constructed directly in unit
+		// tests outside the UA pipeline; nothing to pop in that case.
+		if ($this->ua !== null) {
+			$depth = $this->ua->getInlineStructStack()->popFrame($tag);
+			for ($i = 0; $i < $depth; $i++) {
+				$this->ua->getStructureTree()->close();
 			}
 		}
 	}

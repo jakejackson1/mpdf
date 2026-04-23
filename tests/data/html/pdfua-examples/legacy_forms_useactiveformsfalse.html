@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Legacy form chrome under PDF/UA-1</title>
+</head>
+<body>
+<h1>Sample registration form</h1>
+<p>This document exercises every <code>print_ob_*</code> code path with
+<code>useActiveForms=false</code>. Each widget below is rendered as inert
+chrome wrapped in a <code>/Artifact BMC ... EMC</code> bracket so the page
+content stream contains no untagged real content (PDF/UA-1 §7.1).</p>
+
+<h2>Plain text input</h2>
+<p>Full name: <input type="text" name="full_name" value="Jane Quartermaine" /></p>
+
+<h2>Password input</h2>
+<p>Pick a passphrase: <input type="password" name="passphrase" value="********" /></p>
+
+<h2>Multi-line textarea</h2>
+<p>Tell us about yourself:</p>
+<textarea name="bio" rows="4" cols="40">Born somewhere, lived somewhere else, currently here.</textarea>
+
+<h2>Single-select dropdown</h2>
+<p>Country:
+<select name="country">
+<option>Australia</option>
+<option selected>New Zealand</option>
+<option>Vanuatu</option>
+</select></p>
+
+<h2>Checkbox</h2>
+<p><input type="checkbox" name="newsletter" value="1" checked /> Subscribe to the newsletter</p>
+
+<h2>Radio buttons</h2>
+<p>Preferred contact:
+<input type="radio" name="contact" value="email" checked /> email
+<input type="radio" name="contact" value="post" /> post
+<input type="radio" name="contact" value="phone" /> phone</p>
+
+<h2>Submit button</h2>
+<p><input type="submit" name="submit_btn" value="Send" /></p>
+
+<h2>Reset button</h2>
+<p><input type="reset" name="reset_btn" value="Clear" /></p>
+</body>
+</html>

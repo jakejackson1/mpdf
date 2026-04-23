@@ -51,3 +51,30 @@ Guidelines:
 
 When updating a PR, do not create a new one, just `git push --force` to your former feature branch, the PR will
 update itself.
+
+Testing PDF/UA-1 conformance locally
+-------------------------------------
+
+The `@group verapdf` tests in `tests/Mpdf/Ua/VeraPdfConformanceTest.php` validate
+mPDF's PDF/UA-1 output against the veraPDF conformance checker. They are excluded
+from the default `composer test` run (so they are never a barrier to local development
+of unrelated changes) and only run when `VERAPDF_BIN` is set.
+
+**Install veraPDF locally:**
+
+Follow the instructions at https://docs.verapdf.org/install/ to download and install
+veraPDF (requires Java 17+). The typical macOS/Linux install places the CLI wrapper
+at `~/verapdf/verapdf`.
+
+**Run the conformance tests:**
+
+```bash
+VERAPDF_BIN=~/verapdf/verapdf vendor/bin/phpunit --group=verapdf
+```
+
+Without `VERAPDF_BIN` set, the entire `verapdf` group is skipped with an informative
+message — no Java or veraPDF installation is required to run the standard test suite.
+
+CI runs these tests via the dedicated `verapdf` job in `.github/workflows/tests.yml`
+(single Ubuntu runner, PHP 8.3, Java 17 via Temurin, veraPDF 1.27.1) and the job
+is a required gate before merging PDF/UA-1 changes.

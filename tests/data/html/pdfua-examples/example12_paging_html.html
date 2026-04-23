@@ -1,0 +1,35 @@
+<htmlpageheader name="myHTMLHeader1" style="display:none">
+<table width="100%" style="border-bottom: 1px solid #000000; vertical-align: bottom; font-family: serif; font-size: 9pt; color: #000088;"><tr>
+<td width="50%">Left header page <span style="font-size:14pt;">{PAGENO}</span></td>
+<td width="50%" style="text-align: right;"><span style="font-weight: bold;">Right header</span></td>
+</tr></table>
+</htmlpageheader>
+
+<htmlpageheader name="myHTMLHeader1Even" style="display:none">
+<table width="100%" style="border-bottom: 1px solid #000000; vertical-align: bottom; font-family: serif; font-size: 9pt; color: #000088;"><tr>
+<td width="50%"><span style="font-weight: bold;">Outer header</span></td>
+<td width="50%" style="text-align: right;">Inner header page <span style="font-size:14pt;">{PAGENO}</span></td>
+</tr></table>
+</htmlpageheader>
+
+<htmlpagefooter name="myFooter1" style="display:none">
+<table width="100%" style="border-top: 1px solid #000000; vertical-align: top; font-family: sans; font-size: 8pt;"><tr>
+<td width="50%">My Book Title</td>
+<td width="50%" style="text-align: right;">{PAGENO}</td>
+</tr></table>
+</htmlpagefooter>
+
+<setpageheader name="myHTMLHeader1" page="O" value="on" show-this-page="1" />
+<setpageheader name="myHTMLHeader1Even" page="E" value="on" />
+<setpagefooter name="myFooter1" page="O" value="on" />
+<setpagefooter name="myFooter1" page="E" value="on" />
+
+<h1 style="margin-collapse: none; margin-top: 35mm">Introduction</h1>
+<div>Introduction</div>
+<p>Integer feugiat venenatis metus. Integer lacinia ultrices ipsum. Proin et arcu. Quisque varius libero. Nullam id arcu. Aenean justo quam, accumsan nec, luctus id, pellentesque molestie, mi. Aliquam sollicitudin feugiat eros. Nunc nisi turpis, consequat id, aliquet et, semper a, augue. Integer nisl ipsum, blandit et, lobortis a, egestas nec, odio. Nulla dolor ligula, nonummy ac, vulputate a, sollicitudin id, orci. Aenean turpis lorem, consequat quis, varius in, posuere vel, eros. Nulla facilisi.</p>
+
+<pagebreak />
+
+<h1>Section 2</h1>
+<div>Section 2</div>
+<p>Integer feugiat venenatis metus. Integer lacinia ultrices ipsum. Proin et arcu. Quisque varius libero. Nullam id arcu. Aenean justo quam, accumsan nec, luctus id, pellentesque molestie, mi. Aliquam sollicitudin feugiat eros. Nunc nisi turpis, consequat id, aliquet et, semper a, augue. Integer nisl ipsum, blandit et, lobortis a, egestas nec, odio. Nulla dolor ligula, nonummy ac, vulputate a, sollicitudin id, orci. Aenean turpis lorem, consequat quis, varius in, posuere vel, eros. Nulla facilisi.</p>

@@ -1,0 +1,73 @@
+<html><head>
+<style>
+table {
+	font-family: sans-serif;
+	border: 7mm solid aqua;
+	border-collapse: collapse;
+}
+table.table2 {
+	border: 2mm solid aqua;
+	border-collapse: collapse;
+}
+table.layout {
+	border: 0mm solid black;
+	border-collapse: collapse;
+}
+td.layout {
+	text-align: center;
+	border: 0mm solid black;
+}
+td {
+	padding: 3mm;
+	border: 2mm solid blue;
+	vertical-align: middle;
+}
+td.redcell {
+	border: 3mm solid red;
+}
+td.redcell2 {
+	border: 2mm solid red;
+}
+</style>
+</head>
+<body>
+
+<h1>mPDF</h1>
+<h2>Tables - Borders</h2>
+
+<p>Border conflict resolution in tables with border-collapse set to "collapse". mPDF follows the rules set by CSS as well as possible.</p>
+
+<table>
+<tr>
+<td>Standard cell</td>
+<td class="redcell">Red border cell</td>
+<td>Standard cell</td>
+</tr>
+<tr>
+<td class="redcell2">Red border 2</td>
+<td>Standard cell</td>
+<td class="redcell">Red border cell</td>
+</tr>
+<tr>
+<td>Standard cell</td>
+<td class="redcell2">Red border 2</td>
+<td>Standard cell</td>
+</tr>
+</table>
+
+<h3>Separate borders</h3>
+<table class="table2" style="border-collapse: separate; border-spacing: 3mm;">
+<tr>
+<td>Separate border A1</td>
+<td>Separate border A2</td>
+<td>Separate border A3</td>
+</tr>
+<tr>
+<td>Separate border B1</td>
+<td>Separate border B2</td>
+<td>Separate border B3</td>
+</tr>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,50 @@
+<style>
+table { border-collapse: collapse; margin-top: 0; text-align: center; }
+td { padding: 0.5em; }
+h1 { margin-bottom: 0; }
+</style>
+<h1>mPDF Images</h1>
+<!--
+  Original example04_images.php referenced assets/tiger.gif, tiger.jpg, tigercmyk.jpg,
+  tiger.png, tiger.bmp, tiger2.wmf, tiger.svg, alpha.png, tiger24trns.png, tiger8trns.gif,
+  bg.jpg, img1-5.png, sunset.jpg — none of which are available in the test fixture tree.
+  All image references are replaced with a 1x1 red pixel PNG data URI (same placeholder
+  already used elsewhere in VeraPdfConformanceTest.php) so the fixture exercises image
+  struct-element tagging without external file dependencies.
+-->
+<table>
+<tr>
+<td>GIF (placeholder)</td>
+<td>JPG (placeholder)</td>
+<td>PNG (placeholder)</td>
+<td>SVG (placeholder)</td>
+</tr>
+<tr>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger GIF placeholder" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger JPG placeholder" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger PNG placeholder" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger SVG placeholder" width="80" /></td>
+</tr>
+<tr>
+<td colspan="4" style="text-align: left"><h4>Opacity 50%</h4></td>
+</tr>
+<tr>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger GIF at 50% opacity" style="opacity: 0.5" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger JPG at 50% opacity" style="opacity: 0.5" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger PNG at 50% opacity" style="opacity: 0.5" width="80" /></td>
+<td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Tiger SVG at 50% opacity" style="opacity: 0.5" width="80" /></td>
+</tr>
+</table>
+
+<h3>Image Alignment</h3>
+<div>
+Descriptive image (top-aligned):
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Small red pixel top-aligned" style="vertical-align: top;" width="20" height="20" />
+Decorative image (empty alt):
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="" style="vertical-align: middle;" width="20" height="20" />
+</div>
+
+<h3>Rotated Images</h3>
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Rotated 0 degrees" width="40" />
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Rotated 90 degrees" rotate="90" width="40" />
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==" alt="Rotated 180 degrees" rotate="180" width="40" />

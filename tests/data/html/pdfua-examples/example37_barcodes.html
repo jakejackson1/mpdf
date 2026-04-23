@@ -1,0 +1,51 @@
+<style>
+body { font-family: sans-serif; font-size: 9pt; }
+table.items { font-size: 9pt; border-collapse: collapse; border: 3px solid #880000; }
+td { vertical-align: top; }
+table thead td { background-color: #EEEEEE; text-align: center; }
+.barcode { padding: 1.5mm; margin: 0; vertical-align: top; color: #000000; }
+.barcodecell { text-align: center; vertical-align: middle; padding: 0; }
+</style>
+
+<h1>mPDF</h1>
+<h2>Barcodes</h2>
+<p>Examples of EAN/ISBN/UPC, postcode, variable-width and QR-code barcodes.</p>
+
+<h3>EAN-13 Barcodes</h3>
+<table class="items" width="100%" cellpadding="8" border="1">
+<thead><tr><td width="10%" id="bcA">CODE</td><td id="bcB">DESCRIPTION</td><td id="bcC">BARCODE</td></tr></thead>
+<tbody>
+<tr><td headers="bcA" align="center">EAN13</td><td headers="bcB">Standard EAN-13 barcode.</td><td headers="bcC" class="barcodecell"><barcode code="978-0-9542246-0" text="1" class="barcode" /></td></tr>
+<tr><td headers="bcA" align="center">ISBN</td><td headers="bcB">Standard EAN-13 with ISBN number shown above</td><td headers="bcC" class="barcodecell"><barcode code="978-0-9542246-0" type="ISBN" class="barcode" height="0.66" text="1" /></td></tr>
+</tbody></table>
+
+<h3>UPC and EAN-8</h3>
+<table class="items" width="100%" cellpadding="8" border="1">
+<thead><tr><td width="10%" id="bc2A">CODE</td><td id="bc2B">DESCRIPTION</td><td id="bc2C">BARCODE</td></tr></thead>
+<tbody>
+<tr><td headers="bc2A" align="center">UPCA</td><td headers="bc2B">UPC-A barcode (12 chars).</td><td headers="bc2C" class="barcodecell"><barcode code="09827721123" type="UPCA" class="barcode" /></td></tr>
+<tr><td headers="bc2A" align="center">EAN8</td><td headers="bc2B">EAN-8 barcode (7 chars).</td><td headers="bc2C" class="barcodecell"><barcode code="2468123" type="EAN8" class="barcode" /></td></tr>
+</tbody></table>
+
+<h3>Postal</h3>
+<table class="items" width="100%" cellpadding="8" border="1">
+<thead><tr><td width="10%" id="bc3A">CODE</td><td id="bc3B">DESCRIPTION</td><td id="bc3C">BARCODE</td></tr></thead>
+<tbody>
+<tr><td headers="bc3A" align="center">RM4SCC</td><td headers="bc3B">Royal Mail 4-state Customer.</td><td headers="bc3C" class="barcodecell"><barcode code="SN34RD1A" type="RM4SCC" class="barcode" /></td></tr>
+<tr><td headers="bc3A" align="center">POSTNET</td><td headers="bc3B">POSTNET barcode (5/9/11 digits).</td><td headers="bc3C" class="barcodecell"><barcode code="123456789" type="POSTNET" class="barcode" /></td></tr>
+</tbody></table>
+
+<h3>Variable width</h3>
+<table class="items" width="100%" cellpadding="8" border="1">
+<thead><tr><td width="10%" id="bc4A">CODE</td><td id="bc4B">DESCRIPTION</td><td id="bc4C">BARCODE</td></tr></thead>
+<tbody>
+<tr><td headers="bc4A" align="center">C128B</td><td headers="bc4B">CODE 128 B (printable ASCII).</td><td headers="bc4C" class="barcodecell"><barcode code="ABC123abc@456" type="C128B" class="barcode" /></td></tr>
+<tr><td headers="bc4A" align="center">C39</td><td headers="bc4B">CODE 39.</td><td headers="bc4C" class="barcodecell"><barcode code="TEC-IT" type="C39" class="barcode" /></td></tr>
+</tbody></table>
+
+<h3>2D Code (QR)</h3>
+<table class="items" width="100%" cellpadding="8" border="1">
+<thead><tr><td width="15%" id="bc5A">CODE</td><td id="bc5B">DESCRIPTION</td><td id="bc5C">BARCODE</td></tr></thead>
+<tbody>
+<tr><td headers="bc5A" align="center">QR-code</td><td headers="bc5B">QR-code accepting numeric/alphanumeric/binary input.</td><td headers="bc5C" class="barcodecell"><barcode code="Your message here" type="QR" class="barcode" size="0.8" error="M" disableborder="1" /></td></tr>
+</tbody></table>
