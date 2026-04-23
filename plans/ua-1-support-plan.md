@@ -32,14 +32,14 @@ Tests use HTML drawn from real-world examples in [github.com/mpdf/mpdf-examples]
 | `example08_lists.php` | OL/UL with roman, decimal, alpha, disc markers; nested lists |
 | `example12_paging_html.php` | HTML headers and footers (pagination artifacts) |
 | `example14_page_numbers_ToC_Index_Bookmarks.php` | Multi-page documents; ToC; page numbers (artifact) |
-| `example16_headers_method_2.php` | Uses `mode='c'` (core fonts) — must throw MpdfException |
+| `example16_headers_method_2.php` | Method-2 header/footer API — when copied into a PHPUnit test, **strip `mode='c'`** (core fonts are incompatible with PDF/UA-1 and trigger a separate `MpdfException` covered by `testCoreFontsNotAllowed` in Phase 1's `MetadataTest.php`). Use `PdfUaTestCase::makeMpdf()` (embedded TrueType). The point of this test input is to verify that Method-2 headers/footers produce the correct `/Artifact <</Type /Pagination /Subtype /Header\|Footer>> BDC … EMC` wrapping — NOT to re-test the core-font exception |
 | `example22_columns.php` | Multi-column layout; headings across page breaks |
 | `example26_RTL.php` | Right-to-left text (Hebrew/Arabic); bidirectional |
 | `example34_invoice_example.php` | Real-world complex table (invoice rows, totals, colspan) |
 | `example10_floating_and_fixed_position_elements.php` | Float and fixed-position rendering — both should default to Artifact in PDFUA mode |
 | `example36_annotations_and_attached_files.php` | Sticky note annotations and file attachments — `/Contents`, `/StructParent`, Note struct elements |
 | `example39_PDFA_compliance.php` | PDF/A model — verifies PDFUA/PDFA coexistence |
-| `example64_protected_document.php` | Uses `mode='c'` + `setProtection` — core font + encryption bit tests |
+| `example64_protected_document.php` | `setProtection()` + PDF/UA interaction — when copied into a PHPUnit test, **strip `mode='c'`** (core fonts are forbidden by PDF/UA and would trigger the unrelated core-font exception). Use `PdfUaTestCase::makeMpdf()` (embedded TrueType). The purpose is to verify that `setProtection()` combined with `PDFUA=true` keeps the "extract for accessibility" permission bit (bit 10) set and leaves the XMP stream unencrypted — NOT to re-test the core-font exception |
 
 **Test implementation pattern** — embed the HTML inline rather than fetching the remote repo:
 
@@ -383,8 +383,8 @@ $this->ua1->auto    = (bool) $this->ua1->auto;
 - Code inside `Mpdf.php` reads `$this->ua1->enabled`.
 - Tag handlers call `$this->mpdf->ua1->markedContentHelper->begin(...)` / `->end()`.
 - The depth balance check in `_enddoc()` reads `$this->ua1->markedContentHelper->getDepth()`.
-- Warnings are recorded via `$this->mpdf->ua1->addWarning($msg)` (replaces the old `$this->mpdf->ua1->addWarning($msg)`).
-- `/StructParents` allocation uses `$this->mpdf->ua1->nextStructParents()` (replaces the old `$this->mpdf->ua1->nextStructParents()`).
+- Warnings are recorded via `$this->mpdf->ua1->addWarning($msg)` (replaces the old `$this->mpdf->addPDFUAwarning($msg)`).
+- `/StructParents` allocation uses `$this->mpdf->ua1->nextStructParents()` (replaces the old `$this->mpdf->nextStructParents()`).
 
 ### 1c. XMP metadata (`src/Writer/MetadataWriter.php`, after line 135)
 
@@ -1359,18 +1359,18 @@ Phase 3 tests check the BDC/EMC *infrastructure* only — they do not assert str
 
 | Test method | Assertion |
 |---|---|
-| `testHelperWritesBdcToPageStream` | Calling `$mpdf->markedContentHelper->begin('P', 5)` appends `/P <</MCID 5>> BDC` to the page stream |
-| `testHelperWritesEmcToPageStream` | `$mpdf->markedContentHelper->end()` appends `EMC` to the page stream |
-| `testArtifactHelperWritesBmcNoDictToPageStream` | `$mpdf->markedContentHelper->begin('Artifact', -1)` appends `/Artifact BMC` (no dict) |
+| `testHelperWritesBdcToPageStream` | Calling `$mpdf->ua1->markedContentHelper->begin('P', 5)` appends `/P <</MCID 5>> BDC` to the page stream |
+| `testHelperWritesEmcToPageStream` | `$mpdf->ua1->markedContentHelper->end()` appends `EMC` to the page stream |
+| `testArtifactHelperWritesBmcNoDictToPageStream` | `$mpdf->ua1->markedContentHelper->begin('Artifact', -1)` appends `/Artifact BMC` (no dict) |
 | `testHelperTracksDepth` | After `begin()` depth is 1; after `end()` depth is 0; `end()` when depth is 0 is no-op |
 | `testHeaderArtifactUsesBdcNotBmc` | Page stream for doc with HTML header contains `/Artifact <</Type /Pagination /Subtype /Header>> BDC` |
 | `testFooterArtifactUsesBdcNotBmc` | Page stream contains `/Artifact <</Type /Pagination /Subtype /Footer>> BDC` |
 | `testImageWithEmptyAltProducesArtifactBmc` | Image with `alt=""` produces `/Artifact BMC` (no dict — BMC is correct here) |
 | `testBdcEmcBalancedSimple` | In the page content stream for a simple `<p>Hello</p>` document, count of `BDC` + `BMC` occurrences equals count of `EMC` occurrences. Scope the regex to tokens emitted by mPDF's PDFUA code only (match lines ending in `BDC` or `BMC` only when preceded by a known tag name or `/Artifact`) to avoid picking up existing Optional Content Group operators |
 | `testBdcEmcBalancedWithHeaders` | Same balance assertion applied to `example12_paging_html.php` HTML which includes HTML headers and footers — validates that header/footer BDC/EMC pairs close correctly |
-| `testEndMarkedContentWhenDepthIsZeroIsNoop` | Calling `$mpdf->markedContentHelper->end()` when depth is already 0 does NOT write `EMC` to the stream and does NOT make the counter negative — the depth remains 0 |
-| `testUnbalancedMarkedContentDepthPositiveThrows` | If `$mpdf->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=false`, an `MpdfException` is thrown |
-| `testUnbalancedMarkedContentDepthPositiveWarns` | If `$mpdf->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=true`, no exception is thrown but `$mpdf->ua1->warnings` is non-empty |
+| `testEndMarkedContentWhenDepthIsZeroIsNoop` | Calling `$mpdf->ua1->markedContentHelper->end()` when depth is already 0 does NOT write `EMC` to the stream and does NOT make the counter negative — the depth remains 0 |
+| `testUnbalancedMarkedContentDepthPositiveThrows` | If `$mpdf->ua1->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=false`, an `MpdfException` is thrown |
+| `testUnbalancedMarkedContentDepthPositiveWarns` | If `$mpdf->ua1->markedContentHelper->getDepth() > 0` at `_enddoc()` time and `PDFUAauto=true`, no exception is thrown but `$mpdf->ua1->warnings` is non-empty |
 | `testHeaderContentIsArtifactWrapped` | Page content stream for a doc with an HTML header contains the header text inside an `/Artifact <</Type /Pagination /Subtype /Header>> BDC … EMC` block |
 | `testFooterContentIsArtifactWrapped` | Page content stream for a doc with an HTML footer contains footer text inside an `/Artifact <</Type /Pagination /Subtype /Footer>> BDC … EMC` block |
 | `testEncryptedOutputHasXmpNotEncrypted` | With `PDFUA=true` and `SetProtection()` active, the raw PDF output contains plaintext XMP namespace declarations (`pdfuaid:part`) — the XMP stream is not encrypted |
@@ -2869,8 +2869,10 @@ For every integration test the following *invariant assertions* are made uncondi
 | `testCoexistenceWithPdfx` | `PDFX=true, PDFUA=true` with basic HTML | Output contains both `pdfx:GTS_PDFXVersion` and `pdfuaid:part` XMP blocks; struct tree present |
 | `testPdfuaDoesNotAddOutputIntents` | `PDFUA=true` without PDFA or PDFX | Output does NOT contain `/OutputIntents` |
 | `testRtlDocument` | `example26_RTL.php` HTML | PDFUA output produced without errors; struct tree valid |
-| `testCoreFontsModeThrows` | `example16_headers_method_2.php` uses `mode='c'` | `MpdfException` thrown before any PDF output |
-| `testEncryptionAccessibilityBit` | `example64_protected_document.php` style: setProtection + PDFUA | Exception or warning about accessibility permission bit |
+| `testMethod2HeadersAreArtifactTagged` | `example16_headers_method_2.php` HTML copied into a PHPUnit test with `mode='c'` **removed** (PDF/UA forbids core fonts; use `PdfUaTestCase::makeMpdf()` so embedded TrueType fonts are selected) | Page content stream contains `/Artifact <</Type /Pagination /Subtype /Header>> BDC … EMC` wrapping the Method-2 header text AND `/Artifact <</Type /Pagination /Subtype /Footer>> BDC … EMC` wrapping the footer; struct tree contains NO struct elements for header/footer content; BDC/EMC balanced |
+
+(The core-font exception is covered by `testCoreFontsNotAllowed` in Phase 1's `MetadataTest.php` — see §"Phase 1 Tests" above. No duplicate test needed in Phase 5.)
+| `testEncryptionAccessibilityBit` | `example64_protected_document.php` HTML copied into a PHPUnit test with `mode='c'` **removed** (PDF/UA forbids core fonts; use `PdfUaTestCase::makeMpdf()` so embedded TrueType fonts are selected). Test scenario: `setProtection(['print'])` omits the `'extract'` permission | In strict mode (`PDFUAauto=false`): `MpdfException` thrown. In auto mode (`PDFUAauto=true`): `$mpdf->ua1->warnings` non-empty AND the emitted `/P` permissions integer in the `/Encrypt` dict has bit 10 set (accessibility permission force-added by Phase 1). Separately: assert the XMP metadata stream remains unencrypted (raw output contains plaintext `pdfuaid:part`) per Phase 3 Constraint 2 |
 | `testIndexFeatureRendersWithoutErrors` | `<indexentry content="foo">` + `<indexinsert>` HTML | No PHP errors; BDC/EMC balanced; index divs produce Div/P struct elements; `<indexentry>` produces no BDC/EMC of its own |
 | `testIndexEntryProducesNoBdcEmc` | Document with only `<indexentry content="foo">` (no indexinsert) | Page stream contains no BDC or EMC from the indexentry itself |
 | `testTocRendersWithStructElements` | `example14_page_numbers_ToC_Index_Bookmarks.php` HTML | No PHP errors; BDC/EMC balanced after `MovePages`; ToC divs produce Div struct elements; `<tocentry>` produces no BDC/EMC; ToC links produce Link struct elements |
@@ -2927,7 +2929,7 @@ Warnings are accessible via `$mpdf->ua1->warnings` (array of strings).
 |---|---|
 | `testImageMissingAltAddsWarning` | Image with no `alt` populates `$mpdf->ua1->warnings` when `PDFUAauto=true` |
 | `testImageMissingAltThrowsWhenStrict` | Image with no `alt` throws `MpdfException` when `PDFUAauto=false` |
-| `testEncryptionBit10MustRemainSet` | `setProtection([])` + `PDFUA=true` throws or warns about accessibility permission bit (based on `example64_protected_document.php` pattern) |
+| `testEncryptionBit10MustRemainSet` | `setProtection([])` + `PDFUA=true` throws or warns about accessibility permission bit (based on `example64_protected_document.php` HTML, but with `mode='c'` removed — use `PdfUaTestCase::makeMpdf()` for embedded TrueType fonts; the purpose is to exercise the encryption / permission-bit path, not the core-font exception) |
 | `testSetColumnsProducesTaggedColumnContent` | `SetColumns(2)` followed by `<p>Column body</p>` with `PDFUA=true` (either mode) produces real `/P <</MCID N>> BDC … EMC` inside the column content (via the sentinel expansion in `printcolumnbuffer()`). No `/Artifact` markers around column body content. `$mpdf->ua1->structureTree` contains a `P` child. Works in both strict and auto modes — column tagging is always on. |
 | `testIndexInColumnsProducesTaggedStructElements` | `SetColumns(2)` + `<indexinsert>` produces `Div`/`P`/`Link` struct elements inside the column region; BDC/EMC balanced; no `/Artifact` wrappers around index entries |
 | `testColumnSentinelsSurviveReorder` | Column balancing moves `rel_y`-sorted entries across columns; sentinel `__PDFUA_BDC__` / `__PDFUA_EMC__` stay adjacent to their content; final output has matched BDC/EMC pairs |
