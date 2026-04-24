@@ -629,8 +629,12 @@ namespace Mpdf\Ua;
  * everything else so removing PDF/UA-1 support later becomes a single property
  * deletion plus the `src/Ua/` directory.
  *
- * All fields are `protected`; read/write through the explicit getters/setters
- * below. No `Strict` trait — this class is self-contained.
+ * All fields are `protected`. Collaborator fields are written only once in
+ * `__construct()` (no ServiceFactory-wiring setters exist — the facade is
+ * immutable from bootstrap onwards); the two runtime mutators that remain
+ * (`setStructTreeRootObjNum`, `setOpenedImplicitLI`) guard actual runtime
+ * state, not bootstrap wiring. No `Strict` trait — this class is
+ * self-contained.
  *
  * Spec references:
  *   - ISO 14289-1:2014 §7 — document-level UA requirements accumulated here
@@ -689,7 +693,7 @@ class UaState
      */
     protected $openedImplicitLI      = false;
 
-    // --- collaborators (wired by ServiceFactory via setters) ---
+    // --- collaborators (injected once via __construct; no setters) ---
     /** @var MarkedContentHelper */            protected $markedContentHelper;
     /** @var StructureTree */                  protected $structureTree;
     /** @var StructureWriter */                protected $structureWriter;
@@ -700,6 +704,45 @@ class UaState
     // The mode flags PDFUA and PDFUAauto live on Mpdf.php as `var` properties,
     // matching the $PDFA / $PDFAauto pattern. Writer/consumer code reads
     // $this->mpdf->PDFUA / $this->mpdf->PDFUAauto directly.
+
+    // ================== Constructor ==================
+
+    /**
+     * Build a fully-populated UaState.
+     *
+     * All six collaborators are mandatory and injected once at bootstrap by
+     * ServiceFactory (§2d). Every getter returns a non-null reference for the
+     * lifetime of the instance — callers never need null-guards and no
+     * partially-initialised facade is ever observable.
+     *
+     * The four collaborators that previously took `UaState` in their own
+     * constructors (StructureWriter, AriaIdResolver, LigatureActualTextWriter,
+     * FpdiStructMerger) now receive the specific pieces they need
+     * (StructureTree, MarkedContentHelper, BaseWriter, Mpdf) so there is no
+     * construction-time cycle and no setter-injection phase.
+     *
+     * @param StructureTree             $structureTree             element stack + ParentTree accumulator (Phase 2b)
+     * @param MarkedContentHelper       $markedContentHelper       BDC/EMC emitter (Phase 3a)
+     * @param StructureWriter           $structureWriter           StructTreeRoot serialiser (Phase 2e)
+     * @param AriaIdResolver            $ariaIdResolver            deferred ARIA ID-reference resolver (Phase 4)
+     * @param LigatureActualTextWriter  $ligatureActualTextWriter  /Span /ActualText wrapper for OTL ligatures (Phase 5)
+     * @param Import\FpdiStructMerger   $fpdiStructMerger          tagged-source struct subtree merger (Phase 4)
+     */
+    public function __construct(
+        StructureTree $structureTree,
+        MarkedContentHelper $markedContentHelper,
+        StructureWriter $structureWriter,
+        AriaIdResolver $ariaIdResolver,
+        LigatureActualTextWriter $ligatureActualTextWriter,
+        Import\FpdiStructMerger $fpdiStructMerger
+    ) {
+        $this->structureTree            = $structureTree;
+        $this->markedContentHelper      = $markedContentHelper;
+        $this->structureWriter          = $structureWriter;
+        $this->ariaIdResolver           = $ariaIdResolver;
+        $this->ligatureActualTextWriter = $ligatureActualTextWriter;
+        $this->fpdiStructMerger         = $fpdiStructMerger;
+    }
 
     // ================== Getters ==================
 
@@ -779,23 +822,12 @@ class UaState
      */
     public function setOpenedImplicitLI($v) { $this->openedImplicitLI = (bool) $v; }
 
-    /** @param MarkedContentHelper $h  BDC/EMC emitter; called by ServiceFactory during bootstrap. */
-    public function setMarkedContentHelper(MarkedContentHelper $h) { $this->markedContentHelper = $h; }
-
-    /** @param StructureTree $t  element stack + ParentTree; called by ServiceFactory during bootstrap. */
-    public function setStructureTree(StructureTree $t) { $this->structureTree = $t; }
-
-    /** @param StructureWriter $w  serialiser; called by ServiceFactory during bootstrap. */
-    public function setStructureWriter(StructureWriter $w) { $this->structureWriter = $w; }
-
-    /** @param AriaIdResolver $r  two-pass ARIA resolver; called by ServiceFactory during bootstrap. */
-    public function setAriaIdResolver(AriaIdResolver $r) { $this->ariaIdResolver = $r; }
-
-    /** @param LigatureActualTextWriter $w  /Span /ActualText wrapper; called by ServiceFactory during bootstrap. */
-    public function setLigatureActualTextWriter(LigatureActualTextWriter $w) { $this->ligatureActualTextWriter = $w; }
-
-    /** @param Import\FpdiStructMerger $m  FPDI struct subtree merger; called by ServiceFactory during bootstrap. */
-    public function setFpdiStructMerger(Import\FpdiStructMerger $m) { $this->fpdiStructMerger = $m; }
+    // The six collaborator fields (markedContentHelper, structureTree,
+    // structureWriter, ariaIdResolver, ligatureActualTextWriter,
+    // fpdiStructMerger) are populated exclusively through __construct(). There
+    // are deliberately no setters for them: the facade is immutable from
+    // bootstrap onwards so every getter always returns the same non-null
+    // reference.
 
     // ================== Behaviour ==================
 
@@ -833,11 +865,12 @@ class UaState
 }
 ```
 
-**Encapsulation rationale**: `UaState` holds every piece of state that isn't a mode flag. Marking fields `protected` and routing access through named getters/setters gives three wins:
+**Encapsulation rationale**: `UaState` holds every piece of state that isn't a mode flag. Marking fields `protected`, wiring the six collaborators exclusively through `__construct()`, and routing the remaining access through named getters / runtime mutators gives four wins:
 
-1. Any invalid external write (e.g., stashing a random value on `->structureTree`) becomes a visible `setStructureTree()` call with a typed parameter — the type-hint catches misuse at development time on PHP 7+ even though `src/` must remain PHP 5.6 compatible (the hints are constructor-param style, not property types).
-2. Booleans are reached through `isOpenedImplicitLI()` — the `isX()` prefix makes call sites self-documenting vs the ambiguous-read `->openedImplicitLI`.
-3. Future evolution (e.g. lazy-initialising a collaborator, asserting required fields, adding observability) is a single-file change inside `UaState` instead of touching every caller.
+1. Collaborator fields are constructor-injected and never re-assigned — every getter returns a non-null, final reference for the lifetime of the instance. Callers do not need null-guards and a partially-populated facade is never observable, which eliminates the class of bugs where a consumer reads a collaborator before ServiceFactory's setter phase has finished.
+2. The runtime mutators (`setStructTreeRootObjNum`, `setOpenedImplicitLI`) carry typed parameters — the type-hint catches misuse at development time on PHP 7+ even though `src/` must remain PHP 5.6 compatible (the hints are constructor-param style, not property types).
+3. Booleans are reached through `isOpenedImplicitLI()` — the `isX()` prefix makes call sites self-documenting vs the ambiguous-read `->openedImplicitLI`.
+4. Future evolution (e.g. asserting invariants on the runtime mutators, adding observability) is a single-file change inside `UaState` instead of touching every caller.
 
 **Why the mode flags stay on `Mpdf.php` and not on `UaState`**: `PDFUA` and `PDFUAauto` are read from a huge number of call sites (73+ mode checks) and must feel natural next to the existing `PDFA` / `PDFAauto` flags. Pushing them into the `UaState` facade adds an unnecessary `->ua->` hop at every check and breaks the visual parallel with the rest of mPDF's mode flags. Everything that accumulates or is mutated at runtime — warnings, counters, the root object number, collaborator references — still lives on `UaState`; removing PDF/UA-1 from mPDF becomes deleting `$ua` + the `$PDFUA`/`$PDFUAauto` declarations + the `src/Ua/` directory.
 
@@ -1596,18 +1629,28 @@ as a kid of the Link struct element, alongside any MCIDs.
 
 `UaState` is registered as a service and injected into every consumer that needs to read or mutate UA state. The individual collaborators (`MarkedContentHelper`, `StructureTree`, `StructureWriter`, `AriaIdResolver`, `LigatureActualTextWriter`, `FpdiStructMerger`) live **inside** `UaState` behind `protected` fields reached via getters (`getStructureTree()`, `getMarkedContentHelper()`, …).
 
-Construct `$uaState` first, then every collaborator, then wire the collaborators into `$uaState` via setters. This happens after `$writer` (BaseWriter) is constructed:
+All six collaborator fields on `UaState` are **constructor-injected** — there are no ServiceFactory-wiring setters. Build each collaborator first (in dependency order; none of them take `UaState` anymore), then construct `UaState` with all six in a single call. This happens after `$writer` (BaseWriter) is constructed:
 
 ```php
-$uaState = new \Mpdf\Ua\UaState();
+// Build the six collaborators first. None of them take UaState —
+// each receives the specific pieces it actually needs (StructureTree,
+// MarkedContentHelper, $writer, $mpdf), which is why there is no cycle.
+$structureTree           = new \Mpdf\Ua\StructureTree();
+$markedContentHelper     = new \Mpdf\Ua\MarkedContentHelper($writer);
+$structureWriter         = new \Mpdf\Ua\StructureWriter($mpdf, $writer, $structureTree);
+$ariaIdResolver          = new \Mpdf\Ua\AriaIdResolver($structureTree);
+$ligatureActualTextWriter = new \Mpdf\Ua\LigatureActualTextWriter($writer, $markedContentHelper);
+$fpdiStructMerger        = new \Mpdf\Ua\Import\FpdiStructMerger($mpdf, $structureTree);
 
-$structureTree = new \Mpdf\Ua\StructureTree();
-$uaState->setStructureTree($structureTree);
-$uaState->setMarkedContentHelper(new \Mpdf\Ua\MarkedContentHelper($writer));
-$uaState->setStructureWriter(new \Mpdf\Ua\StructureWriter($writer, $uaState));
-$uaState->setAriaIdResolver(new \Mpdf\Ua\AriaIdResolver($uaState));
-$uaState->setLigatureActualTextWriter(new \Mpdf\Ua\LigatureActualTextWriter($writer, $uaState));
-$uaState->setFpdiStructMerger(new \Mpdf\Ua\Import\FpdiStructMerger($mpdf, $uaState));
+// Then build the facade — fully populated, no setter phase.
+$uaState = new \Mpdf\Ua\UaState(
+    $structureTree,
+    $markedContentHelper,
+    $structureWriter,
+    $ariaIdResolver,
+    $ligatureActualTextWriter,
+    $fpdiStructMerger
+);
 
 // In getServices() return array:
 'uaState' => $uaState,
@@ -1615,6 +1658,8 @@ $uaState->setFpdiStructMerger(new \Mpdf\Ua\Import\FpdiStructMerger($mpdf, $uaSta
 // In getServiceIds():
 'uaState',
 ```
+
+Construction order is important but obvious: `StructureTree` and `MarkedContentHelper` have no UA-layer dependencies, so they come first. `StructureWriter`, `AriaIdResolver`, `LigatureActualTextWriter`, and `FpdiStructMerger` each take one of those two plus `$writer` / `$mpdf`. `UaState` itself is constructed last, once all six collaborators exist.
 
 **Dependency injection surface** — every consumer accepts `UaState` in its constructor and never reaches for it through `$this->mpdf->…`:
 
@@ -1652,7 +1697,8 @@ use Mpdf\Writer\BaseWriter;
  *   3. The /RoleMap dict (if any custom role= values were registered).
  *   4. The StructTreeRoot dict itself.
  *
- * Stores the StructTreeRoot's PDF object number on UaState so
+ * Returns the StructTreeRoot's PDF object number to its caller
+ * (`ResourceWriter::writeResources()`) which records it on UaState so
  * MetadataWriter::writeCatalog() can emit `/StructTreeRoot N 0 R` on the
  * document catalog.
  *
@@ -1669,20 +1715,20 @@ use Mpdf\Writer\BaseWriter;
  */
 class StructureWriter
 {
-    /** @var Mpdf */      private $mpdf;
-    /** @var BaseWriter */private $writer;
-    /** @var UaState */   private $ua;
+    /** @var Mpdf */          private $mpdf;
+    /** @var BaseWriter */    private $writer;
+    /** @var StructureTree */ private $tree;
 
     /**
-     * @param Mpdf        $mpdf   host Mpdf for object-number allocation and page-ref lookups
-     * @param BaseWriter  $writer PDF byte emitter
-     * @param UaState     $ua     facade providing StructureTree + setStructTreeRootObjNum()
+     * @param Mpdf           $mpdf   host Mpdf for object-number allocation and page-ref lookups
+     * @param BaseWriter     $writer PDF byte emitter
+     * @param StructureTree  $tree   in-memory element stack + ParentTree accumulator to serialise
      */
-    public function __construct(Mpdf $mpdf, BaseWriter $writer, UaState $ua)
+    public function __construct(Mpdf $mpdf, BaseWriter $writer, StructureTree $tree)
     {
         $this->mpdf   = $mpdf;
         $this->writer = $writer;
-        $this->ua     = $ua;
+        $this->tree   = $tree;
     }
 
     /**
@@ -1695,9 +1741,14 @@ class StructureWriter
      *
      * Side effects:
      *   - Sets `$elem->objNum` on every StructureElement as its object number is allocated.
-     *   - Calls `$this->ua->setStructTreeRootObjNum($n)` with the final root number.
      *
-     * @return void
+     * The StructTreeRoot's PDF object number is **returned** to the caller
+     * (ResourceWriter) which in turn records it on `UaState` via
+     * `setStructTreeRootObjNum()`. StructureWriter holds no back-reference to
+     * UaState — breaking what used to be a construction-time cycle between the
+     * two.
+     *
+     * @return int  the PDF object number assigned to the StructTreeRoot dict
      */
     public function writeStructTree()
     {
@@ -1732,8 +1783,8 @@ class StructureWriter
         // ---- 3. RoleMap dict ----
         //
         // ISO 32000-1 §14.7.3 — `/RoleMap <</CustomRoleName /StandardType …>>`.
-        // Emit only if $this->ua->getStructureTree()->getRoleMappings() is
-        // non-empty; veraPDF rejects empty /RoleMap dicts in some configurations.
+        // Emit only if $this->tree->getRoleMappings() is non-empty; veraPDF
+        // rejects empty /RoleMap dicts in some configurations.
 
         // ---- 4. StructTreeRoot dict (last, references the three objects above) ----
         //
@@ -1744,10 +1795,13 @@ class StructureWriter
         //   /ParentTreeNextKey N           (see Appendix A13 — required entry)
         //   /RoleMap <rolemap ref 0 R>     (if written)
         //
-        // After allocating the root object number via $this->writer->object():
-        //   $this->ua->setStructTreeRootObjNum($this->mpdf->n);
-        // This lets MetadataWriter::writeCatalog() emit `/StructTreeRoot N 0 R`
-        // when it runs later in _enddoc().
+        // Allocate the root object number via $this->writer->object() and
+        // return it to the caller — ResourceWriter feeds it into
+        // $uaState->setStructTreeRootObjNum() so MetadataWriter::writeCatalog()
+        // can emit `/StructTreeRoot N 0 R` when it runs later in _enddoc().
+        //
+        //   $rootObjNum = $this->mpdf->n;
+        //   return $rootObjNum;
     }
 }
 ```
@@ -1755,11 +1809,13 @@ class StructureWriter
 Hook into `ResourceWriter::writeResources()` after the resource dictionary:
 ```php
 if ($this->mpdf->PDFUA) {
-    $this->ua->getStructureWriter()->writeStructTree();
+    $this->ua->setStructTreeRootObjNum(
+        $this->ua->getStructureWriter()->writeStructTree()
+    );
 }
 ```
 
-Because `writeStructTree()` sets `structTreeRoot` via the setter, the catalog's `writeCatalog()` (called later in `_enddoc()`) picks up the correct object number. **Ordering is correct**: `writeResources()` fires before `writeCatalog()` in `_enddoc()`.
+Because `ResourceWriter` immediately pushes the returned root object number into `$uaState->setStructTreeRootObjNum()`, the catalog's `writeCatalog()` (called later in `_enddoc()`) picks up the correct object number. **Ordering is correct**: `writeResources()` fires before `writeCatalog()` in `_enddoc()`. The setter on `UaState` is a runtime mutator — it is not a ServiceFactory-wiring setter and therefore remains on the class.
 
 ### Phase 2 Tests
 
@@ -1872,8 +1928,10 @@ class MarkedContentHelper
     /**
      * Construct with the buffer-routing writer.
      *
-     * Called once by ServiceFactory during bootstrap; injected into UaState
-     * via setMarkedContentHelper().
+     * Called once by ServiceFactory during bootstrap and then passed into
+     * UaState's constructor as one of its six collaborators (UaState has no
+     * ServiceFactory-wiring setters — every collaborator field is populated
+     * exclusively through `UaState::__construct()`).
      *
      * @param BaseWriter $writer
      */
@@ -2817,8 +2875,8 @@ namespace Mpdf\Ua;
  */
 class AriaIdResolver
 {
-    /** @var UaState  injected once; provides access to StructureTree and addWarning(). */
-    private $ua;
+    /** @var StructureTree  injected once; walked during resolveAll() to populate /Alt /E /Ref. */
+    private $tree;
 
     /** @var array<string, StructureElement>  id attribute value → struct element that carries it. */
     private $idMap = [];
@@ -2828,22 +2886,19 @@ class AriaIdResolver
      */
     private $pending = [];
 
-    /**
-     * @param UaState $ua  injected by ServiceFactory; used for StructureTree access and warning recording
-     */
-    public function __construct(UaState $ua)
-    {
-        $this->ua = $ua;
-    }
+    /** @var string[]  unresolved-reference diagnostics produced by resolveAll(); flushed into UaState by the _enddoc() caller. */
+    private $unresolvedWarnings = [];
 
     /**
-     * Convenience shim to reach the StructureTree through UaState.
-     *
-     * @return StructureTree
+     * @param StructureTree $tree  element stack / ParentTree accumulator; used by collectText() to walk /K.
+     *                             AriaIdResolver deliberately does not take UaState — it holds its own
+     *                             $unresolvedWarnings list instead, which the _enddoc() caller flushes
+     *                             into $uaState->addWarning() after resolveAll(). This breaks the
+     *                             construction-time cycle that previously required setter-based wiring.
      */
-    private function tree()
+    public function __construct(StructureTree $tree)
     {
-        return $this->ua->getStructureTree();
+        $this->tree = $tree;
     }
 
     /**
@@ -2891,9 +2946,12 @@ class AriaIdResolver
      * Walk every queued reference and mutate the referencing struct element.
      *
      * Called exactly once from Mpdf::_enddoc(), before
-     * `$this->ua->getStructureWriter()->writeStructTree()` serialises the tree.
-     * Unresolved IDs produce a PDFUAauto-mode warning (`$ua->addWarning()`) so
-     * authors can diagnose broken references without failing the render.
+     * `UaState::getStructureWriter()->writeStructTree()` serialises the tree.
+     * Unresolved IDs append a PDFUAauto-mode diagnostic to
+     * `$this->unresolvedWarnings`. The `_enddoc()` caller flushes those into
+     * `UaState::addWarning()` immediately after `resolveAll()` returns (see
+     * the hook block later in this section) — AriaIdResolver itself holds no
+     * UaState reference.
      *
      * @return void
      */
@@ -2901,7 +2959,7 @@ class AriaIdResolver
     {
         foreach ($this->pending as list($elem, $attr, $id)) {
             if (!isset($this->idMap[$id])) {
-                $this->ua->addWarning("Unresolved ARIA reference: $attr=\"$id\" has no matching id=\"$id\" in the document");
+                $this->unresolvedWarnings[] = "Unresolved ARIA reference: $attr=\"$id\" has no matching id=\"$id\" in the document";
                 continue;
             }
             $target = $this->idMap[$id];
@@ -2952,6 +3010,22 @@ class AriaIdResolver
         // content items. See §"Aria Id Resolver collectText" implementation note.
         return '';
     }
+
+    /**
+     * Diagnostics collected by `resolveAll()` for IDs that had no matching
+     * element. The `_enddoc()` caller flushes these into
+     * `$uaState->addWarning()` — AriaIdResolver itself holds no UaState
+     * reference, so it cannot record warnings directly.
+     *
+     * Every call returns the full list; it is not cleared across calls, but
+     * `resolveAll()` is only invoked once per render so that is not a concern.
+     *
+     * @return string[]
+     */
+    public function getUnresolvedWarnings()
+    {
+        return $this->unresolvedWarnings;
+    }
 }
 ```
 
@@ -2981,7 +3055,15 @@ if ($this->mpdf->PDFUA) {
 
 ```php
 if ($this->PDFUA) {
-    $this->ua->getAriaIdResolver()->resolveAll();
+    $resolver = $this->ua->getAriaIdResolver();
+    $resolver->resolveAll();
+    // AriaIdResolver holds no UaState back-reference (it was removed when
+    // UaState became constructor-injection-only). Flush the diagnostics it
+    // accumulated while resolving into $this->ua here so they appear in
+    // $this->ua->getWarnings() alongside every other PDFUAauto warning.
+    foreach ($resolver->getUnresolvedWarnings() as $w) {
+        $this->ua->addWarning($w);
+    }
 }
 ```
 
@@ -3574,15 +3656,21 @@ into the page content stream. The Form XObject contains the original page's cont
 
 **Two-tier treatment based on source PDF tagging**:
 
-**Tier 1 — Source PDF is untagged** (no `StructTreeRoot` in its catalog): Wrap the `Do` call as Artifact in `src/FpdiTrait.php::useTemplate()`:
+**Tier 1 — Source PDF is untagged** (no `StructTreeRoot` in its catalog): Wrap the `Do` call as Artifact in `src/FpdiTrait.php::useTemplate()`. The untagged-source diagnostic is recorded on the merger (which has no UaState back-reference) and flushed into `$this->ua->addWarning()` once after the tier decision:
 ```php
+$merger = $this->ua->getFpdiStructMerger();
 if ($this->PDFUA && !$sourceIsTagged) {
     $this->writer->write('/Artifact <</Type /Layout>> BDC');
-    $this->ua->addWarning('Imported PDF page (untagged source) marked as Artifact.');
+    $merger->addUntaggedWarning('Imported PDF page (untagged source) marked as Artifact.');
 }
 $this->fpdiUseImportedPage($tpl, $x, $y, $width, $height, $adjustPageSize);
 if ($this->PDFUA && !$sourceIsTagged) {
     $this->writer->write('EMC');
+}
+if ($this->PDFUA) {
+    foreach ($merger->getUntaggedWarnings() as $w) {
+        $this->ua->addWarning($w);
+    }
 }
 ```
 Use `$this->writer->write()` (routes through `BaseWriter::endPage()` → `columnbuffer` in column mode).
@@ -3631,30 +3719,54 @@ use Mpdf\Ua\StructureElement;
  */
 class FpdiStructMerger
 {
-    /** @var Mpdf     host Mpdf — needed for $mpdf->objectsToCopy and page-object lookups. */
+    /** @var Mpdf           host Mpdf — needed for $mpdf->objectsToCopy and page-object lookups. */
     private $mpdf;
 
-    /** @var UaState  injected facade providing StructureTree + addWarning(). */
-    private $ua;
+    /** @var StructureTree  injected once; merges source subtrees into this tree during mergePageStructSubtree(). */
+    private $tree;
+
+    /** @var string[]  untagged-source diagnostics; flushed into UaState by the FpdiTrait caller. */
+    private $untaggedWarnings = [];
 
     /**
-     * @param Mpdf    $mpdf
-     * @param UaState $ua
+     * FpdiStructMerger takes `StructureTree` directly rather than `UaState` —
+     * this keeps ServiceFactory bootstrap linear (no construction-time cycle)
+     * and means the merger has no back-reference to the facade. Untagged-source
+     * diagnostics accumulate on `$untaggedWarnings` and are flushed into
+     * `$uaState->addWarning()` by `FpdiTrait::useTemplate()` after the tier
+     * decision is made (see hook block below).
+     *
+     * @param Mpdf          $mpdf  host Mpdf for objectsToCopy / page-object lookups
+     * @param StructureTree $tree  host struct tree into which imported subtrees are merged
      */
-    public function __construct(Mpdf $mpdf, UaState $ua)
+    public function __construct(Mpdf $mpdf, StructureTree $tree)
     {
         $this->mpdf = $mpdf;
-        $this->ua   = $ua;
+        $this->tree = $tree;
     }
 
     /**
-     * Convenience shim.
+     * Append an untagged-source diagnostic. Called from the FpdiTrait hook
+     * whenever a PDF is imported whose source catalog has no /StructTreeRoot.
      *
-     * @return StructureTree
+     * @param  string $msg
+     * @return void
      */
-    private function tree()
+    public function addUntaggedWarning($msg)
     {
-        return $this->ua->getStructureTree();
+        $this->untaggedWarnings[] = (string) $msg;
+    }
+
+    /**
+     * Diagnostics accumulated by `addUntaggedWarning()`. The FpdiTrait caller
+     * flushes these into `$uaState->addWarning()` after each tier decision —
+     * FpdiStructMerger itself holds no UaState reference.
+     *
+     * @return string[]
+     */
+    public function getUntaggedWarnings()
+    {
+        return $this->untaggedWarnings;
     }
 
     /**
@@ -3692,7 +3804,7 @@ class FpdiStructMerger
      *      annotations that FPDI copied; drop OBJR entries whose source
      *      annotation was not imported (groupXObject=false).
      *   5. Merge source /RoleMap entries via
-     *      `$this->tree()->addRoleMapping($role, $standardType)` (first-wins).
+     *      `$this->tree->addRoleMapping($role, $standardType)` (first-wins).
      *   6. Attach the merged subtree root as a child of the current host struct
      *      element (usually the page-level container).
      *
@@ -3732,13 +3844,14 @@ class FpdiStructMerger
 **Hook in `src/FpdiTrait.php::useTemplate()`**:
 
 ```php
-$sourceIsTagged = $this->ua->getFpdiStructMerger()->sourceIsTagged($this->currentReaderId);
+$merger         = $this->ua->getFpdiStructMerger();
+$sourceIsTagged = $merger->sourceIsTagged($this->currentReaderId);
 
 if ($this->PDFUA && $sourceIsTagged) {
     $structParents = $this->ua->nextStructParents();
     // Wrap the Do as a content container — Method 2 from SVG handling. The Do stays
     // bare (no BDC/EMC wrap on the page); the Form XObject carries /StructParents.
-    $this->ua->getFpdiStructMerger()->mergePageStructSubtree(
+    $merger->mergePageStructSubtree(
         $tpl,
         $this->importedPages[$tpl]['objectNumber'],
         $this->getCurrentPageObjNum()
@@ -3748,10 +3861,20 @@ if ($this->PDFUA && $sourceIsTagged) {
 $newSize = $this->fpdiUseImportedPage($tpl, $x, $y, $width, $height, $adjustPageSize);
 
 if ($this->PDFUA && !$sourceIsTagged) {
-    // Legacy Artifact wrap for genuinely untagged sources only
+    // Legacy Artifact wrap for genuinely untagged sources only.
     $this->writer->write('/Artifact <</Type /Layout>> BDC');
-    $this->ua->addWarning('Imported PDF page (untagged source) marked as Artifact.');
+    $merger->addUntaggedWarning('Imported PDF page (untagged source) marked as Artifact.');
     $this->writer->write('EMC');
+}
+
+// FpdiStructMerger holds no UaState back-reference (removed when UaState
+// became constructor-injection-only). Flush the untagged-source diagnostics
+// it accumulated into $this->ua here so they appear in
+// $this->ua->getWarnings() alongside every other PDFUAauto warning.
+if ($this->PDFUA) {
+    foreach ($merger->getUntaggedWarnings() as $w) {
+        $this->ua->addWarning($w);
+    }
 }
 ```
 
@@ -4357,8 +4480,9 @@ Matterhorn 24-001 fires when a glyph resulting from OpenType ligature substituti
 
 **Implementation (in-scope)** — add `src/Ua/LigatureActualTextWriter.php` in Phase 5:
 
+- **Constructor signature**: `LigatureActualTextWriter(BaseWriter $writer, MarkedContentHelper $mch)`. The class does **not** take `UaState` — it receives `MarkedContentHelper` directly. This is why ServiceFactory can construct `LigatureActualTextWriter` before `UaState` exists (§2d wiring block).
 - **Otl instrumentation**: extend `Otl` so that every substitution it performs is appended to a per-run log keyed by the output glyph cluster: `[outputGlyphId => originalUnicodeCharacters]`. The log is stored on the `$GPOSinfo` / `$useOTL` metadata that `Otl` already attaches to the text buffer entry.
-- **Emit-time wrapping**: `Cell()` and `finishFlowingBlock()` check the log for the current run. When a glyph cluster has more than one source character (ligature), the run is split and each ligature sub-run is wrapped via `$this->ua->getMarkedContentHelper()`:
+- **Emit-time wrapping**: `Cell()` and `finishFlowingBlock()` check the log for the current run. When a glyph cluster has more than one source character (ligature), the run is split and each ligature sub-run is wrapped by calling `$this->mch->begin('Span', null, ['ActualText' => $utf16BeBomHex])` / `$this->mch->end()` on the injected `MarkedContentHelper` (no `$this->ua->getMarkedContentHelper()` indirection):
   ```
   /Span <</ActualText <FEFF 00 66 00 69>>> BDC
     BT /F1 12 Tf 100 700 Td <1ED> Tj ET   % fi glyph
@@ -4387,7 +4511,7 @@ Matterhorn 24-001 fires when a glyph resulting from OpenType ligature substituti
 Matterhorn 01-007 (a PDF claiming PDF/UA-1 conformance must not contain untagged real content) is satisfied by the two-tier treatment in the §"Imported PDFs via FPDI" section:
 
 - **Tagged source**: `\Mpdf\Ua\Import\FpdiStructMerger` (Phase 4) reads the source catalog's `/StructTreeRoot`, queues the struct subtree for the imported page onto FPDI's `objectsToCopy` (so FPDI's existing `writePdfType()` rewriter at `src/FpdiTrait.php:344–395` handles object-number remapping), rewrites MCR `/Pg` to the host page and adds `/Stm` pointing at the Form XObject. `SetPageTemplate()` reuse on N host pages emits N MCR kids under a single struct subtree.
-- **Untagged source**: the `Do` is wrapped as `/Artifact <</Type /Layout>> BDC … EMC` and a warning is appended to `$this->ua->getWarnings()` via `->addWarning()`.
+- **Untagged source**: the `Do` is wrapped as `/Artifact <</Type /Layout>> BDC … EMC` and a warning is recorded on `FpdiStructMerger::addUntaggedWarning()`. The `FpdiTrait::useTemplate()` caller flushes that list into `$this->ua->addWarning()` after each tier decision — `FpdiStructMerger` itself has no UaState back-reference, so the flush step is where the warning reaches `$this->ua->getWarnings()`.
 
 Both paths are in-scope in Phase 4; no future work or plan gaps remain here.
 
@@ -4430,7 +4554,9 @@ The plan says "verify `src/Tag/Abbr.php` exists." It does not. Create it (mirror
 
 ### A12. `StructureWriter` service registration
 
-Under the `UaState` facade (D10), `ServiceFactory` no longer registers `markedContentHelper`, `structureTree`, `structureWriter` as top-level services — it registers a single `'uaState'` service that references all of them. `ResourceWriter::writeResources()` reaches the struct writer via `$this->ua->getStructureWriter()->writeStructTree()` — no new constructor parameter needed on `ResourceWriter` because it already receives `$mpdf`.
+Under the `UaState` facade (D10), `ServiceFactory` no longer registers `markedContentHelper`, `structureTree`, `structureWriter` as top-level services — it registers a single `'uaState'` service that references all of them. The six collaborators are built first (in dependency order — none of them take `UaState` anymore) and are handed to `UaState::__construct()` in one call, so the service is fully populated from the moment it is registered and has no setter-based wiring phase.
+
+`ResourceWriter::writeResources()` reaches the struct writer via `$this->ua->getStructureWriter()->writeStructTree()` — no new constructor parameter needed on `ResourceWriter` because it already receives `$mpdf`. `writeStructTree()` now **returns** the StructTreeRoot's PDF object number; `ResourceWriter` feeds it straight into `$this->ua->setStructTreeRootObjNum($this->ua->getStructureWriter()->writeStructTree())` so the root object number round-trips through the facade's runtime mutator (runtime mutators are deliberately retained on `UaState`; only the six ServiceFactory-wiring setters were removed).
 
 ---
 
