@@ -352,9 +352,9 @@ Also add **`'title'`** as a recognised config key so it is no longer silently dr
 'title' => '',
 ```
 
-With this entry, users can pass `['title' => 'My Document', 'PDFUA' => true]` to the `Mpdf` constructor and the title is populated before `WriteHTML()` / `Output()` is called. This removes a long-standing PDF/UA-1 foot-gun: PDF/UA-1 requires a non-empty `/Title`, and the previous behaviour silently dropped the constructor-arg title — users saw an unexpected "title missing" exception.
+With this entry, users can pass `['title' => 'My Document', 'PDFUA' => true]` to the `Mpdf` constructor and the title is populated before `WriteHTML()` / `Output()` is called. PDF/UA-1 requires a non-empty `/Title`; the config key is the most discoverable way for users to supply one.
 
-`SetTitle($title)` still exists at `src/Mpdf.php:1803–1807` and remains the canonical setter for code that sets the title after construction; the config key is an additive convenience.
+`SetTitle($title)` at `src/Mpdf.php:1803–1807` remains the canonical setter for code that sets the title after construction; the config key is an additive convenience.
 
 ### 1b. Property declarations (`src/Mpdf.php`, ~line 82)
 
@@ -386,8 +386,8 @@ $this->ua = $services['uaState'];   // injected by ServiceFactory
 - Code inside `Mpdf.php` reads `$this->PDFUA` / `$this->PDFUAauto`.
 - Tag handlers call `$this->mpdf->ua->getMarkedContentHelper()->begin(...)` / `->end()`.
 - The depth balance check in `_enddoc()` reads `$this->ua->getMarkedContentHelper()->getDepth()`.
-- Warnings are recorded via `$this->mpdf->ua->addWarning($msg)` (replaces the old `$this->mpdf->addPDFUAwarning($msg)`).
-- `/StructParents` allocation uses `$this->mpdf->ua->nextStructParents()` (replaces the old `$this->mpdf->nextStructParents()`).
+- Warnings are recorded via `$this->mpdf->ua->addWarning($msg)`.
+- `/StructParents` allocation uses `$this->mpdf->ua->nextStructParents()`.
 
 ### 1c. XMP metadata (`src/Writer/MetadataWriter.php`, after line 135)
 
@@ -541,22 +541,22 @@ namespace Mpdf\Ua;
 class UaState
 {
     // --- accumulated state ---
-    protected $warnings              = [];      // was Mpdf->$PDFUAwarnings
-    protected $structParentsCounter  = 0;       // was Mpdf->$pdfuaStructParentsCounter
-    protected $structTreeRootObjNum  = 0;       // was Mpdf->$structTreeRoot (PDF obj number)
-    protected $openedImplicitLI      = false;   // was Mpdf->$pdfuaOpenedImplicitLI
+    protected $warnings              = [];
+    protected $structParentsCounter  = 0;
+    protected $structTreeRootObjNum  = 0;       // PDF object number of StructTreeRoot
+    protected $openedImplicitLI      = false;   // DT/DD opened an implicit LI
 
     // --- collaborators (wired by ServiceFactory via setters) ---
     /** @var MarkedContentHelper */            protected $markedContentHelper;
     /** @var StructureTree */                  protected $structureTree;
     /** @var StructureWriter */                protected $structureWriter;
-    /** @var AriaIdResolver */                 protected $ariaIdResolver;          // added by D6
-    /** @var LigatureActualTextWriter */       protected $ligatureActualTextWriter; // added by D1 (Phase 5)
-    /** @var Import\FpdiStructMerger */        protected $fpdiStructMerger;        // added by D2
+    /** @var AriaIdResolver */                 protected $ariaIdResolver;
+    /** @var LigatureActualTextWriter */       protected $ligatureActualTextWriter;
+    /** @var Import\FpdiStructMerger */        protected $fpdiStructMerger;
 
-    // NOTE: the mode flags `PDFUA` and `PDFUAauto` deliberately stay on `Mpdf.php`
-    // as `var` properties, matching the existing `$PDFA` / `$PDFAauto` pattern.
-    // Writer code reads `$this->mpdf->PDFUA` / `$this->mpdf->PDFUAauto` directly.
+    // The mode flags `PDFUA` and `PDFUAauto` live on `Mpdf.php` as `var` properties,
+    // matching the `$PDFA` / `$PDFAauto` pattern. Writer code reads
+    // `$this->mpdf->PDFUA` / `$this->mpdf->PDFUAauto` directly.
 
     // ================== Getters ==================
 
@@ -829,7 +829,7 @@ class StructureTree
 }
 ```
 
-**Key correction vs. original plan:** MCID counter is per-page (`$mcidByPage[$page]`), not global. This is required by ISO 32000-1 §14.7.4.4 — the ParentTree value for each `/StructParents N` key must be a dense array starting at index 0.
+**MCID counter invariant:** MCID is per-page (`$mcidByPage[$page]`), not global. This is required by ISO 32000-1 §14.7.4.4 — the ParentTree value for each `/StructParents N` key must be a dense array starting at index 0.
 
 **ParentTree key clarification**: The NumTree keys are the `/StructParents` integers assigned sequentially to page dicts (not 1-based page numbers). The value for each key is a **dense array** of references to struct element objects, ordered by MCID (index 0 = MCID 0, index 1 = MCID 1, etc. — never sparse).
 
@@ -1159,7 +1159,7 @@ Struct element type names (P, H1, Figure, etc.) are assigned in Phase 4; Phase 3
 
 ### 3a. `src/Ua/MarkedContentHelper.php` (new) — BDC/EMC encapsulation
 
-BDC/EMC operator emission is handled by a dedicated collaborator — **no new methods are added to `Mpdf.php`**. The `_beginMarkedContent()` / `_endMarkedContent()` methods from the original design do not exist; all call sites use `$this->mpdf->ua->getMarkedContentHelper()->begin(...)` / `->end()` instead.
+BDC/EMC operator emission is handled by a dedicated collaborator — **no new methods are added to `Mpdf.php`**. All call sites use `$this->mpdf->ua->getMarkedContentHelper()->begin(...)` / `->end()`.
 
 ```php
 namespace Mpdf\Ua;
@@ -2779,7 +2779,7 @@ class FpdiStructMerger
 }
 ```
 
-**Hook in `src/FpdiTrait.php::useTemplate()`** (replaces the old Tier-1-only Artifact wrap):
+**Hook in `src/FpdiTrait.php::useTemplate()`**:
 
 ```php
 $sourceIsTagged = $this->ua->getFpdiStructMerger()->sourceIsTagged($this->currentReaderId);
@@ -3018,7 +3018,7 @@ vendor/bin/phpunit --group=snapshot        # snapshot suite must stay green
 
 ---
 
-## Spec-Review Corrections (Tagged PDF Best Practice Guide + WTPDF 1.0)
+## Spec Compliance Details (Tagged PDF Best Practice Guide + WTPDF 1.0)
 
 ### TH Scope attribute (Matterhorn 09-004)
 
@@ -3050,7 +3050,7 @@ The Tagged PDF Best Practice Guide §4.3.1 recommends that when a `<figure>` has
 
 mPDF's `<figure>/<figcaption>` parsing: if `<figcaption>` appears after image content (the common case), the struct tree will naturally have `Figure` before `Caption` — no special handling needed. If `<figcaption>` appears before the image (as a title caption), struct order follows DOM order; this is acceptable.
 
-No plan change required — natural DOM traversal produces correct struct order.
+Natural DOM traversal produces correct struct order — no special handling needed in the tag handler.
 
 ### Definition lists (`<dl>`, `<dt>`, `<dd>`)
 
@@ -3069,19 +3069,19 @@ $this->mpdf->ua->getStructureTree()->open('Lbl');  // for DT, or 'LBody' for DD
 
 The `$this->mpdf->ua->isOpenedImplicitLI()` flag tracks whether an implicit `LI` was opened (closed on the next sibling `DT`/`DD` or on `/DL`).
 
-### Items confirmed correct by spec review
+### Spec-mandated invariants
 
-The following plan decisions were verified against both specs and are correct:
+The following mappings and behaviours are direct requirements of ISO 14289-1 / ISO 32000-1 and MUST be preserved by any implementation:
 
-- `BLOCKQUOTE → BlockQuote` ✓ (ISO 32000-1 Table 333 standard type)
-- `CODE/PRE → Code` ✓ (ISO 32000-1 Table 333 standard type)
-- Artifact marking for running headers/footers ✓
-- Decorative images (empty alt) → Artifact ✓
-- Per-page MCID reset to 0 ✓ (ISO 32000-1 §14.7.4.4)
-- `pdfuaid:part` in XMP ✓
-- `displayDocTitle` in ViewerPreferences ✓ (documented in Phase 1)
-- Heading level validation (no skipping) ✓
-- `LI → Lbl + LBody` structure ✓
+- `BLOCKQUOTE → BlockQuote` (ISO 32000-1 Table 333 standard type)
+- `CODE/PRE → Code` (ISO 32000-1 Table 333 standard type)
+- Artifact marking for running headers/footers
+- Decorative images (empty `alt`) → Artifact
+- Per-page MCID reset to 0 (ISO 32000-1 §14.7.4.4)
+- `pdfuaid:part` in XMP
+- `displayDocTitle` in ViewerPreferences (implemented in Phase 1)
+- Heading level validation (no skipping)
+- `LI → Lbl + LBody` structure
 
 ---
 
@@ -3327,17 +3327,15 @@ vendor/bin/phpstan analyse
 
 ---
 
-## Appendix: Expert Audit Findings
+## Appendix: Implementation Details and Matterhorn Requirements
 
-Three expert agents audited this plan against (1) ISO 14289-1 and Matterhorn Protocol 1.1, (2) the mPDF codebase implementation details, and (3) the testing strategy. Blocking errors have been corrected inline above. Remaining gaps and uncertainties are documented here as required implementation work.
+The items below capture ISO 14289-1 / Matterhorn Protocol 1.1 / PDF 32000-1 details that span multiple phases or that would otherwise be easy to miss. Each is a hard requirement for veraPDF `--flavour ua1` conformance.
 
 ---
 
 ### A1. `/Alt`, `/ActualText`, `/Lang` are direct StructElem dict keys — not inside `/A`
 
-**Error in original plan**: The StructureWriter section proposed writing `/Scope`, `/ColSpan`, `/RowSpan`, `/ListNumbering`, `/Alt`, `/ActualText`, and `/Lang` all inside a single `/A <</O /Layout ...>>` attribute object.
-
-**Correct placement per ISO 32000-1 §14.7.2 Table 323**:
+**Placement per ISO 32000-1 §14.7.2 Table 323**:
 - **Direct StructElem keys** (written on the struct element dict itself, not inside `/A`): `/Alt`, `/ActualText`, `/E`, `/Lang`, `/T`, `/ID`, `/Pg`, `/K`, `/P`, `/S`, `/A`, `/C`, `/R`
 - **Attribute objects** (inside `/A` with appropriate owner `/O`):
   - `/O /Table` (Table 349): `/Scope`, `/ColSpan`, `/RowSpan`, `/Headers`, `/Summary`
@@ -3375,7 +3373,7 @@ Add to the Phase 4 form field section: validate `/TU` is populated (fall back to
 
 ### A4. Figure struct element `/BBox` (Matterhorn 13-008)
 
-Per ISO 32000-1 Table 344, `/BBox` is **required** for any Figure appearing in its entirety on a single page. `/Placement` is a separate optional attribute (default `Inline`) — it is NOT required alongside `/BBox`. The `/Placement /Block` wording in earlier plan drafts was incorrect.
+Per ISO 32000-1 Table 344, `/BBox` is **required** for any Figure appearing in its entirety on a single page. `/Placement` is a separate optional attribute (default `Inline`) — it is NOT required alongside `/BBox`.
 
 ```php
 // In the struct element attribute object for Figure (Layout owner):
