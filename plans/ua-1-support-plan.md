@@ -116,6 +116,86 @@ All new test classes extend `PdfUaTestCase` in the `Mpdf\Ua` namespace (matches 
 
 ---
 
+## Code Documentation Standards (applies to every new method in Phases 1–5)
+
+Every new class, method, and non-trivial code block introduced by this plan **MUST** carry documentation that answers three questions for a future developer (or AI agent) reading the code in isolation:
+
+1. **What is this for?** (purpose)
+2. **What does it do?** (behaviour — inputs, outputs, side-effects)
+3. **How is it used?** (call sites, ordering, prerequisites)
+
+### Class-level docblock (every new class)
+
+```php
+/**
+ * One-line summary (what the class represents).
+ *
+ * Longer description: the role of this class in the PDF/UA-1 pipeline, who
+ * constructs it (usually ServiceFactory), who consumes it, and the invariants
+ * it maintains.
+ *
+ * Spec references (one or more, whichever apply):
+ *   - ISO 32000-1:2008 §<section> — <short description>
+ *   - ISO 14289-1:2014 §<section> — <short description>
+ *   - Matterhorn Protocol 1.1 failure condition <NN-NNN> — <short description>
+ *
+ * @see \Mpdf\Ua\<related-class> for <relationship>
+ */
+```
+
+### Method docblock (every new public or protected method)
+
+```php
+/**
+ * One-line summary (imperative mood: "Emit the BDC operator…", not "Emits…").
+ *
+ * Longer description only if the behaviour is non-obvious: edge cases,
+ * ordering constraints, failure modes, interaction with other methods.
+ *
+ * Spec references where the behaviour is mandated by the standard.
+ *
+ * @param  <type> $<name>  <what it is + any value constraints>
+ * @param  <type> $<name>  <what it is + any value constraints>
+ * @return <type>          <what is returned + any sentinel values (e.g. -1 for Artifact)>
+ * @throws \Mpdf\MpdfException  <when + why>
+ */
+```
+
+### Getters / setters
+
+Trivial getters/setters still get a one-line docblock with `@return` / `@param`. If the property is covered by a class-level spec reference, repeat only the specific entry that applies to this accessor.
+
+### Inline comments with PDF-spec references
+
+For any code block whose correctness depends on a specific clause of ISO 32000-1, ISO 14289-1, the Tagged PDF Best Practice Guide, or the Matterhorn Protocol, add an inline comment immediately above the block referencing the clause:
+
+```php
+// ISO 32000-1 §14.7.4.4 Table 324 — MCR dict may carry both /Pg and /Stm;
+// /Pg identifies the host page, /Stm identifies the Form XObject stream.
+$mcr = [
+    'Type' => 'MCR',
+    'Pg'   => $hostPageRef,
+    'Stm'  => $xobjRef,
+    'MCID' => $mcid,
+];
+```
+
+Rules of thumb for inline comments:
+
+- **Always cite the spec when** the code implements a hard conformance rule (emitted bytes, attribute names, permission bits, XMP namespaces, MCID allocation).
+- **Always explain the workaround when** a loop/branch exists only because of a known mPDF-specific quirk (e.g., column-buffer reordering, `Strict` trait idioms, FPDI indirect-ref rewriter reuse).
+- **Do not narrate obvious code** — `// increment counter` above `$this->counter++` adds noise, not value.
+
+### PHP 5.6 compatibility
+
+`src/` must compile on PHP 5.6 through 8.5 (see CLAUDE.md / CI matrix). Docblocks may use full type annotations (they are comments). Actual method signatures MUST NOT use scalar type hints (`int`, `string`, `bool`) or return types, and MUST NOT use nullable (`?Type`), union, or intersection types. Class type hints are allowed (`UaState $ua`, `StructureElement $elem`).
+
+### What to write vs. what to skip
+
+`CLAUDE.md` at the repo root says to prefer no comments unless the *why* is non-obvious. That rule still governs inside method bodies — don't explain trivial statements. Docblocks, spec-reference inline comments, and workaround explanations are the exception because they encode information that isn't recoverable from reading the code.
+
+---
+
 ## Architecture Overview
 
 PDF/UA-1 tagging requires two parallel systems operating during document generation:
@@ -539,13 +619,75 @@ New classes that accumulate the logical document structure in memory during HTML
 ```php
 namespace Mpdf\Ua;
 
+/**
+ * Facade holding all runtime PDF/UA-1 state and collaborator references.
+ *
+ * Constructed once by ServiceFactory, stored as Mpdf::$ua (private), and injected
+ * via constructor DI into every tag handler, writer, and \Mpdf\Ua\* collaborator
+ * that needs to read or mutate UA state. The two mode flags `PDFUA` and `PDFUAauto`
+ * live on Mpdf.php directly (matching `$PDFA` / `$PDFAauto`); UaState carries
+ * everything else so removing PDF/UA-1 support later becomes a single property
+ * deletion plus the `src/Ua/` directory.
+ *
+ * All fields are `protected`; read/write through the explicit getters/setters
+ * below. No `Strict` trait — this class is self-contained.
+ *
+ * Spec references:
+ *   - ISO 14289-1:2014 §7 — document-level UA requirements accumulated here
+ *   - ISO 32000-1:2008 §14.7.4.4 — /StructParents allocation (see $structParentsCounter)
+ *   - ISO 32000-1:2008 §14.7.2 Table 322 — StructTreeRoot object number
+ *     (see $structTreeRootObjNum, written by StructureWriter)
+ *
+ * @see \Mpdf\Ua\StructureTree         element stack + ParentTree
+ * @see \Mpdf\Ua\MarkedContentHelper   BDC/EMC emission
+ * @see \Mpdf\Ua\StructureWriter       StructTreeRoot serialisation
+ */
 class UaState
 {
     // --- accumulated state ---
+
+    /** @var string[] PDFUAauto-mode warnings collected during rendering. */
     protected $warnings              = [];
+
+    /**
+     * Sequential /StructParents integer counter.
+     *
+     * Allocated by nextStructParents() and emitted on every page dict, every
+     * SVG Form XObject with internal MCIDs, and every FPDI tagged import (§1h,
+     * §"SVG Images", §"Imported PDFs via FPDI"). StructureWriter emits
+     * /ParentTreeNextKey equal to this counter's final value.
+     *
+     * ISO 32000-1 §14.7.4.4 — ParentTree key space; integers start at 0 and
+     * must be dense per-key (the array entry indexed by a given /StructParents
+     * integer must be a 0-based contiguous list of MCIDs).
+     *
+     * @var int
+     */
     protected $structParentsCounter  = 0;
-    protected $structTreeRootObjNum  = 0;       // PDF object number of StructTreeRoot
-    protected $openedImplicitLI      = false;   // DT/DD opened an implicit LI
+
+    /**
+     * PDF object number assigned to the StructTreeRoot dict.
+     *
+     * Set by StructureWriter::writeStructTree() immediately after it allocates
+     * the root object. Read by MetadataWriter::writeCatalog() to emit
+     * `/StructTreeRoot N 0 R` in the document catalog. Ordering is guaranteed
+     * because ResourceWriter runs StructureWriter before writeCatalog().
+     *
+     * @var int  0 until StructureWriter has run.
+     */
+    protected $structTreeRootObjNum  = 0;
+
+    /**
+     * True while a DT or DD tag handler has auto-opened an implicit LI parent
+     * because the DOM structure is `<dl><dt>…</dt><dd>…</dd></dl>` (no explicit
+     * LI in HTML). Closed on the next sibling DT/DD or on `</dl>`.
+     *
+     * Tagged PDF Best Practice Guide §4.2.3 — DL maps to L, DT to Lbl, DD to
+     * LBody; Lbl/LBody must be children of an LI (see §"Definition lists").
+     *
+     * @var bool
+     */
+    protected $openedImplicitLI      = false;
 
     // --- collaborators (wired by ServiceFactory via setters) ---
     /** @var MarkedContentHelper */            protected $markedContentHelper;
@@ -555,66 +697,135 @@ class UaState
     /** @var LigatureActualTextWriter */       protected $ligatureActualTextWriter;
     /** @var Import\FpdiStructMerger */        protected $fpdiStructMerger;
 
-    // The mode flags `PDFUA` and `PDFUAauto` live on `Mpdf.php` as `var` properties,
-    // matching the `$PDFA` / `$PDFAauto` pattern. Writer code reads
-    // `$this->mpdf->PDFUA` / `$this->mpdf->PDFUAauto` directly.
+    // The mode flags PDFUA and PDFUAauto live on Mpdf.php as `var` properties,
+    // matching the $PDFA / $PDFAauto pattern. Writer/consumer code reads
+    // $this->mpdf->PDFUA / $this->mpdf->PDFUAauto directly.
 
     // ================== Getters ==================
 
-    /** @return string[] */
-    public function getWarnings()             { return $this->warnings; }
+    /**
+     * Accumulated PDFUAauto-mode warnings.
+     *
+     * PDFUAauto=true converts conformance violations into entries here instead
+     * of throwing MpdfException. Inspect via `$mpdf->ua->getWarnings()` after
+     * Output(). Empty array if PDFUA is off or no violations were recorded.
+     *
+     * @return string[]
+     */
+    public function getWarnings() { return $this->warnings; }
 
-    /** @return int */
+    /**
+     * Current value of the /StructParents allocator, BEFORE the next allocation.
+     *
+     * Used by StructureWriter to emit /ParentTreeNextKey = (highest key + 1).
+     *
+     * @return int
+     */
     public function getStructParentsCounter() { return $this->structParentsCounter; }
 
-    /** @return int */
+    /**
+     * PDF object number of the StructTreeRoot dict; 0 before StructureWriter runs.
+     *
+     * @return int
+     */
     public function getStructTreeRootObjNum() { return $this->structTreeRootObjNum; }
 
-    /** @return bool */
-    public function isOpenedImplicitLI()      { return $this->openedImplicitLI; }
+    /**
+     * Whether a DT/DD tag has auto-opened an implicit LI on the struct stack.
+     *
+     * @return bool
+     */
+    public function isOpenedImplicitLI() { return $this->openedImplicitLI; }
 
-    /** @return MarkedContentHelper */
-    public function getMarkedContentHelper()  { return $this->markedContentHelper; }
+    /** @return MarkedContentHelper BDC/EMC emitter (Phase 3a). */
+    public function getMarkedContentHelper() { return $this->markedContentHelper; }
 
-    /** @return StructureTree */
-    public function getStructureTree()        { return $this->structureTree; }
+    /** @return StructureTree element stack + ParentTree accumulator (Phase 2b). */
+    public function getStructureTree() { return $this->structureTree; }
 
-    /** @return StructureWriter */
-    public function getStructureWriter()      { return $this->structureWriter; }
+    /** @return StructureWriter StructTreeRoot serialiser (Phase 2e). */
+    public function getStructureWriter() { return $this->structureWriter; }
 
-    /** @return AriaIdResolver */
-    public function getAriaIdResolver()       { return $this->ariaIdResolver; }
+    /** @return AriaIdResolver deferred resolver for ID-referencing ARIA attrs (Phase 4). */
+    public function getAriaIdResolver() { return $this->ariaIdResolver; }
 
-    /** @return LigatureActualTextWriter */
+    /** @return LigatureActualTextWriter /Span /ActualText wrapper for OTL ligatures (Phase 5). */
     public function getLigatureActualTextWriter() { return $this->ligatureActualTextWriter; }
 
-    /** @return Import\FpdiStructMerger */
-    public function getFpdiStructMerger()     { return $this->fpdiStructMerger; }
+    /** @return Import\FpdiStructMerger tagged-source struct subtree merger (Phase 4). */
+    public function getFpdiStructMerger() { return $this->fpdiStructMerger; }
 
-    // ================== Setters (only where callers legitimately mutate state) ==================
+    // ================== Setters ==================
 
-    /** @param int $n */
+    /**
+     * Record the PDF object number assigned to the StructTreeRoot dict.
+     *
+     * Called once by StructureWriter::writeStructTree() immediately after it
+     * reserves the root object number via $mpdf->writer->object().
+     *
+     * @param  int $n
+     * @return void
+     */
     public function setStructTreeRootObjNum($n) { $this->structTreeRootObjNum = (int) $n; }
 
-    /** @param bool $v */
-    public function setOpenedImplicitLI($v)   { $this->openedImplicitLI = (bool) $v; }
+    /**
+     * Mark / unmark whether a DT/DD tag has opened an implicit LI parent.
+     *
+     * Called from DT/DD open handlers when the current struct parent is `L`
+     * (so no explicit LI is on the stack); cleared by the matching close.
+     *
+     * @param  bool $v
+     * @return void
+     */
+    public function setOpenedImplicitLI($v) { $this->openedImplicitLI = (bool) $v; }
 
+    /** @param MarkedContentHelper $h  BDC/EMC emitter; called by ServiceFactory during bootstrap. */
     public function setMarkedContentHelper(MarkedContentHelper $h) { $this->markedContentHelper = $h; }
-    public function setStructureTree(StructureTree $t)             { $this->structureTree = $t; }
-    public function setStructureWriter(StructureWriter $w)         { $this->structureWriter = $w; }
-    public function setAriaIdResolver(AriaIdResolver $r)           { $this->ariaIdResolver = $r; }
+
+    /** @param StructureTree $t  element stack + ParentTree; called by ServiceFactory during bootstrap. */
+    public function setStructureTree(StructureTree $t) { $this->structureTree = $t; }
+
+    /** @param StructureWriter $w  serialiser; called by ServiceFactory during bootstrap. */
+    public function setStructureWriter(StructureWriter $w) { $this->structureWriter = $w; }
+
+    /** @param AriaIdResolver $r  two-pass ARIA resolver; called by ServiceFactory during bootstrap. */
+    public function setAriaIdResolver(AriaIdResolver $r) { $this->ariaIdResolver = $r; }
+
+    /** @param LigatureActualTextWriter $w  /Span /ActualText wrapper; called by ServiceFactory during bootstrap. */
     public function setLigatureActualTextWriter(LigatureActualTextWriter $w) { $this->ligatureActualTextWriter = $w; }
-    public function setFpdiStructMerger(Import\FpdiStructMerger $m){ $this->fpdiStructMerger = $m; }
+
+    /** @param Import\FpdiStructMerger $m  FPDI struct subtree merger; called by ServiceFactory during bootstrap. */
+    public function setFpdiStructMerger(Import\FpdiStructMerger $m) { $this->fpdiStructMerger = $m; }
 
     // ================== Behaviour ==================
 
-    /** @param string $msg */
+    /**
+     * Append a PDFUAauto-mode warning.
+     *
+     * Called from any code path that detects a conformance issue that can be
+     * auto-corrected rather than thrown. In PDFUAauto=false mode, callers
+     * should throw `\Mpdf\MpdfException` instead of calling this.
+     *
+     * @param  string $msg  human-readable diagnostic; appears verbatim in getWarnings()
+     * @return void
+     */
     public function addWarning($msg)
     {
         $this->warnings[] = (string) $msg;
     }
 
-    /** @return int previous value */
+    /**
+     * Allocate the next /StructParents integer and advance the counter.
+     *
+     * Returns the pre-increment value so callers emit that exact integer on the
+     * page/XObject dict and the matching ParentTree entry.
+     *
+     * ISO 32000-1 §14.7.4.4 — /StructParents keys are dense, 0-based. Every
+     * call site that emits `/StructParents N` on a dict MUST obtain N via this
+     * method so the counter stays monotonic and /ParentTreeNextKey is accurate.
+     *
+     * @return int  the previous counter value (the integer to emit)
+     */
     public function nextStructParents()
     {
         return $this->structParentsCounter++;
@@ -637,19 +848,86 @@ All properties `protected`. No `Strict` trait (this class does not extend Mpdf o
 ```php
 namespace Mpdf\Ua;
 
+/**
+ * A single node in the document's logical structure tree.
+ *
+ * One StructureElement exists per opened struct element (P, H1, Figure, Table,
+ * TR, TD, Link, Note, etc.). Assembled by StructureTree during HTML parse,
+ * serialised to a PDF `/Type /StructElem` object by StructureWriter at close.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.7.2 Table 322 — StructElem dict entries (/S, /P, /K, /A, /Alt, /ActualText, /Lang, /ID, /Pg)
+ *   - ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict (/Type /MCR /Pg /Stm /MCID) for content items spanning pages / Form XObjects
+ *   - ISO 32000-1:2008 §14.7.4.4.2 Table 338 — OBJR dict (/Type /OBJR /Obj) for annotation references
+ *
+ * @see StructureTree   owns the stack / lifecycle
+ * @see StructureWriter serialises this element to a PDF object
+ */
 class StructureElement
 {
-    protected $type;       // string — validated PDF struct type
-    protected $parent;     // StructureElement|null
-    protected $children;   // StructureElement[]
-    protected $mcids;      // array of ['page'=>int, 'mcid'=>int, 'pageRef'=>int]
-    protected $objrefs;    // array of ['structParent'=>int, 'obj'=>int]
-    protected $attributes; // array — Alt, Lang, Scope, ColSpan, RowSpan, etc.
-    protected $id;         // string|null — globally unique (for Note elements)
-    protected $objNum;     // int — PDF object number assigned at write time
+    /** @var string  Validated PDF struct type (e.g., 'P', 'H1', 'Figure'). */
+    protected $type;
 
+    /** @var StructureElement|null  Parent element, or null for the Document root. */
+    protected $parent;
+
+    /** @var StructureElement[]  Ordered list of child struct elements. */
+    protected $children;
+
+    /**
+     * @var array<int, array{page:int, mcid:int, pageRef:int}>
+     *   Marked content references owned by this element. `page` is the
+     *   /StructParents integer; `mcid` is the BDC operator's /MCID; `pageRef`
+     *   is the PDF object number of the page (filled at write time by
+     *   StructureWriter looking up $mpdf->offsets).
+     */
+    protected $mcids;
+
+    /**
+     * @var array<int, array{structParent:int, obj:int}>
+     *   Object references — annotations (links, widgets, notes, file attachments)
+     *   reached via /Type /OBJR kids in the struct element's /K array. One entry
+     *   per attached annotation; `structParent` is the annotation's /StructParent
+     *   integer, `obj` is the annotation's PDF object number.
+     */
+    protected $objrefs;
+
+    /**
+     * @var array<string, mixed>
+     *   StructElem attributes. Three categories:
+     *     - Direct dict keys (ISO 32000-1 Table 322): Alt, ActualText, Lang, E, T, ID
+     *     - /O /Layout attribute object (Table 344): Placement, BBox, WritingMode
+     *     - /O /Table attribute object (Table 349): Scope, ColSpan, RowSpan, Headers, Summary
+     *     - /O /List attribute object (Table 348): ListNumbering
+     *   StructureWriter splits them into direct keys vs `/A` attribute objects at emit time.
+     */
+    protected $attributes;
+
+    /**
+     * @var string|null  Globally unique /ID string, required for Note elements
+     *   (Matterhorn 09-002) and for TH cells referenced by TD /Headers.
+     */
+    protected $id;
+
+    /** @var int  PDF object number assigned by StructureWriter at serialisation time; 0 before write. */
+    protected $objNum;
+
+    /**
+     * Construct a struct element with a validated PDF struct type and an
+     * optional attribute map.
+     *
+     * The `$attributes` array is passed through to StructureWriter verbatim;
+     * keys are conventional PDF attribute names (not HTML) — e.g. pass
+     * `['Scope' => 'Row']` for a TH, NOT `['scope' => 'row']`.
+     *
+     * @param  string              $type        PDF struct type; validated via StructType::isValid()
+     * @param  array<string,mixed> $attributes  optional attribute map (see class docblock)
+     * @throws \InvalidArgumentException  if $type is not a standard PDF struct type
+     */
     public function __construct($type, $attributes = [])
     {
+        // ISO 32000-1 §14.8 Table 333/334/335 — only standard struct types are
+        // legal; non-standard custom roles must go through StructureTree::addRoleMapping().
         if (!StructType::isValid($type)) {
             throw new \InvalidArgumentException(
                 'Invalid PDF struct type: "' . $type . '"'
@@ -665,29 +943,106 @@ class StructureElement
         $this->objNum     = 0;
     }
 
-    public function getType()       { return $this->type; }
-    public function getParent()     { return $this->parent; }
-    public function getChildren()   { return $this->children; }
-    public function getMcids()      { return $this->mcids; }
-    public function getObjrefs()    { return $this->objrefs; }
-    public function getAttributes() { return $this->attributes; }
-    public function getId()         { return $this->id; }
-    public function getObjNum()     { return $this->objNum; }
+    /** @return string validated PDF struct type. */
+    public function getType() { return $this->type; }
 
-    // Package-internal setters (used only by StructureTree and StructureWriter)
-    public function setId($id)           { $this->id = $id; }
-    public function setObjNum($n)        { $this->objNum = $n; }
+    /** @return StructureElement|null parent element; null for the Document root. */
+    public function getParent() { return $this->parent; }
+
+    /** @return StructureElement[] ordered child elements. */
+    public function getChildren() { return $this->children; }
+
+    /** @return array<int, array{page:int, mcid:int, pageRef:int}> MCR entries owned by this element. */
+    public function getMcids() { return $this->mcids; }
+
+    /** @return array<int, array{structParent:int, obj:int}> OBJR entries (annotations). */
+    public function getObjrefs() { return $this->objrefs; }
+
+    /** @return array<string,mixed> attributes map (see class docblock for categories). */
+    public function getAttributes() { return $this->attributes; }
+
+    /** @return string|null globally unique /ID, or null if none assigned. */
+    public function getId() { return $this->id; }
+
+    /** @return int PDF object number assigned by StructureWriter; 0 before serialisation. */
+    public function getObjNum() { return $this->objNum; }
+
+    // Package-internal mutators — used only by StructureTree (during parse) and
+    // StructureWriter (during serialisation). Tag handlers should go through
+    // StructureTree::open() / addContent() / addObjref() instead.
+
+    /**
+     * Assign a globally unique /ID to this element.
+     *
+     * Required for Note elements (Matterhorn 09-002) and for TH elements that
+     * need to be referenced by a TD's /Headers attribute (Matterhorn 09-004/005).
+     *
+     * @param  string $id  globally unique identifier; caller must guarantee uniqueness
+     * @return void
+     */
+    public function setId($id) { $this->id = $id; }
+
+    /**
+     * Record the PDF object number assigned to this element at serialisation time.
+     *
+     * Called by StructureWriter after $mpdf->writer->object() reserves a number
+     * for this element's /Type /StructElem dict.
+     *
+     * @param  int $n
+     * @return void
+     */
+    public function setObjNum($n) { $this->objNum = $n; }
+
+    /**
+     * Record one marked-content reference (MCR) owned by this element.
+     *
+     * Appended whenever a content item (a BDC/EMC pair) addressed to this
+     * element is emitted on a page. Multi-page elements accumulate multiple
+     * entries; StructureWriter emits them as a /K array of MCR dicts per
+     * ISO 32000-1 §14.7.4.4 Table 324.
+     *
+     * @param  int $page     /StructParents integer of the host page or Form XObject
+     * @param  int $mcid     MCID integer embedded in the BDC operator's property dict
+     * @param  int $pageRef  PDF object number of the host page; filled by StructureWriter
+     * @return void
+     */
     public function addMcid($page, $mcid, $pageRef = 0)
     {
         $this->mcids[] = ['page' => $page, 'mcid' => $mcid, 'pageRef' => $pageRef];
     }
+
+    /**
+     * Record one annotation object reference (OBJR) as a child kid of this element.
+     *
+     * Required for Link / Widget / Note / FileAttachment struct elements so the
+     * associated annotation is reachable from the struct tree (Matterhorn 02-003,
+     * 11-002). StructureWriter emits each entry as a `<</Type /OBJR /Obj N 0 R>>`
+     * kid alongside MCID integers.
+     *
+     * ISO 32000-1 §14.7.4.4.2 Table 338 — OBJR dict entries.
+     *
+     * @param  int $structParent  /StructParent integer on the annotation dict
+     * @param  int $obj           PDF object number of the annotation
+     * @return void
+     */
     public function addObjref($structParent, $obj)
     {
         $this->objrefs[] = ['structParent' => $structParent, 'obj' => $obj];
     }
+
+    /**
+     * Append a child struct element and set its parent to $this.
+     *
+     * Called by StructureTree::open() when a new element is pushed onto the
+     * stack. Parent linkage is written directly (same-class private access) so
+     * external callers can't bypass the parent/child invariant.
+     *
+     * @param  StructureElement $child
+     * @return void
+     */
     public function addChild(StructureElement $child)
     {
-        $child->parent  = $this;   // direct write: same class
+        $child->parent    = $this;   // direct write: same class
         $this->children[] = $child;
     }
 }
@@ -704,19 +1059,85 @@ All properties `protected`.
 ```php
 namespace Mpdf\Ua;
 
+/**
+ * Accumulator for the logical document structure during HTML parse.
+ *
+ * Maintains the currently-open element stack, allocates per-page MCID integers,
+ * builds the ParentTree mapping from /StructParents keys → struct elements, and
+ * tracks the artifact suppression depth so decorative content (running
+ * headers/footers, OCG-layer wrappers, aria-hidden subtrees) bypasses struct-
+ * element creation entirely.
+ *
+ * One instance per Mpdf lifecycle, constructed by ServiceFactory and reached
+ * via `$this->ua->getStructureTree()`.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.7.2 — Structure Hierarchy
+ *   - ISO 32000-1:2008 §14.7.4.4 — ParentTree; dense MCID arrays per /StructParents key
+ *   - ISO 32000-1:2008 §14.8.2.2 — Real Content vs Artifacts
+ *   - ISO 32000-1:2008 §14.7.3 — RoleMap (custom → standard type mapping)
+ *
+ * @see StructureElement  the node type managed by the stack / tree
+ * @see StructureWriter   serialises this tree to PDF objects
+ */
 class StructureTree
 {
-    protected $root;                   // StructureElement — Document root
-    protected $stack;                  // StructureElement[] — open element stack
-    protected $mcidByPage;             // int[] — per-page MCID counter
-    protected $parentTree;             // [page][mcid] => StructureElement
-    protected $artifactDepth;          // int
-    protected $annotParentCounter;     // int
-    protected $annotParentTree;        // [structParentInt] => StructureElement
-    protected $roleMappings;           // [customRole] => standardType
+    /** @var StructureElement  Permanent Document root; never popped from $stack. */
+    protected $root;
 
+    /** @var StructureElement[]  Open element stack; index 0 is always $root. */
+    protected $stack;
+
+    /**
+     * @var array<int,int>
+     *   Per-page MCID counters keyed by /StructParents integer. ISO 32000-1
+     *   §14.7.4.4 — the ParentTree entry for each key must be a dense array
+     *   starting at MCID 0. The counter resets automatically because a new
+     *   /StructParents integer gets a new key.
+     */
+    protected $mcidByPage;
+
+    /**
+     * @var array<int, array<int, StructureElement>>
+     *   Outer key: /StructParents integer (from PageWriter). Inner key: MCID.
+     *   Value: the struct element that owns that content item. Serialised by
+     *   StructureWriter as the ParentTree NumTree.
+     */
+    protected $parentTree;
+
+    /**
+     * @var int  Artifact suppression depth; incremented by openArtifact() /
+     *   decremented by closeArtifact(). When > 0, open()/addContent() become
+     *   no-ops — content renders but produces no struct element and no MCID.
+     *   ISO 32000-1 §14.8.2.2 — Artifacts are content outside the logical
+     *   structure (pagination, decoration, layout helpers).
+     */
+    protected $artifactDepth;
+
+    /** @var int  Sequential /StructParent integer for annotations (singular key per annotation dict). */
+    protected $annotParentCounter;
+
+    /** @var array<int, StructureElement>  Annotation /StructParent integer → owning struct element. */
+    protected $annotParentTree;
+
+    /**
+     * @var array<string,string>
+     *   RoleMap entries collected from ARIA `role="custom-name"` usage.
+     *   Key: custom role name. Value: standard PDF struct type it maps to.
+     *   Emitted by StructureWriter on the StructTreeRoot dict.
+     *   ISO 32000-1 §14.7.3 — RoleMap dict.
+     */
+    protected $roleMappings;
+
+    /**
+     * Initialise the tree with a Document root already on the stack and all
+     * accumulators empty. Called once by ServiceFactory; Mpdf stores the
+     * resulting instance inside UaState.
+     */
     public function __construct()
     {
+        // ISO 32000-1 §14.8 Table 333 — Document is the permanent root of every
+        // struct tree. It never has a parent and never carries MCIDs directly.
         $this->root               = new StructureElement('Document');
         $this->stack              = [$this->root];
         $this->mcidByPage         = [];
@@ -727,40 +1148,121 @@ class StructureTree
         $this->roleMappings       = [];
     }
 
-    // --- Getters ---
-    public function getRoot()            { return $this->root; }
-    public function getCurrent()         { return end($this->stack); }
-    public function getParentTree()      { return $this->parentTree; }
-    public function getAnnotParentTree() { return $this->annotParentTree; }
-    public function getRoleMappings()    { return $this->roleMappings; }
-    public function isArtifactContext()  { return $this->artifactDepth > 0; }
+    // ================== Getters ==================
 
-    // --- open / close ---
+    /** @return StructureElement permanent Document root. */
+    public function getRoot() { return $this->root; }
+
+    /**
+     * @return StructureElement top of the open-element stack; never null
+     *   because the Document root is always present.
+     */
+    public function getCurrent() { return end($this->stack); }
+
+    /**
+     * ParentTree contents keyed by /StructParents integer, then by MCID.
+     *
+     * @return array<int, array<int, StructureElement>>
+     */
+    public function getParentTree() { return $this->parentTree; }
+
+    /**
+     * Annotation /StructParent index → owning struct element.
+     *
+     * @return array<int, StructureElement>
+     */
+    public function getAnnotParentTree() { return $this->annotParentTree; }
+
+    /**
+     * Collected RoleMap entries.
+     *
+     * @return array<string,string> customRole => standardType
+     */
+    public function getRoleMappings() { return $this->roleMappings; }
+
+    /**
+     * Whether the current render position is inside an Artifact scope.
+     *
+     * True while running header/footer rendering, aria-hidden subtrees, OCG
+     * layer wrappers, decorative image paths, or any other
+     * openArtifact()/closeArtifact() bracket. Tag handlers should treat this
+     * as "do not emit struct elements".
+     *
+     * @return bool
+     */
+    public function isArtifactContext() { return $this->artifactDepth > 0; }
+
+    // ================== open / close ==================
+
+    /**
+     * Push a new struct element onto the stack as a child of the current top.
+     *
+     * Called from every tag handler's open() when PDFUA is active and the tag
+     * maps to a standard struct type (see StructType::fromHtmlTag()). In
+     * artifact scope, this is a no-op — the paired close() is also a no-op
+     * so the stack stays balanced.
+     *
+     * @param  string              $type        PDF struct type (must be valid per StructType::isValid())
+     * @param  array<string,mixed> $attributes  optional attribute map (Alt, Scope, ColSpan, …)
+     * @return void
+     * @throws \InvalidArgumentException  if $type is not a standard PDF struct type
+     */
     public function open($type, $attributes = [])
     {
         if (!StructType::isValid($type)) {
             throw new \InvalidArgumentException('Invalid struct type: "' . $type . '"');
         }
         if ($this->isArtifactContext()) {
-            return;  // suppress struct element creation in artifact scope
+            // ISO 32000-1 §14.8.2.2 — Artifact content must NOT appear in the
+            // structure tree. Suppress element creation; the paired close() is
+            // also a no-op below.
+            return;
         }
         $elem = new StructureElement($type, $attributes);
         $this->getCurrent()->addChild($elem);
         $this->stack[] = $elem;
     }
 
+    /**
+     * Pop the top of the open-element stack.
+     *
+     * Two guard cases, both no-ops:
+     *   - stack size ≤ 1: never pop the Document root (would corrupt the tree).
+     *   - artifact scope: the paired open() was a no-op, so close() must match.
+     *
+     * @return void
+     */
     public function close()
     {
         if (count($this->stack) <= 1) {
-            return;  // never pop the Document root
+            return;
         }
         if ($this->isArtifactContext()) {
-            return;  // open() was a no-op; close() must match
+            return;
         }
         array_pop($this->stack);
     }
 
-    // --- content / artifact ---
+    // ================== content / artifact ==================
+
+    /**
+     * Allocate an MCID for a content item on the CURRENT struct element.
+     *
+     * Called by tag handlers / rendering code immediately before emitting the
+     * BDC operator: the returned integer is embedded in the property dict
+     * (e.g. `/P <</MCID 3>> BDC`) and registered in the ParentTree.
+     *
+     * ISO 32000-1 §14.7.4.4 — the ParentTree entry for a given /StructParents
+     * key must be dense starting at MCID 0; nextMcidForPage() enforces this.
+     *
+     * In artifact scope returns -1 (the Artifact sentinel); callers pass -1
+     * through to MarkedContentHelper::begin() to emit `/Artifact BMC` instead
+     * of a property-dict BDC.
+     *
+     * @param  int $structParentsIndex  /StructParents integer of the host page or Form XObject
+     * @return int                      assigned MCID, or -1 when in artifact scope
+     * @throws \InvalidArgumentException  if $structParentsIndex is not a non-negative integer
+     */
     public function addContent($structParentsIndex)
     {
         if (!is_int($structParentsIndex) || $structParentsIndex < 0) {
@@ -777,6 +1279,18 @@ class StructureTree
         return $mcid;
     }
 
+    /**
+     * Allocate an MCID and attach it to an EXPLICIT struct element rather
+     * than the stack top.
+     *
+     * Used by `_tableWrite()` and other deferred-rendering code paths where
+     * the struct element was pushed at parse time but the BDC is emitted
+     * later (when the render-time stack top is a different element).
+     *
+     * @param  StructureElement $elem                target element
+     * @param  int              $structParentsIndex  /StructParents integer of the host page/XObject
+     * @return int                                   assigned MCID, or -1 in artifact scope
+     */
     public function addContentForElement(StructureElement $elem, $structParentsIndex)
     {
         if ($this->isArtifactContext()) {
@@ -788,12 +1302,38 @@ class StructureTree
         return $mcid;
     }
 
+    /**
+     * Return the Artifact sentinel MCID (-1).
+     *
+     * Convenience wrapper so callers in non-artifact-scope code paths can also
+     * route explicit Artifact content through a single entry point.
+     * MarkedContentHelper::begin(..., -1) emits `/Artifact BMC` (no dict).
+     *
+     * @return int  -1 (Artifact sentinel)
+     */
     public function addArtifact()
     {
         return -1;
     }
 
-    public function openArtifact()  { $this->artifactDepth++; }
+    /**
+     * Enter an Artifact suppression scope.
+     *
+     * Paired with closeArtifact(). Nesting is permitted; the depth counter
+     * tracks balance so nested opens/closes behave correctly.
+     *
+     * @return void
+     */
+    public function openArtifact() { $this->artifactDepth++; }
+
+    /**
+     * Leave one Artifact suppression scope.
+     *
+     * Clamped at 0 — extra closeArtifact() calls are no-ops. This tolerates
+     * tag-handler bugs rather than throwing mid-render.
+     *
+     * @return void
+     */
     public function closeArtifact()
     {
         if ($this->artifactDepth > 0) {
@@ -801,16 +1341,45 @@ class StructureTree
         }
     }
 
-    // --- role map ---
+    // ================== role map ==================
+
+    /**
+     * Register a RoleMap entry for a custom ARIA / HTML role.
+     *
+     * First registration wins — a second call with the same $role but a
+     * different $standardType is silently ignored so conflicting RoleMap
+     * entries can't reach veraPDF (which rejects them).
+     *
+     * ISO 32000-1 §14.7.3 — RoleMap dict on StructTreeRoot.
+     *
+     * @param  string $role          non-standard struct type seen in the HTML
+     * @param  string $standardType  fallback standard struct type (e.g. 'Div')
+     * @return void
+     */
     public function addRoleMapping($role, $standardType)
     {
         if (!isset($this->roleMappings[$role])) {
             $this->roleMappings[$role] = $standardType;
         }
-        // first registration wins — duplicates with different target are silently ignored
     }
 
-    // --- annotation struct parent ---
+    // ================== annotation struct parent ==================
+
+    /**
+     * Allocate the next annotation /StructParent integer and associate it with
+     * the given struct element.
+     *
+     * Annotation dicts carry /StructParent (singular) — a single integer that
+     * indexes an entry in the ParentTree pointing back to one struct element.
+     * This differs from page dicts, which use /StructParents (plural) and a
+     * dense MCID array. StructureWriter emits the singular-key ParentTree
+     * entries from $annotParentTree.
+     *
+     * ISO 32000-1 §14.7.4.4 — /StructParent vs /StructParents distinction.
+     *
+     * @param  StructureElement $elem  the struct element owning the annotation
+     * @return int                     the /StructParent integer to emit on the annotation dict
+     */
     public function nextAnnotStructParent(StructureElement $elem)
     {
         $idx = $this->annotParentCounter++;
@@ -818,10 +1387,20 @@ class StructureTree
         return $idx;
     }
 
-    // --- internals ---
+    // ================== internals ==================
+
+    /**
+     * Allocate the next MCID for a given /StructParents key.
+     *
+     * ISO 32000-1 §14.7.4.4 — MCIDs within one content stream (one page or
+     * one Form XObject) must be dense and 0-based. Each /StructParents key
+     * has its own independent counter; a new key starts at 0.
+     *
+     * @param  int $page  /StructParents integer (NOT a 1-based page number)
+     * @return int        previous counter value
+     */
     private function nextMcidForPage($page)
     {
-        // MCIDs must reset to 0 per page — veraPDF requires dense arrays per /StructParents key
         if (!isset($this->mcidByPage[$page])) {
             $this->mcidByPage[$page] = 0;
         }
@@ -1059,33 +1638,116 @@ Called from `ResourceWriter::writeResources()` when `$this->mpdf->PDFUA` is true
 ```php
 namespace Mpdf\Ua;
 
+use Mpdf\Mpdf;
+use Mpdf\Writer\BaseWriter;
+
+/**
+ * Serialise the in-memory StructureTree to the PDF file.
+ *
+ * Called once from `ResourceWriter::writeResources()` when PDFUA is active,
+ * before the catalog is written. Produces four groups of PDF objects:
+ *
+ *   1. One /Type /StructElem dict per StructureElement (recursive walk of the tree).
+ *   2. The ParentTree NumTree (maps /StructParents integers → struct elements).
+ *   3. The /RoleMap dict (if any custom role= values were registered).
+ *   4. The StructTreeRoot dict itself.
+ *
+ * Stores the StructTreeRoot's PDF object number on UaState so
+ * MetadataWriter::writeCatalog() can emit `/StructTreeRoot N 0 R` on the
+ * document catalog.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.7.2 Table 322 — StructTreeRoot dict
+ *   - ISO 32000-1:2008 §14.7.2 Table 323 — StructElem dict
+ *   - ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict
+ *   - ISO 32000-1:2008 §14.7.4.4.2 Table 338 — OBJR dict
+ *   - ISO 32000-1:2008 §14.7.3 — RoleMap dict
+ *   - ISO 32000-1:2008 §7.9.7 — Number trees (NumTree) used for ParentTree
+ *
+ * @see StructureTree    source of truth for what gets serialised
+ * @see StructureElement the node type serialised per PDF struct element
+ */
 class StructureWriter
 {
-    public function writeStructTree() {
-        // 1. Walk the StructureTree root recursively.
-        //    Write one PDF object per StructureElement:
-        //      /Type /StructElem /S /<type> /P <parentRef 0 R>
-        //      /K [<children or MCR dicts>] /Pg <pageRef 0 R> (if single page)
-        //    For single-page elements: /K is [<mcid int>] or [<child refs>]
-        //    For multi-page elements: /K is [<</Type /MCR /Pg N 0 R /MCID n>> ...]
-        //    Store the assigned object number on each element ($elem->objNum).
-        //    Include /A <</O /Layout /Scope /Column>> or other attribute objects when
-        //    $elem->attributes is non-empty.
-        //    Note struct elements are a separate attribute namespace (/O /Layout, /O /Table, etc.)
+    /** @var Mpdf */      private $mpdf;
+    /** @var BaseWriter */private $writer;
+    /** @var UaState */   private $ua;
 
-        // 2. Write the /ParentTree NumTree object.
-        //    Keys: the /StructParents integers from pageDim[n]['structParents']
-        //    Values: arrays of struct elem obj refs ordered by MCID
-        //    Format: << /Nums [0 [ref ref …] 1 [ref ref …] …] >>
+    /**
+     * @param Mpdf        $mpdf   host Mpdf for object-number allocation and page-ref lookups
+     * @param BaseWriter  $writer PDF byte emitter
+     * @param UaState     $ua     facade providing StructureTree + setStructTreeRootObjNum()
+     */
+    public function __construct(Mpdf $mpdf, BaseWriter $writer, UaState $ua)
+    {
+        $this->mpdf   = $mpdf;
+        $this->writer = $writer;
+        $this->ua     = $ua;
+    }
 
-        // 3. Write the /RoleMap dict if any custom role= types were mapped.
-        //    /RoleMap << /CustomRole /P … >>
-        //    Required when role= HTML attributes introduce types not in the standard set.
+    /**
+     * Walk the in-memory structure tree and emit it as PDF objects.
+     *
+     * Ordering is fixed: struct element objects first (they need to know each
+     * other's object numbers for /P and /K cross-refs), then ParentTree, then
+     * RoleMap, then StructTreeRoot last. StructureWriter reserves object
+     * numbers bottom-up so parent /P back-references resolve correctly.
+     *
+     * Side effects:
+     *   - Sets `$elem->objNum` on every StructureElement as its object number is allocated.
+     *   - Calls `$this->ua->setStructTreeRootObjNum($n)` with the final root number.
+     *
+     * @return void
+     */
+    public function writeStructTree()
+    {
+        // ---- 1. Struct element objects (recursive walk from Document root) ----
+        //
+        // ISO 32000-1 §14.7.2 Table 323 — each struct element is written as
+        //   /Type /StructElem /S /<type> /P <parentRef 0 R>
+        //   /K [<child refs or MCIDs or MCR dicts or OBJR dicts>]
+        //   /Pg <pageRef 0 R>                          (single-page elements only)
+        //   /ID (<unique>)                             (when $elem->id is set)
+        //   /Alt (<...>) /ActualText (<...>) /Lang (…) (direct keys — see Appendix A1)
+        //   /A [<</O /Layout ...>> <</O /Table ...>>]  (attribute objects — mixed owners as array)
+        //
+        // For single-page elements with a single MCID: /K is a bare integer.
+        // For multi-page elements: /K is an array of MCR dicts
+        //   `<</Type /MCR /Pg N 0 R /MCID n>>` (ISO 32000-1 §14.7.4.4 Table 324).
+        // For annotations: /K entries include `<</Type /OBJR /Obj N 0 R>>`
+        //   OBJR dicts alongside MCIDs (ISO 32000-1 §14.7.4.4.2 Table 338).
 
-        // 4. Write the /StructTreeRoot object:
-        //    /Type /StructTreeRoot /K [<document root obj ref>]
-        //    /ParentTree <numtree ref 0 R> /RoleMap <rolemap ref 0 R> (if present)
-        //    Store the resulting object number via $this->ua->setStructTreeRootObjNum($n).
+        // ---- 2. ParentTree NumTree object ----
+        //
+        // ISO 32000-1 §7.9.7 + §14.7.4.4 — a NumTree keyed by the
+        // /StructParents integers emitted on page dicts (PageWriter §1h) and
+        // Form XObject dicts (FormWriter for SVG/FPDI). For each key, the value
+        // is either:
+        //   - a dense array of struct elem obj refs indexed by MCID, OR
+        //   - a single struct elem obj ref (when the key came from a singular
+        //     /StructParent on an annotation dict — see StructureTree::nextAnnotStructParent()).
+        //
+        // Format: `<< /Nums [0 [ref ref …] 1 <singleRef> 2 [ref …] …] >>`.
+
+        // ---- 3. RoleMap dict ----
+        //
+        // ISO 32000-1 §14.7.3 — `/RoleMap <</CustomRoleName /StandardType …>>`.
+        // Emit only if $this->ua->getStructureTree()->getRoleMappings() is
+        // non-empty; veraPDF rejects empty /RoleMap dicts in some configurations.
+
+        // ---- 4. StructTreeRoot dict (last, references the three objects above) ----
+        //
+        // ISO 32000-1 §14.7.2 Table 322 — StructTreeRoot carries:
+        //   /Type /StructTreeRoot
+        //   /K [<document root obj ref>]   (the Document struct element)
+        //   /ParentTree <numtree ref 0 R>
+        //   /ParentTreeNextKey N           (see Appendix A13 — required entry)
+        //   /RoleMap <rolemap ref 0 R>     (if written)
+        //
+        // After allocating the root object number via $this->writer->object():
+        //   $this->ua->setStructTreeRootObjNum($this->mpdf->n);
+        // This lets MetadataWriter::writeCatalog() emit `/StructTreeRoot N 0 R`
+        // when it runs later in _enddoc().
     }
 }
 ```
@@ -1176,28 +1838,80 @@ BDC/EMC operator emission is handled by a dedicated collaborator — **no new me
 ```php
 namespace Mpdf\Ua;
 
-use Mpdf\Mpdf;
 use Mpdf\Writer\BaseWriter;
 
+/**
+ * Emit BDC / EMC / BMC marked-content operators into the active PDF buffer.
+ *
+ * Tag handlers and writers route all BDC/EMC emission through this class so
+ * the operators end up in the correct buffer (page body, header/footer,
+ * column buffer, rotated-table buffer, …) via BaseWriter::write(). Direct
+ * writes to `$this->pages[$this->page]` would bypass the buffer routing and
+ * place operators in the wrong stream in four out of five rendering contexts.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.6 — Marked Content (BMC/BDC/EMC operators)
+ *   - ISO 32000-1:2008 §14.7.4.4 — MCID in the BDC property dict
+ *   - ISO 32000-1:2008 §14.8.2.2 — /Artifact BMC for non-structure content
+ *
+ * @see StructureTree::addContent()  allocates the MCID passed to begin()
+ * @see BaseWriter::write()          buffer-routing target
+ */
 class MarkedContentHelper
 {
+    /** @var BaseWriter  buffer-routing writer; reached from ServiceFactory. */
     private $writer;
-    private $depth = 0;   // tracks BDC/EMC nesting depth
 
+    /**
+     * @var int  BDC/EMC nesting depth. Incremented by begin(), decremented
+     *   by end(). Checked at _enddoc() time to detect unbalanced operators
+     *   that would produce invalid PDF.
+     */
+    private $depth = 0;
+
+    /**
+     * Construct with the buffer-routing writer.
+     *
+     * Called once by ServiceFactory during bootstrap; injected into UaState
+     * via setMarkedContentHelper().
+     *
+     * @param BaseWriter $writer
+     */
     public function __construct(BaseWriter $writer)
     {
         $this->writer = $writer;
     }
 
     /**
-     * Emit a BDC operator for a tagged content sequence.
-     * Pass $mcid = -1 to emit /Artifact BMC (no property dict).
+     * Emit a BDC (or BMC for Artifact) marked-content operator.
+     *
+     * Two cases, discriminated by $mcid:
+     *   - $mcid >= 0 : emits `/<structType> <</MCID N>> BDC` — a real tagged
+     *     content item belonging to a struct element.
+     *   - $mcid === -1 : emits `/Artifact BMC` (no property dict) — decorative
+     *     / layout content outside the logical structure. `BMC` is used (not
+     *     `BDC`) because ISO 32000-1 §14.6 specifies BMC for property-less
+     *     sequences; BDC requires a property dict.
+     *
+     * Increments the depth counter; caller must pair with exactly one end().
+     *
+     * ISO 32000-1 §14.6 — BMC/BDC/EMC operators.
+     * ISO 32000-1 §14.8.2.2 — Artifact content sequences.
+     *
+     * @param  string   $structType  PDF struct type to tag (ignored when $mcid === -1)
+     * @param  int      $mcid        marked-content ID from StructureTree::addContent(); -1 for Artifact
+     * @param  ?string  $altText     reserved — alt text for inline Span wrappers; not currently emitted here
+     * @return void
      */
     public function begin($structType, $mcid, $altText = null)
     {
         if ($mcid === -1) {
+            // ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no property dict).
             $this->writer->write('/Artifact BMC');
         } else {
+            // ISO 32000-1 §14.7.4.4 — MCID is the integer the ParentTree
+            // cross-references; must match the value StructureTree::addContent()
+            // returned for the current struct element.
             $props = '/MCID ' . $mcid;
             $this->writer->write('/' . $structType . ' <<' . $props . '>> BDC');
         }
@@ -1205,7 +1919,13 @@ class MarkedContentHelper
     }
 
     /**
-     * Emit EMC. No-op if depth is already 0 (guards against underflow).
+     * Emit an EMC operator closing the most recent BDC / BMC.
+     *
+     * Guarded against underflow: if $depth is already 0, the call is a no-op
+     * rather than writing a stray EMC into the stream. That guard makes
+     * defensive unwinding in error paths safe.
+     *
+     * @return void
      */
     public function end()
     {
@@ -1216,7 +1936,15 @@ class MarkedContentHelper
         $this->depth--;
     }
 
-    /** @return int */
+    /**
+     * Current BDC/EMC nesting depth.
+     *
+     * Mpdf::_enddoc() reads this to assert BDC/EMC balance at document close;
+     * a non-zero value indicates a tag handler that opened without closing,
+     * which produces invalid PDF.
+     *
+     * @return int
+     */
     public function getDepth()
     {
         return $this->depth;
@@ -1295,9 +2023,17 @@ During image rendering in `src/Mpdf.php` (where the `Do` operator is emitted), w
 if ($this->PDFUA) {
     $alt = isset($objattr['pdfua_alt']) ? $objattr['pdfua_alt'] : null;
     if ($alt === '') {
-        // Explicitly empty alt = decorative, no property dict needed
+        // W3C HTML: alt="" declares a decorative image. ISO 32000-1 §14.8.2.2
+        // — decorative content is an Artifact and has no place in the logical
+        // structure tree. addArtifact() returns -1 so begin() below emits
+        // `/Artifact BMC` instead of a property-dict BDC.
         $mcid = $this->ua->getStructureTree()->addArtifact();
     } else {
+        // alt is either a non-empty string (provided by the author) or null
+        // (attribute entirely absent — treat as empty alternate text and let
+        // Phase 5 validation decide whether to warn or throw).
+        // ISO 32000-1 §14.7.2 Table 322 — /Alt is a direct StructElem dict
+        // key, NOT inside /A (see Appendix A1).
         $figAlt = ($alt !== null) ? $alt : '';
         $this->ua->getStructureTree()->open('Figure', ['Alt' => $figAlt]);
         $structParents = isset($this->pageDim[$this->page]['structParents'])
@@ -1305,11 +2041,15 @@ if ($this->PDFUA) {
             : 0;
         $mcid = $this->ua->getStructureTree()->addContent($structParents);
     }
+    // begin() emits either `/Figure <</MCID N>> BDC` or `/Artifact BMC`
+    // depending on the $mcid sentinel. The paired end() below closes it.
     $this->ua->getMarkedContentHelper()->begin('Figure', $mcid);
 }
 // ... existing image Do operator ...
 if ($this->PDFUA) {
     $this->ua->getMarkedContentHelper()->end();
+    // Don't pop the struct stack in the Artifact branch — addArtifact() is a
+    // read-only sentinel and didn't push a StructureElement.
     if ($mcid !== -1) {
         $this->ua->getStructureTree()->close();
     }
@@ -2046,30 +2786,98 @@ mPDF's parser is sequential, so the target element for a forward reference may n
 ```php
 namespace Mpdf\Ua;
 
+/**
+ * Two-pass resolver for ID-referencing ARIA attributes.
+ *
+ * mPDF's HTML parse is sequential and single-pass, so a tag handler reading
+ * `aria-labelledby="caption"` may not yet have seen the `<span id="caption">`
+ * target. This resolver records every referencer during parse (Pass 1) and
+ * resolves them against the id→element map at `_enddoc()` time (Pass 2),
+ * BEFORE `StructureWriter::writeStructTree()` serialises the tree.
+ *
+ * Pass-2 mutations touch the in-memory `StructureElement::$attributes` and
+ * relationship kids only — the page content stream is already flushed by
+ * `_enddoc()` time, but that doesn't matter because /Alt, /E, and OBJR kids
+ * live on the struct element dict (not in the content stream).
+ *
+ * Supported attributes (WAI-ARIA 1.2):
+ *   - aria-labelledby   → /Alt (StructElem dict, ISO 32000-1 Table 322)
+ *   - aria-describedby  → /E (expansion text, ISO 32000-1 Table 322)
+ *   - aria-details      → /E (same treatment as aria-describedby)
+ *   - aria-controls     → relationship kid (ISO 32000-1 §14.8.5.3)
+ *   - aria-owns         → relationship kid
+ *   - aria-flowto       → relationship kid
+ *   - aria-activedescendant → relationship kid
+ *
+ * Interactive-state ARIA (aria-live, aria-busy, aria-checked, …) has no
+ * static-PDF analog and is intentionally out of scope.
+ *
+ * @see StructureElement::setAttribute()
+ * @see StructureElement::addRelationship()
+ */
 class AriaIdResolver
 {
+    /** @var UaState  injected once; provides access to StructureTree and addWarning(). */
     private $ua;
-    /** @var array<string, StructureElement> id → element */
+
+    /** @var array<string, StructureElement>  id attribute value → struct element that carries it. */
     private $idMap = [];
-    /** @var array list of [element, attrName, targetId] tuples to resolve at _enddoc() */
+
+    /** @var array<int, array{0: StructureElement, 1: string, 2: string}>
+     *  [referencing element, aria attribute name (lowercase), target ID] tuples to resolve at _enddoc().
+     */
     private $pending = [];
 
-    public function __construct(UaState $ua) { $this->ua = $ua; }
+    /**
+     * @param UaState $ua  injected by ServiceFactory; used for StructureTree access and warning recording
+     */
+    public function __construct(UaState $ua)
+    {
+        $this->ua = $ua;
+    }
 
+    /**
+     * Convenience shim to reach the StructureTree through UaState.
+     *
+     * @return StructureTree
+     */
     private function tree()
     {
         return $this->ua->getStructureTree();
     }
 
-    /** Call from any tag handler's open() when an `id` attribute is seen. */
+    /**
+     * Record an HTML `id` attribute on a struct element.
+     *
+     * Called from any tag handler whose open() observes an `id` attribute.
+     * First-declaration wins — duplicate IDs in malformed HTML silently keep
+     * the first binding rather than throwing, matching typical browser
+     * behaviour for `getElementById`.
+     *
+     * @param  string           $id    value of the HTML `id` attribute
+     * @param  StructureElement $elem  struct element carrying this id
+     * @return void
+     */
     public function registerId($id, StructureElement $elem)
     {
         if ($id !== '' && !isset($this->idMap[$id])) {
-            $this->idMap[$id] = $elem;  // first-declaration wins on duplicate IDs
+            $this->idMap[$id] = $elem;
         }
     }
 
-    /** Call from tag handlers that see an ID-referencing ARIA attribute. */
+    /**
+     * Queue an ID-referencing ARIA attribute for deferred resolution.
+     *
+     * Called from every tag handler that sees `aria-labelledby`,
+     * `aria-describedby`, `aria-details`, `aria-controls`, `aria-owns`,
+     * `aria-flowto`, or `aria-activedescendant`. ARIA allows space-separated
+     * ID lists; this splits them and queues one pending entry per ID.
+     *
+     * @param  StructureElement $elem          element that owns the ARIA attribute
+     * @param  string           $ariaAttrName  lowercase ARIA attribute name (e.g. 'aria-labelledby')
+     * @param  string           $targetIds     raw attribute value; may be space-separated list
+     * @return void
+     */
     public function queue(StructureElement $elem, $ariaAttrName, $targetIds)
     {
         foreach (preg_split('/\s+/', trim((string) $targetIds)) as $id) {
@@ -2079,7 +2887,16 @@ class AriaIdResolver
         }
     }
 
-    /** Call once from _enddoc() before StructureWriter::writeStructTree(). */
+    /**
+     * Walk every queued reference and mutate the referencing struct element.
+     *
+     * Called exactly once from Mpdf::_enddoc(), before
+     * `$this->ua->getStructureWriter()->writeStructTree()` serialises the tree.
+     * Unresolved IDs produce a PDFUAauto-mode warning (`$ua->addWarning()`) so
+     * authors can diagnose broken references without failing the render.
+     *
+     * @return void
+     */
     public function resolveAll()
     {
         foreach ($this->pending as list($elem, $attr, $id)) {
@@ -2090,28 +2907,51 @@ class AriaIdResolver
             $target = $this->idMap[$id];
             switch ($attr) {
                 case 'aria-labelledby':
+                    // ISO 32000-1 §14.7.2 Table 322 — /Alt is a direct StructElem
+                    // key (NOT inside /A). Only fill if the element doesn't already
+                    // carry Alt from an explicit `alt=""` / `aria-label=""` source.
                     if (!isset($elem->getAttributes()['Alt'])) {
                         $elem->setAttribute('Alt', $this->collectText($target));
                     }
                     break;
                 case 'aria-describedby':
                 case 'aria-details':
+                    // ISO 32000-1 §14.7.2 Table 322 — /E carries expansion /
+                    // description text (same slot as <abbr title="…"> expansions).
                     $elem->setAttribute('E', $this->collectText($target));
                     break;
                 case 'aria-controls':
                 case 'aria-owns':
                 case 'aria-flowto':
                 case 'aria-activedescendant':
-                    // Register a relationship kid — an OBJR if the target is an annotation,
-                    // otherwise a UserProperty /Ref attribute (ISO 32000-1 §14.8.5.3).
+                    // ISO 32000-1 §14.8.5.3 — relationship attributes belong in a
+                    // UserProperties /Ref attribute when the target is a struct
+                    // element; for annotation targets they become OBJR kids under
+                    // the referencing element's /K array. StructureWriter picks the
+                    // correct encoding based on the target type.
                     $elem->addRelationship($attr, $target);
                     break;
             }
         }
     }
 
-    /** Gather concatenated descendant text for Alt/E text sourcing. */
-    private function collectText(StructureElement $elem) { /* walk K array, collect text items */ }
+    /**
+     * Gather concatenated descendant text from a struct element for use as
+     * /Alt or /E content.
+     *
+     * Recursively walks the target's /K array and concatenates every text
+     * content item. Skips Artifact kids. Produces plain UTF-8 text suitable
+     * for passing straight into StructureElement::setAttribute().
+     *
+     * @param  StructureElement $elem
+     * @return string  concatenated descendant text (may be empty)
+     */
+    private function collectText(StructureElement $elem)
+    {
+        // TODO: walk $elem->getChildren() recursively and concatenate text
+        // content items. See §"Aria Id Resolver collectText" implementation note.
+        return '';
+    }
 }
 ```
 
@@ -2388,9 +3228,21 @@ For **SVG-font text** (inside `svgText()` around line 2480): the source Unicode 
 ```php
 // Inside svgText(), after building $subpath_cmd for all glyphs of the run:
 if ($this->mpdf->PDFUA && $is_svg_font) {
+    // Each run gets its own MCID, recorded on $this->svgMcids so the Form
+    // XObject's ParentTree entry can be assembled later.
+    // ISO 32000-1 §14.7.4.4 — MCIDs inside a Form XObject stream are dense
+    // and 0-based, keyed by the Form XObject's /StructParents integer.
     $mcid = $this->svgNextMcid++;
     $this->svgMcids[] = $mcid;
+
+    // ISO 32000-1 §14.8.5.4 — /ActualText lets assistive technology read the
+    // logical text when the visual rendering is not a text-showing operator.
+    // The literal is UTF-16BE with a BOM (FEFF), hex-encoded per §7.3.4.3.
     $hex = bin2hex("\xFE\xFF" . mb_convert_encoding($txt, 'UTF-16BE', 'UTF-8'));
+
+    // Wrap the accumulated glyph-path operators with /Span BDC … EMC so the
+    // run appears as a real content item addressable via MCR dicts in the
+    // struct tree (ISO 32000-1 §14.7.4.4 Table 324).
     $subpath_cmd = '/Span <</MCID ' . $mcid . ' /ActualText <' . $hex . '>>> BDC' . "\n"
                  . $subpath_cmd . "\nEMC\n";
 }
@@ -2583,19 +3435,24 @@ Note: `BookmarkWriter` writes `/Type /BMoutlines` (line 133) which should be `/T
 **Solution — Sentinel entries**: During column collection (`ColActive === 1`), tag handlers do NOT call `markedContentHelper->begin()` or `->end()`. Instead they add sentinel entries to `columnbuffer[]`:
 
 ```php
-// On tag open (inside ColActive=1):
+// Sentinel buffer entry on tag open (inside ColActive=1). PDF bytes are NOT
+// written here — the sentinel string is a recognisable marker that
+// printcolumnbuffer() expands into real BDC bytes after the column-balancing
+// reorder. This is necessary because each writer->write() call becomes one
+// columnbuffer[] entry, and the reorder sort (by rel_y) would split a BDC
+// from its content if both were emitted as separate write() calls.
 $this->mpdf->columnbuffer[] = [
-    's'          => '__PDFUA_BDC__',   // sentinel — not PDF operators
-    'pdfua_type' => $structType,
-    'pdfua_mcid' => $mcid,             // from structureTree->addContent()
+    's'          => '__PDFUA_BDC__',   // sentinel — recognised by the expansion loop below
+    'pdfua_type' => $structType,       // struct type name to interpolate into /<Type> … BDC
+    'pdfua_mcid' => $mcid,             // MCID from StructureTree::addContent()
     'col'        => $this->mpdf->CurrCol,
     'x'          => $this->mpdf->x,
     'y'          => $this->mpdf->y,
     'h'          => 0,
-    'rel_y'      => null,              // sentinels are not position-sensitive
+    'rel_y'      => null,              // skip the position-sensitive reorder (null < any int)
 ];
 
-// On tag close (inside ColActive=1):
+// Matching sentinel on tag close — paired with the __PDFUA_BDC__ above.
 $this->mpdf->columnbuffer[] = [
     's'     => '__PDFUA_EMC__',
     'col'   => $this->mpdf->CurrCol,
@@ -2611,6 +3468,10 @@ The `rel_y` assignment loop in `printcolumnbuffer()` (lines 24495–24511) skips
 In the final output loop of `printcolumnbuffer()` (lines ~24730 and ~24901), expand sentinels:
 
 ```php
+// Expand the sentinel entries into real ISO 32000-1 §14.6 / §14.7.4.4
+// BDC / EMC bytes AFTER the column-balancing reorder has finalised the
+// sequence. Emitting bytes here (not at tag-open time) guarantees BDC/EMC
+// stay adjacent to their content.
 if ($s['s'] === '__PDFUA_BDC__' && $this->PDFUA) {
     $out = '/' . $s['pdfua_type'] . ' <</MCID ' . $s['pdfua_mcid'] . '>> BDC' . "\n";
 } elseif ($s['s'] === '__PDFUA_EMC__' && $this->PDFUA) {
@@ -2734,68 +3595,137 @@ Use `$this->writer->write()` (routes through `BaseWriter::endPage()` → `column
 namespace Mpdf\Ua\Import;
 
 use Mpdf\Mpdf;
+use Mpdf\Ua\UaState;
 use Mpdf\Ua\StructureTree;
 use Mpdf\Ua\StructureElement;
 
+/**
+ * Merge tagged-source PDF struct subtrees into the host document's struct tree.
+ *
+ * Called from `FpdiTrait::useTemplate()` when the source PDF's catalog has a
+ * `/StructTreeRoot`. Produces one merged struct subtree per imported page
+ * whose /Pg refs and /OBJR refs are remapped to host-document object numbers,
+ * so the imported content appears as first-class tagged content in the host
+ * StructTreeRoot (Matterhorn 01-007 conformance).
+ *
+ * `SetPageTemplate()` reuse is supported: if the same FPDI pageId is drawn on
+ * N host pages via `useTemplate()`, only ONE struct subtree is physically
+ * emitted — it carries N MCR kids differing only by /Pg (ISO 32000-1 §14.7.4.4
+ * Table 324 permits /Pg and /Stm to coexist, and /Pg disambiguates per-page
+ * occurrence).
+ *
+ * The indirect-reference rewriting (source object numbers → host object
+ * numbers) is delegated to FPDI's existing `writePdfType()` visitor at
+ * `src/FpdiTrait.php:344–395`; this merger only needs to queue objects onto
+ * `$this->mpdf->objectsToCopy[$readerId]` and rewrite /Pg / /Stm / /Obj keys
+ * inside MCR and OBJR dicts before serialisation.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict may carry both /Pg and /Stm
+ *   - ISO 32000-1:2008 §14.7.4.4.2 Table 338 — OBJR dict points to annotation object
+ *   - ISO 32000-1:2008 §14.7.3 — RoleMap merge semantics (first-wins via StructureTree::addRoleMapping())
+ *   - Matterhorn Protocol 1.1 failure condition 01-007 — untagged real content in a UA-claiming PDF
+ *
+ * @see \Mpdf\FpdiTrait::useTemplate()  hook site
+ * @see \Mpdf\FpdiTrait::writePdfType() indirect-ref rewriter that consumes objectsToCopy
+ */
 class FpdiStructMerger
 {
+    /** @var Mpdf     host Mpdf — needed for $mpdf->objectsToCopy and page-object lookups. */
     private $mpdf;
+
+    /** @var UaState  injected facade providing StructureTree + addWarning(). */
     private $ua;
 
+    /**
+     * @param Mpdf    $mpdf
+     * @param UaState $ua
+     */
     public function __construct(Mpdf $mpdf, UaState $ua)
     {
         $this->mpdf = $mpdf;
         $this->ua   = $ua;
     }
 
+    /**
+     * Convenience shim.
+     *
+     * @return StructureTree
+     */
     private function tree()
     {
         return $this->ua->getStructureTree();
     }
 
     /**
-     * Inspect the source PDF catalog — return true if /StructTreeRoot is present.
-     */
-    public function sourceIsTagged($readerId) { /* read getCatalog()->get('StructTreeRoot') */ }
-
-    /**
-     * Merge the struct subtree for one imported page into the host struct tree.
-     * Called from FpdiTrait::useTemplate() when sourceIsTagged() returned true.
+     * Return true if the FPDI reader's source catalog carries /StructTreeRoot.
      *
-     * @param string $pageId           FPDI page identifier
-     * @param int    $foXObjectObjNum  PDF object number of the host's Form XObject for this imported page
-     * @param int    $hostPageObjNum   PDF object number of the host page on which the Do is emitted
+     * Called from `useTemplate()` before rendering begins to choose between
+     * Tier 1 (Artifact-wrap the Do) and Tier 2 (merge the struct subtree).
+     *
+     * @param  string $readerId  FPDI-assigned reader identifier
+     * @return bool              true if the source PDF is tagged
      */
-    public function mergePageStructSubtree($pageId, $foXObjectObjNum, $hostPageObjNum)
+    public function sourceIsTagged($readerId)
     {
-        // 1. Read source catalog → /StructTreeRoot → walk K array, find struct elements
-        //    whose /Pg references the source page being imported.
-        // 2. Queue every struct object (and its attribute-object indirect refs) onto
-        //    $this->mpdf->objectsToCopy[$readerId] — FPDI's writePdfType() rewriter
-        //    (src/FpdiTrait.php:344–395) will handle object-number remapping.
-        // 3. Translate every MCR dict inside those subtrees:
-        //      - Original /Pg refs rewritten to $hostPageObjNum.
-        //      - /Stm entry added (or retained) pointing at $foXObjectObjNum.
-        //      - /MCID values left unchanged (they address content already inside the
-        //        Form XObject stream, which is copied verbatim).
-        // 4. For /OBJR kids referencing source annotations: translate /Obj to the
-        //    host annotation that was created during importPage() (FPDI already
-        //    copies source annotations when groupXObject=true). Drop OBJR kids whose
-        //    source annotation was not imported.
-        // 5. Merge source /RoleMap entries into the host tree via
-        //    $this->tree->addRoleMapping($role, $standardType) — first-wins semantics.
-        // 6. Attach the root of the merged subtree as a child of the currently open
-        //    host struct element (typically the outer host page's struct stack top).
-        //    The attachment is structural only — physical PDF object creation happens
-        //    when FPDI processes objectsToCopy during writeImportedPagesAndResolvedObjects().
+        // Read source getCatalog() via $this->mpdf->getPdfReader($readerId)->getParser()
+        // and return isset($catalog->value['StructTreeRoot']).
+        return false;
     }
 
     /**
-     * Called once per useTemplate() call even when the same FPDI pageId is reused
-     * across N host pages (SetPageTemplate reuse). Adds new MCR kids differing only
-     * by /Pg; the struct subtree is NOT physically duplicated.
+     * Merge the struct subtree for one imported page into the host struct tree.
+     *
+     * Called from `FpdiTrait::useTemplate()` when `sourceIsTagged()` returned
+     * true. Attaches a copy of the source page's struct subtree under the host
+     * page's current stack top; FPDI's existing write-time rewriter rewrites
+     * indirect object references during `writeImportedPagesAndResolvedObjects()`.
+     *
+     * Steps (numbered comments inside the body describe each phase):
+     *
+     *   1. Locate every source StructElem whose /Pg references the imported page.
+     *   2. Queue them onto `$mpdf->objectsToCopy[$readerId]` so FPDI's
+     *      `writePdfType()` rewriter handles object-number translation.
+     *   3. Rewrite MCR dicts: /Pg → host page object number; /Stm → Form XObject
+     *      object number; /MCID unchanged (the content stream is copied verbatim).
+     *   4. Rewrite OBJR dicts: /Obj → host annotation object number for
+     *      annotations that FPDI copied; drop OBJR entries whose source
+     *      annotation was not imported (groupXObject=false).
+     *   5. Merge source /RoleMap entries via
+     *      `$this->tree()->addRoleMapping($role, $standardType)` (first-wins).
+     *   6. Attach the merged subtree root as a child of the current host struct
+     *      element (usually the page-level container).
+     *
+     * @param  string $pageId           FPDI page identifier
+     * @param  int    $foXObjectObjNum  PDF object number of the host's Form XObject for this imported page
+     * @param  int    $hostPageObjNum   PDF object number of the host page on which the Do is emitted
+     * @return void
      */
-    public function addPerPageMcrKids($pageId, $hostPageObjNum, $foXObjectObjNum) { /* ... */ }
+    public function mergePageStructSubtree($pageId, $foXObjectObjNum, $hostPageObjNum)
+    {
+        // See the numbered description in this method's docblock for the step-by-step flow.
+    }
+
+    /**
+     * Register an additional (host page, Form XObject) pairing for a struct
+     * subtree that is being reused via `SetPageTemplate()`.
+     *
+     * Called once per extra reuse. Instead of duplicating the subtree, this
+     * adds another MCR kid under each affected struct element so the single
+     * physical subtree renders as tagged content on multiple pages.
+     *
+     * ISO 32000-1 §14.7.4.4 Table 324 — /Pg disambiguates per-page occurrence
+     * while /Stm identifies the shared Form XObject stream.
+     *
+     * @param  string $pageId           FPDI page identifier (must match a previous mergePageStructSubtree call)
+     * @param  int    $hostPageObjNum   PDF object number of the host page using the template this time
+     * @param  int    $foXObjectObjNum  PDF object number of the Form XObject (same as previous call for this $pageId)
+     * @return void
+     */
+    public function addPerPageMcrKids($pageId, $hostPageObjNum, $foXObjectObjNum)
+    {
+        // See class docblock for the SetPageTemplate reuse mechanics.
+    }
 }
 ```
 
@@ -3051,15 +3981,23 @@ ISO 32000-1 §14.8.5.7 and the Tagged PDF Best Practice Guide §5.4 require a `/
 **Implementation in the `TH` tag handler (`src/Tag/TableTH.php` or equivalent):**
 
 ```php
-// Inside open(), when PDFUA is active:
-$scope = 'Column';  // default
+// Inside open(), when PDFUA is active.
+// ISO 32000-1 §14.8.5.7 Table 349 — /Scope is a /O /Table attribute on TH
+// struct elements. Matterhorn 09-004 fires when /Scope is missing from a TH
+// in a complex table, so emit it unconditionally.
+$scope = 'Column';  // default for first-row THs (column headers)
 if ($isHeaderRow === false) {
-    // not first row — examine position
+    // Row-header THs appear in the leftmost column of subsequent rows.
+    // Anything else in a non-header row is still a column header (e.g. a TH
+    // inside TBODY that groups rows) — default back to /Column.
     $scope = $isFirstColumn ? 'Row' : 'Column';
 }
+// TODO Phase 4: also emit /Scope /Both for corner cells in tables that have
+// both row and column headers at position (0,0).
 $attributes = ['Scope' => $scope];
-// Pass $attributes to structureTree->open('TH', $attributes)
-// StructureWriter then emits /A << /O /Table /Scope /Column >> in the TH struct dict
+// structureTree->open('TH', $attributes) stores the value on StructureElement.
+// StructureWriter later emits it as `/A <</O /Table /Scope /Column>>` inside
+// the TH struct element's dict (see A1 — /Scope is NOT a direct StructElem key).
 ```
 
 The `StructureElement::$attributes` array carries the Scope value through to `StructureWriter`, which emits it as a PDF `/A` attribute dict entry: `<< /O /Table /Scope /Column >>`.
