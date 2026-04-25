@@ -59,9 +59,12 @@ final class BaseWriter
 		}
 	}
 
-	public function stream($s)
+	public function stream($s, $encrypt = true)
 	{
-		if ($this->mpdf->encrypted) {
+		// ISO 32000-1 §14.3.2 — the XMP metadata stream must not be encrypted.
+		// PDF/UA-1 requires pdfuaid:part to be readable regardless of encryption state.
+		// Pass $encrypt=false when writing the XMP metadata stream with PDFUA+encrypted.
+		if ($this->mpdf->encrypted && $encrypt) {
 			$s = $this->protection->rc4($this->protection->objectKey($this->mpdf->currentObjectNumber), $s);
 		}
 

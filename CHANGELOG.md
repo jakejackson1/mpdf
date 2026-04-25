@@ -3,6 +3,9 @@ mPDF 8.3.x
 
 New features
 ------------
+* PDF/UA-1 Phase 3: content stream BDC/EMC tagging — `MarkedContentHelper` fully implemented (BDC/EMC operator emission via `BaseWriter::write()` for correct buffer routing); block content tagging infrastructure in `newFlowingBlock()`/`finishFlowingBlock()`; image tagging in `printobjectbuffer()` (Figure with /Alt for descriptive images, /Artifact BMC for decorative/missing-alt images with warning); HTML header/footer artifact marking in `_puthtmlheaders()` with struct-tree suppression via `openArtifact()`/`closeArtifact()`; BDC/EMC depth balance assertion in `_enddoc()` (throws or warns per PDFUAauto mode); `getPdfUaMarkedContentHelper()` public accessor added (@jakejackson1)
+* PDF/UA-1 Phase 2: logical structure tree infrastructure — `StructureElement`, `StructureTree`, `StructType`, `StructureWriter`, `UaState` facade fully wired with six collaborators; `MarkedContentHelper`, `AriaIdResolver`, `LigatureActualTextWriter`, `FpdiStructMerger` stubs registered; StructTreeRoot, ParentTree NumTree, and RoleMap serialised to PDF at close time (@jakejackson1)
+* PDF/UA-1 (ISO 14289-1:2014) Phase 1 foundation: `PDFUA` and `PDFUAauto` config flags, XMP pdfuaid:part metadata, /MarkInfo /Marked true, /Lang validation, /DisplayDocTitle enforcement, /StructParents + /Tabs /S on every page dict, core-font embedding rejection, PDF 1.7 version header, and `title` config key (@jakejackson1)
 * Refactored CssManager (@jakejackson1, #2150)
 * Snapshot testing (@jakejackson1, #2148)
 * Reduce memory usage by using array buffer (@jorrit #2151)

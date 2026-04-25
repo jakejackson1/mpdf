@@ -10,6 +10,14 @@ class Img extends Tag
 	public function open($attr, &$ahtml, &$ihtml)
 	{
 		$this->mpdf->ignorefollowingspaces = false;
+
+		// PDF/UA-1 §3c — Capture the alt attribute early so it can be stored on
+		// $objattr and carried through to printobjectbuffer() where the Do operator
+		// is emitted. null means the attribute is entirely absent (unknown intent);
+		// '' (empty string) means the author declared the image decorative (W3C convention).
+		// ISO 32000-1 §14.7.2 Table 322 — /Alt is a StructElem key, not a BDC prop-dict entry.
+		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
+
 		$objattr = [];
 		$objattr['margin_top'] = 0;
 		$objattr['margin_bottom'] = 0;
@@ -406,6 +414,10 @@ class Img extends Tag
 			if (isset($properties['TRANSFORM']) && !$this->mpdf->ColActive && !$this->mpdf->kwt) {
 				$objattr['transform'] = $properties['TRANSFORM'];
 			}
+
+			// PDF/UA-1 §3c — Carry the alt value through serialization so
+			// printobjectbuffer() can emit the correct BDC/BMC wrap around the Do operator.
+			$objattr['pdfua_alt'] = $alt;
 
 			$e = Mpdf::OBJECT_IDENTIFIER . "type=image,objattr=" . serialize($objattr) . Mpdf::OBJECT_IDENTIFIER;
 

@@ -38,11 +38,38 @@ class A extends Tag
 				$this->mpdf->setCSS($properties, 'INLINE');
 			}
 			$this->mpdf->HREF = $attr['HREF']; // mPDF 5.7.4 URLs
+
+			// PDF/UA-1 Phase 4 — push a Link struct element for hyperlinks.
+			// Destination anchors (<a name="...">) do not produce struct elements.
+			if ($this->mpdf->PDFUA) {
+				$structAttrs = [];
+				if (isset($attr['LANG'])) {
+					$structAttrs['Lang'] = $attr['LANG'];
+				}
+				$this->ua->getStructureTree()->open('Link', $structAttrs);
+
+				// Register ARIA ID references
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				if (!empty($attr['ID'])) {
+					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+				}
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				          'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+					if (!empty($attr[$k])) {
+						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
+					}
+				}
+			}
 		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// PDF/UA-1 — close the Link struct element (only if one was opened for HREF links).
+		if ($this->mpdf->PDFUA && $this->mpdf->HREF !== '') {
+			$this->ua->getStructureTree()->close();
+		}
+
 		$this->mpdf->HREF = '';
 		if (isset($this->mpdf->InlineProperties['A'])) {
 			$this->mpdf->restoreInlineProperties($this->mpdf->InlineProperties['A']);

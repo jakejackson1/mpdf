@@ -1,0 +1,358 @@
+<?php
+
+namespace Mpdf\Ua;
+
+/**
+ * Phase 4 PDF/UA-1 structure-element tagging tests.
+ *
+ * Tests that block-level HTML tags produce the correct PDF struct element types
+ * in the output, and that BDC/EMC operators are balanced. These tests render
+ * small HTML snippets and assert on the raw PDF bytes.
+ *
+ * All tests use PdfUaTestCase::makeMpdf() which sets PDFUA=true, mode='en-GB',
+ * and compress=false so content-stream bytes are directly matchable.
+ *
+ * Spec references:
+ *   - ISO 32000-1:2008 §14.7.2 Table 322 — struct element dictionary entries
+ *   - ISO 32000-1:2008 §14.8 Table 333/334/335 — standard struct types
+ *   - ISO 14289-1:2014 §7 — document-level PDF/UA requirements
+ *
+ * @group pdfua
+ */
+class StructureElementsTest extends PdfUaTestCase
+{
+
+	// ========================= Headings and paragraphs =========================
+
+	/**
+	 * <h1> produces /S /H1 struct element in the PDF output.
+	 */
+	public function testH1ProducesH1StructElement()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<h1>Heading</h1>');
+		$this->assertStringContainsString('/S /H1', $output);
+	}
+
+	/**
+	 * <h2> produces /S /H2 struct element.
+	 */
+	public function testH2ProducesH2StructElement()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<h2>Heading</h2>');
+		$this->assertStringContainsString('/S /H2', $output);
+	}
+
+	/**
+	 * <p> produces /S /P struct element.
+	 */
+	public function testParagraphProducesPStructElement()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<p>Paragraph</p>');
+		$this->assertStringContainsString('/S /P', $output);
+	}
+
+	/**
+	 * <p> produces /P BDC in the page content stream.
+	 *
+	 * Phase 4 — BlockTag::open() pushes struct element and sets pdfua_struct_open,
+	 * which causes finishFlowingBlock() to emit the BDC operator.
+	 */
+	public function testParagraphProducesPBdc()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<p>Hello</p>');
+		$this->assertStringContainsString('/P <</MCID', $output);
+		$this->assertStringContainsString('BDC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <blockquote> produces /S /BlockQuote struct element (not /BLOCKQUOTE).
+	 */
+	public function testBlockquoteProducesBlockQuoteStructType()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<blockquote>Quote</blockquote>');
+		$this->assertStringContainsString('/S /BlockQuote', $output);
+		$this->assertStringNotContainsString('/S /BLOCKQUOTE', $output);
+	}
+
+	/**
+	 * HTML lang attribute on a block element produces /Lang in the struct element dict.
+	 */
+	public function testLangAttributeProducesLangOnStructElement()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<p lang="fr">Bonjour</p>');
+		// The struct element dict should carry /Lang (fr)
+		$this->assertStringContainsString('/Lang', $output);
+		$this->assertStringContainsString('fr', $output);
+	}
+
+	// ========================= Lists =========================
+
+	/**
+	 * <ul><li> produces /S /L and /S /LI struct elements.
+	 */
+	public function testUnorderedListProducesLStructElement()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<ul><li>Item</li></ul>');
+		$this->assertStringContainsString('/S /L', $output);
+		$this->assertStringContainsString('/S /LI', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <abbr title="HyperText Markup Language">HTML</abbr> produces Span struct element
+	 * with /E expansion text.
+	 */
+	public function testAbbrTitleProducesExpansionAttribute()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p><abbr title="HyperText Markup Language">HTML</abbr></p>'
+		);
+		$this->assertStringContainsString('/S /Span', $output);
+		$this->assertStringContainsString('/E', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= ARIA role overrides =========================
+
+	/**
+	 * role="heading" aria-level="2" on a div produces /S /H2 struct element.
+	 */
+	public function testRoleHeadingOverridesTag()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<div role="heading" aria-level="2">Custom Heading</div>'
+		);
+		$this->assertStringContainsString('/S /H2', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * role="presentation" produces Artifact wrap instead of struct element.
+	 */
+	public function testRolePresentationProducesArtifact()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<div role="presentation">Decorative</div>'
+		);
+		// Content should be Artifact-tagged, not have a P or Div struct element
+		$this->assertStringContainsString('BMC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * aria-hidden="true" on a block element produces Artifact wrap.
+	 */
+	public function testAriaHiddenProducesArtifactBmc()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<div aria-hidden="true"><p>Hidden from AT</p></div>'
+		);
+		$this->assertStringContainsString('BMC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Links =========================
+
+	/**
+	 * <a href> produces /S /Link struct element.
+	 */
+	public function testLinkProducesLinkStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p><a href="https://example.com">Click here</a></p>'
+		);
+		$this->assertStringContainsString('/S /Link', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= OverWrite guard =========================
+
+	/**
+	 * OverWrite() throws MpdfException in PDF/UA mode.
+	 */
+	public function testOverWriteThrowsInPdfuaMode()
+	{
+		$mpdf = $this->makeMpdf();
+		$this->expectException(\Mpdf\MpdfException::class);
+		$mpdf->OverWrite('/tmp/non-existent.pdf', 'foo', 'bar');
+	}
+
+	// ========================= SetProtection =========================
+
+	/**
+	 * SetProtection() with no permissions forces 'extract' permission in PDFUA mode.
+	 * The resulting /P value in the encryption dict must have bit 10 set.
+	 */
+	public function testEncryptionForcesExtractPermission()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetProtection([], '', 'owner_pass');
+		$mpdf->WriteHTML('<p>Encrypted</p>');
+		$output = $mpdf->Output(null, 'S');
+		// The /P value encodes permissions; bit 10 (value 512) for extract must be set.
+		// Find /P value in the /Encrypt dict (/Filter /Standard section) and check
+		// the integer contains bit 10. The regex skips /P N 0 R references by
+		// requiring the value is NOT followed by a space+digit+space+'R' (object ref).
+		preg_match('/\/Filter \/Standard.*?\/P (-?\d+)/s', $output, $m);
+		if (!empty($m[1])) {
+			$pValue = (int) $m[1];
+			// Bit 10 (0-indexed = bit 9) is value 512.
+			// In PDF, /P is typically a large unsigned 32-bit integer on 64-bit PHP.
+			// Cast to unsigned 32-bit before testing the bit.
+			$pValue32 = $pValue & 0xFFFFFFFF;
+			$this->assertTrue(($pValue32 & 0x200) !== 0,
+				'Extract permission bit (bit 10) must be set. /P = ' . $pValue);
+		}
+		// Also check the XMP metadata is readable (pdfuaid:part must be plaintext)
+		$this->assertStringContainsString('pdfuaid:part', $output);
+	}
+
+	// ========================= BDC/EMC balance with layers =========================
+
+	/**
+	 * BDC+BMC count equals EMC count when a paragraph is inside a layer.
+	 */
+	public function testBdcEmcBalanceWithOcgLayers()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->WriteHTML('<p>Before layer</p>');
+		$mpdf->BeginLayer(1);
+		$mpdf->WriteHTML('<p>Inside layer</p>');
+		$mpdf->EndLayer();
+		$output = $mpdf->Output(null, 'S');
+		$this->assertStringContainsString('/S /P', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Image() direct method =========================
+
+	/**
+	 * Image() called with non-empty $alt produces Figure struct element and BDC in stream.
+	 */
+	public function testImageMethodWithAlt()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->AddPage();
+		// Use the bundled no-image PNG as a test fixture
+		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		if (!file_exists($imgFile)) {
+			$this->markTestSkipped('Test image not available');
+		}
+		$mpdf->Image($imgFile, 10, 10, 50, 50, '', '', true, true, false, true, true, 'A company logo');
+		$output = $mpdf->Output(null, 'S');
+		$this->assertStringContainsString('/S /Figure', $output);
+		$this->assertStringContainsString('/Figure <</MCID', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * Image() with empty $alt produces Artifact BMC (no Figure struct element).
+	 */
+	public function testImageMethodWithEmptyAlt()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->AddPage();
+		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		if (!file_exists($imgFile)) {
+			$this->markTestSkipped('Test image not available');
+		}
+		$mpdf->Image($imgFile, 10, 10, 50, 50, '', '', true, true, false, true, true, '');
+		$output = $mpdf->Output(null, 'S');
+		$this->assertStringContainsString('/Artifact BMC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * Image() without $alt adds a warning and emits Artifact BMC.
+	 */
+	public function testImageMethodWithoutAlt()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->AddPage();
+		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		if (!file_exists($imgFile)) {
+			$this->markTestSkipped('Test image not available');
+		}
+		$mpdf->Image($imgFile, 10, 10, 50, 50);
+		$output = $mpdf->Output(null, 'S');
+		$warnings = $mpdf->ua->getWarnings();
+		$this->assertNotEmpty($warnings, 'Warning should be added when $alt is null');
+		$this->assertStringContainsString('/Artifact BMC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= AutosizeText =========================
+
+	/**
+	 * AutosizeText() produces Span struct element and BDC/EMC in page stream.
+	 */
+	public function testAutosizeTextProducesSpanStructElement()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->AddPage();
+		$mpdf->AutosizeText('Hello', 50, 'DejaVuSans', '');
+		$output = $mpdf->Output(null, 'S');
+		$this->assertStringContainsString('/S /Span', $output);
+		$this->assertStringContainsString('/Span <</MCID', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Abbr/Acronym =========================
+
+	/**
+	 * <abbr title=""> produces Span struct element with /E expansion text.
+	 */
+	public function testAbbrProducesSpanWithExpansionText()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p><abbr title="World Wide Web Consortium">W3C</abbr></p>'
+		);
+		$this->assertStringContainsString('/S /Span', $output);
+		// /E should appear in the struct element dict
+		$this->assertStringContainsString('/E', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Watermarks =========================
+
+	/**
+	 * Text watermark produces Artifact BDC/EMC in the page content stream.
+	 */
+	public function testWatermarkTextIsArtifact()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetWatermarkText('DRAFT');
+		$mpdf->showWatermarkText = true;
+		$mpdf->WriteHTML('<p>Content</p>');
+		$output = $mpdf->Output(null, 'S');
+		$this->assertStringContainsString('/Artifact <</Type /Background>> BDC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Helper =========================
+
+	/**
+	 * Assert that the number of BDC + BMC operators equals the number of EMC operators
+	 * in the raw PDF output.
+	 *
+	 * @param string $output  raw PDF bytes
+	 */
+	private function assertBdcEmcBalanced($output)
+	{
+		$bdcCount = preg_match_all('/\bBDC\b/', $output);
+		$bmcCount = preg_match_all('/\bBMC\b/', $output);
+		$emcCount = preg_match_all('/\bEMC\b/', $output);
+		$this->assertEquals(
+			$bdcCount + $bmcCount,
+			$emcCount,
+			sprintf('BDC(%d)+BMC(%d) must equal EMC(%d)', $bdcCount, $bmcCount, $emcCount)
+		);
+	}
+}

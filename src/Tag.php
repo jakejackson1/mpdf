@@ -6,6 +6,7 @@ use Mpdf\Strict;
 use Mpdf\Color\ColorConverter;
 use Mpdf\Image\ImageProcessor;
 use Mpdf\Language\LanguageToFontInterface;
+use Mpdf\Ua\UaState;
 
 class Tag
 {
@@ -63,6 +64,11 @@ class Tag
 	private $languageToFont;
 
 	/**
+	 * @var \Mpdf\Ua\UaState
+	 */
+	private $ua;
+
+	/**
 	 * @param \Mpdf\Mpdf $mpdf
 	 * @param \Mpdf\Cache $cache
 	 * @param \Mpdf\CssManager $cssManager
@@ -73,6 +79,7 @@ class Tag
 	 * @param \Mpdf\Color\ColorConverter $colorConverter
 	 * @param \Mpdf\Image\ImageProcessor $imageProcessor
 	 * @param \Mpdf\Language\LanguageToFontInterface $languageToFont
+	 * @param \Mpdf\Ua\UaState $ua
 	 */
 	public function __construct(
 		Mpdf $mpdf,
@@ -84,7 +91,8 @@ class Tag
 		SizeConverter $sizeConverter,
 		ColorConverter $colorConverter,
 		ImageProcessor $imageProcessor,
-		LanguageToFontInterface $languageToFont
+		LanguageToFontInterface $languageToFont,
+		UaState $ua = null
 	) {
 
 		$this->mpdf = $mpdf;
@@ -97,6 +105,7 @@ class Tag
 		$this->colorConverter = $colorConverter;
 		$this->imageProcessor = $imageProcessor;
 		$this->languageToFont = $languageToFont;
+		$this->ua = $ua;
 	}
 
 	/**
@@ -117,7 +126,8 @@ class Tag
 				$this->sizeConverter,
 				$this->colorConverter,
 				$this->imageProcessor,
-				$this->languageToFont
+				$this->languageToFont,
+				$this->ua
 			);
 		}
 	}

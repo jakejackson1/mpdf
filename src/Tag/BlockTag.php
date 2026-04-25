@@ -901,6 +901,115 @@ abstract class BlockTag extends Tag
 
 		$this->mpdf->x = $this->mpdf->lMargin + $currblk['outer_left_margin'];
 
+		// PDF/UA-1 Phase 4 — push a struct element for this block onto the struct tree.
+		// The struct type is determined from the HTML tag and optional ROLE attribute.
+		// Float blocks default to Artifact (no accessible reading order); role or
+		// aria-label overrides this to produce a real struct element.
+		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
+			$structType = null;
+			// Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
+			if (!empty($attr['CLASS'])) {
+				foreach (explode(' ', strtolower($attr['CLASS'])) as $cls) {
+					$tocType = \Mpdf\Ua\StructType::fromCssClass($cls);
+					if ($tocType !== null) {
+						$structType = $tocType;
+						break;
+					}
+				}
+			}
+			if ($structType === null) {
+				$structType = \Mpdf\Ua\StructType::fromHtmlTag($tag, $attr);
+			}
+
+			// ROLE attribute ARIA overrides for block elements
+			if (!empty($attr['ROLE'])) {
+				$role = strtolower($attr['ROLE']);
+				if ($role === 'none' || $role === 'presentation' || $role === 'separator') {
+					$structType = '__artifact__';
+				} elseif ($role === 'heading') {
+					$level = isset($attr['ARIA-LEVEL']) ? (int) $attr['ARIA-LEVEL'] : 2;
+					$structType = 'H' . max(1, min(6, $level));
+				} else {
+					$ariaRoleMap = [
+						'list'           => 'L',
+						'listitem'       => 'LI',
+						'table'          => 'Table',
+						'grid'           => 'Table',
+						'row'            => 'TR',
+						'columnheader'   => 'TH',
+						'rowheader'      => 'TH',
+						'cell'           => 'TD',
+						'gridcell'       => 'TD',
+						'figure'         => 'Figure',
+						'img'            => 'Figure',
+						'note'           => 'Note',
+						'doc-footnote'   => 'Note',
+						'link'           => 'Link',
+						'article'        => 'Art',
+						'doc-chapter'    => 'Sect',
+						'region'         => 'Sect',
+						'navigation'     => 'Sect',
+						'main'           => 'Div',
+						'banner'         => 'Sect',
+						'complementary'  => 'Sect',
+						'contentinfo'    => 'Sect',
+						'group'          => 'Div',
+						'paragraph'      => 'P',
+						'term'           => 'Span',
+						'definition'     => 'Span',
+						'doc-title'      => 'Title',
+					];
+					if (isset($ariaRoleMap[$role])) {
+						$structType = $ariaRoleMap[$role];
+					}
+				}
+			}
+
+			// Float blocks without explicit ARIA role → Artifact (reading order unknown)
+			$isFloat = isset($properties['FLOAT'])
+				&& in_array(strtoupper($properties['FLOAT']), ['LEFT', 'RIGHT']);
+			if ($isFloat && !isset($attr['ROLE']) && !isset($attr['ARIA-LABEL'])) {
+				$structType = '__artifact__';
+			}
+
+			// aria-hidden="true" → Artifact suppression context
+			if (isset($attr['ARIA-HIDDEN']) && strtolower($attr['ARIA-HIDDEN']) === 'true') {
+				$structType = '__artifact__';
+			}
+
+			if ($structType === '__artifact__') {
+				$this->ua->getStructureTree()->openArtifact();
+				$currblk['pdfua_artifact'] = true;
+				$currblk['pdfua_type']     = null;
+			} elseif ($structType !== null) {
+				$structAttrs = [];
+				if (isset($attr['LANG'])) {
+					$structAttrs['Lang'] = $attr['LANG'];
+				}
+				if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+					$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+				}
+				$this->ua->getStructureTree()->open($structType, $structAttrs);
+				$currblk['pdfua_type'] = $structType;
+				$currblk['pdfua_artifact'] = false;
+
+				// ARIA ID registration and deferred-reference queuing
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				if (!empty($attr['ID'])) {
+					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+				}
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				          'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+					if (!empty($attr[$k])) {
+						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
+					}
+				}
+			} else {
+				$currblk['pdfua_type']     = null;
+				$currblk['pdfua_artifact'] = false;
+			}
+		}
+
 		/* -- BACKGROUNDS -- */
 		if (!empty($properties['BACKGROUND-IMAGE']) && !$this->mpdf->kwt && !$this->mpdf->ColActive && !$this->mpdf->keep_block_together) {
 			$ret = $this->mpdf->SetBackground($properties, $currblk['inner_width']);
@@ -1257,6 +1366,19 @@ abstract class BlockTag extends Tag
 				(isset($this->mpdf->blk[$this->mpdf->blklvl]['direction']) ? $this->mpdf->blk[$this->mpdf->blklvl]['direction'] : 'ltr')
 			);
 
+			// PDF/UA-1 — restore pdfua_struct_open/pdfua_artifact_open flags for empty
+			// blocks (same reasoning as printbuffer() — newFlowingBlock() resets them
+			// to false/false on every call).
+			if ($this->mpdf->PDFUA) {
+				$blk = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
+				if (!empty($blk['pdfua_type']) && empty($blk['pdfua_artifact'])) {
+					$this->mpdf->flowingBlockAttr['pdfua_struct_open'] = true;
+					$this->mpdf->flowingBlockAttr['pdfua_type']        = $blk['pdfua_type'];
+				} elseif (!empty($blk['pdfua_artifact'])) {
+					$this->mpdf->flowingBlockAttr['pdfua_artifact_open'] = true;
+				}
+			}
+
 			$this->mpdf->finishFlowingBlock(true); // true = END of flowing block
 			$this->mpdf->PaintDivBB('', $blockstate);
 		} else {
@@ -1419,6 +1541,18 @@ abstract class BlockTag extends Tag
 				$this->mpdf->AddPage();
 			}
 			return;
+		}
+
+		// PDF/UA-1 Phase 4 — pop the struct element from the tree.
+		// Must happen after the block content is flushed (printbuffer/finishFlowingBlock
+		// above) but before blklvl is decremented so pdfua_type is still accessible.
+		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
+			$blk = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
+			if (!empty($blk['pdfua_artifact'])) {
+				$this->ua->getStructureTree()->closeArtifact();
+			} elseif (!empty($blk['pdfua_type'])) {
+				$this->ua->getStructureTree()->close();
+			}
 		}
 
 		if ($this->mpdf->blklvl > 0) { // ==0 SHOULDN'T HAPPEN - NOT XHTML

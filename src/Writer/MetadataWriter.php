@@ -7,6 +7,7 @@ use Mpdf\Form;
 use Mpdf\Mpdf;
 use Mpdf\Pdf\Protection;
 use Mpdf\PsrLogAwareTrait\PsrLogAwareTrait;
+use Mpdf\Ua\UaState;
 use Mpdf\Utils\PdfDate;
 
 use Psr\Log\LoggerInterface;
@@ -37,12 +38,18 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	 */
 	private $protection;
 
-	public function __construct(Mpdf $mpdf, BaseWriter $writer, Form $form, Protection $protection, LoggerInterface $logger)
+	/**
+	 * @var \Mpdf\Ua\UaState
+	 */
+	private $ua;
+
+	public function __construct(Mpdf $mpdf, BaseWriter $writer, Form $form, Protection $protection, UaState $ua, LoggerInterface $logger)
 	{
 		$this->mpdf = $mpdf;
 		$this->writer = $writer;
 		$this->form = $form;
 		$this->protection = $protection;
+		$this->ua = $ua;
 		$this->logger = $logger;
 	}
 
@@ -134,6 +141,25 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$m .= '   </rdf:Description>' . "\n";
 		}
 
+		// ISO 14289-1:2014 §6.2 — pdfuaid:part XMP identifier.
+		// Separate `if` (not `elseif`) so PDFUA and PDFA/PDFX can coexist in the same
+		// document (e.g. PDF/A-3 + PDF/UA-1 for accessible archival documents).
+		// ISO 14289-1:2014 §7.1 (Matterhorn Protocol 1.1 condition 06-003) requires
+		// a non-empty document title in the XMP dc:title element.
+		if ($this->mpdf->PDFUA) {
+			if (empty($this->mpdf->title)) {
+				if ($this->mpdf->PDFUAauto) {
+					$this->ua->addWarning('PDF/UA-1 requires a document title. Set the \'title\' config option.');
+				} else {
+					throw new \Mpdf\MpdfException('PDF/UA-1 requires a document title. Set the \'title\' config option.');
+				}
+			}
+			$m .= '   <rdf:Description rdf:about="uuid:' . $uuid
+				. '" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">' . "\n";
+			$m .= '    <pdfuaid:part>1</pdfuaid:part>' . "\n";
+			$m .= '   </rdf:Description>' . "\n";
+		}
+
 		$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/">' . "\n";
 		$m .= '    <xmpMM:DocumentID>uuid:' . $uuid . '</xmpMM:DocumentID>' . "\n";
 		$m .= '   </rdf:Description>' . "\n";
@@ -141,8 +167,19 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$m .= ' </x:xmpmeta>' . "\n";
 		$m .= str_repeat(str_repeat(' ', 100) . "\n", 20); // 2-4kB whitespace padding required
 		$m .= '<?xpacket end="w"?>'; // "r" read only
-		$this->writer->write('<</Type/Metadata/Subtype/XML/Length ' . strlen($m) . '>>');
-		$this->writer->stream($m);
+		// ISO 32000-1 §14.3.2 — XMP metadata stream must NOT be encrypted.
+		// ISO 14289-1:2014 §6.2 — pdfuaid:part must be readable by PDF/UA processors.
+		// The Identity crypt filter declares the intent; $encrypt=false delivers it.
+		if ($this->mpdf->PDFUA && $this->mpdf->encrypted) {
+			$this->writer->write('<</Type/Metadata/Subtype/XML'
+				. '/Filter[/Crypt]'
+				. '/DecodeParms<</Type/CryptFilterDecodeParms/Name/Identity>>'
+				. '/Length ' . strlen($m) . '>>');
+			$this->writer->stream($m, false);
+		} else {
+			$this->writer->write('<</Type/Metadata/Subtype/XML/Length ' . strlen($m) . '>>');
+			$this->writer->stream($m);
+		}
 		$this->writer->write('endobj');
 	}
 
@@ -330,10 +367,20 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$this->writer->write('/Type /Catalog');
 		$this->writer->write('/Pages 1 0 R');
 
-		if (is_string($this->mpdf->currentLang)) {
+		// ISO 14289-1:2014 §7.2 (Matterhorn Protocol 1.1 condition 04-001) — /Lang is required
+		// in the document catalog when PDFUA is active. Fall back to en-US with a warning in
+		// PDFUAauto mode, or throw in strict mode when neither currentLang nor default_lang is set.
+		if (is_string($this->mpdf->currentLang) && $this->mpdf->currentLang !== '') {
 			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->currentLang));
-		} elseif (is_string($this->mpdf->default_lang)) {
+		} elseif (is_string($this->mpdf->default_lang) && $this->mpdf->default_lang !== '') {
 			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->default_lang));
+		} elseif ($this->mpdf->PDFUA) {
+			if ($this->mpdf->PDFUAauto) {
+				$this->ua->addWarning('PDF/UA-1 requires a /Lang entry in the document catalog. Defaulting to en-US.');
+				$this->writer->write('/Lang (en-US)');
+			} else {
+				throw new \Mpdf\MpdfException('PDF/UA-1 requires a /Lang entry in the document catalog. Pass a language mode such as \'en-GB\' to the Mpdf constructor.');
+			}
 		}
 
 		if ($this->mpdf->ZoomMode === 'fullpage') {
@@ -377,9 +424,20 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/PageMode /FullScreen');
 		}
 
-		// Metadata
-		if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+		// ISO 32000-1:2008 §14.3.2 — /Metadata ref in catalog required for PDFA, PDFX, and PDFUA.
+		if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
 			$this->writer->write('/Metadata ' . $this->mpdf->MetadataRoot . ' 0 R');
+		}
+
+		// ISO 14289-1:2014 §7.1 (Matterhorn 01-003) — /MarkInfo with Marked=true required.
+		// ISO 32000-1:2008 §14.7.2 Table 321 — StructTreeRoot ref in catalog.
+		if ($this->mpdf->PDFUA) {
+			$this->writer->write('/MarkInfo <</Marked true /Suspects false>>');
+			// StructTreeRoot object number is 0 until Phase 2 StructureWriter runs.
+			// The conditional emit ensures valid PDF when the tree is absent in Phase 1.
+			if ($this->ua->getStructTreeRootObjNum()) {
+				$this->writer->write('/StructTreeRoot ' . $this->ua->getStructTreeRootObjNum() . ' 0 R');
+			}
 		}
 
 		// OutputIntents
@@ -407,7 +465,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/Names << /JavaScript ' . $this->mpdf->n_js . ' 0 R >> ');
 		}
 
-		if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins) {
+		// ISO 14289-1:2014 §7.1 (Matterhorn Protocol 1.1 condition 06-001) — /ViewerPreferences
+		// /DisplayDocTitle must be true so PDF viewers show the document title rather than the
+		// filename. Adding $this->mpdf->PDFUA ensures the block opens even when no other
+		// DisplayPreferences, RTL direction, or mirror-margins flag is active.
+		if ($this->mpdf->DisplayPreferences || $this->mpdf->directionality === 'rtl' || $this->mpdf->mirrorMargins || $this->mpdf->PDFUA) {
 
 			$this->writer->write('/ViewerPreferences<<');
 
@@ -423,7 +485,9 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 				$this->writer->write('/HideWindowUI true');
 			}
 
-			if (is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
+			// ISO 14289-1:2014 §7.1 — viewers must display the document title from /Info /Title
+			// rather than the filename when /DisplayDocTitle is true.
+			if ($this->mpdf->PDFUA || is_int(strpos($this->mpdf->DisplayPreferences, 'DisplayDocTitle'))) {
 				$this->writer->write('/DisplayDocTitle true');
 			}
 

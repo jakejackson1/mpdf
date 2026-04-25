@@ -134,8 +134,11 @@ class FontWriter
 				// Standard font
 				$this->mpdf->fonts[$k]['n'] = $this->mpdf->n + 1;
 
-				if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-					throw new \Mpdf\MpdfException('Core fonts are not allowed in PDF/A1-b or PDFX/1-a files (Times, Helvetica, Courier etc.)');
+				// ISO 14289-1:2014 §7.21 (Matterhorn Protocol 1.1 condition 14-002) — all fonts used
+			// for rendering must be embedded. Core Type 1 fonts have no embeddable font program
+			// in mPDF and therefore cannot be used in PDF/UA-1 mode.
+				if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
+					throw new \Mpdf\MpdfException('Core fonts cannot be used in PDF/UA-1, PDF/A-1b, or PDF/X-1a mode as they cannot be embedded (Times, Helvetica, Courier etc.) — use a TrueType/OpenType font instead.');
 				}
 
 				$this->writer->object();
