@@ -83,6 +83,21 @@ trait FpdiTrait
 	}
 
 	/**
+	 * Return a PdfReader for an already-opened source file by its reader id.
+	 *
+	 * Wraps the vendor trait's protected getPdfReader() so that collaborators
+	 * outside the class hierarchy (e.g. FpdiStructMerger) can access the reader
+	 * without calling a protected method directly.
+	 *
+	 * @param  string $readerId  reader id obtained from $importedPages[$pageId]['readerId']
+	 * @return \setasign\Fpdi\PdfReader\PdfReader
+	 */
+	public function getSourcePdfReader($readerId)
+	{
+		return $this->getPdfReader($readerId);
+	}
+
+	/**
 	 * Get the next template id.
 	 *
 	 * @return int
@@ -144,7 +159,64 @@ trait FpdiTrait
 			}
 		}
 
+		// PDF/UA-1 — two-tier treatment for imported PDF pages.
+		//
+		// Tier 1 (untagged source): The Do operator emitted by FPDI is bracketed with
+		//   /Artifact <</Type /Layout>> BDC … EMC
+		// (ISO 14289-1:2014 §7.1; Matterhorn 01-007; ISO 32000-1:2008 §14.7.4.4 Table 324).
+		// A diagnostic warning is emitted via getPdfUaWarnings().
+		//
+		// Tier 2 (tagged source): The source PDF's struct subtree is cloned into the host
+		// StructureTree via FpdiStructMerger::mergePageStructSubtree(). The Form XObject
+		// receives a /StructParents entry at write time (see writeImportedPagesAndResolvedObjects).
+		// No Artifact wrap is emitted; the cloned struct elements provide the tagging.
+		//
+		// The readerId is read from importedPages because $this->currentReaderId is null
+		// at this point in the call stack (it is only set during writeImportedPagesAndResolvedObjects).
+		if ($this->PDFUA && isset($this->importedPages[$pageId])) {
+			$pdfuaMerger = $this->ua->getFpdiStructMerger();
+			$readerId    = $this->importedPages[$pageId]['readerId'];
+
+			if ($pdfuaMerger->sourceIsTagged($readerId)) {
+				// Tier 2: merge struct subtree. Object numbers are not yet known at
+				// render time (they are allocated in writeImportedPagesAndResolvedObjects),
+				// so pass 0 for foXObjectObjNum and hostPageObjNum; the actual numbers
+				// are patched by patchMergedSubtreeObjectNumbers() at write time.
+				$pdfuaMerger->mergePageStructSubtree($pageId, 0, 0);
+				// Record this host page so patchMergedSubtreeObjectNumbers() can resolve
+				// pageDim[$hostPage]['n'] after writePages() has run. Called on every
+				// placement (first use + all SetPageTemplate reuses).
+				$pdfuaMerger->recordHostPage($pageId, $this->page);
+			} else {
+				// Tier 1: wrap Do as Artifact.
+				$this->writer->write('/Artifact <</Type /Layout>> BDC');
+			}
+		} else {
+			$pdfuaMerger = null;
+		}
+
 		$newSize = $this->fpdiUseImportedPage($pageId, $x, $y, $width, $height, $adjustPageSize);
+
+		if ($this->PDFUA && $pdfuaMerger !== null) {
+			$readerId = $this->importedPages[$pageId]['readerId'];
+			if ($pdfuaMerger->sourceIsTagged($readerId)) {
+				// Tier 2: nothing to close; the struct elements carry the tagging.
+				// No EMC needed because no BDC was emitted.
+			} else {
+				// Tier 1: close the Artifact sequence.
+				$this->writer->write('EMC');
+				$pdfuaMerger->addUntaggedWarning(
+					'Imported PDF page treated as untagged and wrapped as /Artifact <</Type /Layout>> — '
+					. 'content is not tagged with a struct element. '
+					. 'Matterhorn 01-007: use a workflow that preserves struct tagging to avoid this warning.'
+				);
+
+				// Flush accumulated warnings into UaState so they appear in getPdfUaWarnings().
+				foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
+					$this->ua->addWarning($w);
+				}
+			}
+		}
 
 		$this->setImportedPageLinks($pageId, $x, $y, $newSize);
 
@@ -296,8 +368,26 @@ trait FpdiTrait
 
 		foreach ($this->importedPages as $key => $pageData) {
 			$this->writer->object();
-			$this->importedPages[$key]['objectNumber'] = $this->n;
+			$foXObjectObjNum                           = $this->n;
+			$this->importedPages[$key]['objectNumber'] = $foXObjectObjNum;
 			$this->currentReaderId = $pageData['readerId'];
+
+			// PDF/UA-1 Tier 2 — inject /StructParents into the Form XObject dict so
+			// the ParentTree NumTree back-reference from the Form XObject to its struct
+			// elements resolves correctly (ISO 32000-1:2008 §14.7.4.4).
+			if ($this->PDFUA) {
+				$merger         = $this->ua->getFpdiStructMerger();
+				$structParentsN = $merger->getFormXObjectStructParents($key);
+				if ($structParentsN >= 0 && $pageData['stream'] instanceof PdfStream) {
+					$pageData['stream']->value->value['StructParents'] = PdfNumeric::create($structParentsN);
+				}
+
+				// Patch MCR placeholder entries (pageRef=0, stm=0) with real object
+				// numbers now that both the Form XObject and page dicts have been
+				// written (writePages runs before writeImportedPagesAndResolvedObjects).
+				$merger->patchMergedSubtreeObjectNumbers($key, $foXObjectObjNum);
+			}
+
 			$this->writePdfType($pageData['stream']);
 			$this->_put('endobj');
 		}

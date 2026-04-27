@@ -419,6 +419,18 @@ class Img extends Tag
 			// printobjectbuffer() can emit the correct BDC/BMC wrap around the Do operator.
 			$objattr['pdfua_alt'] = $alt;
 
+			// PDF/UA-1 ARIA — carry the HTML id and aria-* attributes through to the
+			// render-time struct-element creation in printobjectbuffer(), where
+			// AriaIdResolver::registerId() and ::queue() are called against the
+			// freshly-created Figure struct element.
+			$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
+				}
+			}
+
 			$e = Mpdf::OBJECT_IDENTIFIER . "type=image,objattr=" . serialize($objattr) . Mpdf::OBJECT_IDENTIFIER;
 
 			/* -- TABLES -- */

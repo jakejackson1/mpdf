@@ -354,6 +354,66 @@ class StructureTree
 		return $idx;
 	}
 
+	/**
+	 * Reserve the next /StructParent integer without registering a struct element.
+	 *
+	 * Used by MetadataWriter before widget annotation dicts are written, so that
+	 * form widget dicts can include /StructParent N before their corresponding
+	 * Form struct elements exist. StructureWriter::writeStructTree() completes
+	 * the registration by calling registerAnnotStructParent() for each widget.
+	 *
+	 * ISO 32000-1 §14.7.4.4 — /StructParent on annotation dicts (singular).
+	 *
+	 * @return int  the reserved /StructParent integer
+	 */
+	public function reserveAnnotStructParent()
+	{
+		return $this->annotParentCounter++;
+	}
+
+	/**
+	 * Register a struct element for a previously reserved /StructParent integer.
+	 *
+	 * Called by StructureWriter::writeStructTree() after Form struct elements
+	 * are constructed, to complete the ParentTree registration that
+	 * reserveAnnotStructParent() deferred.
+	 *
+	 * @param  int              $idx   the /StructParent integer previously reserved
+	 * @param  StructureElement $elem  the struct element that owns this annotation
+	 * @return void
+	 */
+	public function registerAnnotStructParent($idx, StructureElement $elem)
+	{
+		$this->annotParentTree[$idx] = $elem;
+	}
+
+	// ================== FPDI tagged-import registration ==================
+
+	/**
+	 * Register a struct element for a specific MCR key that was cloned from an
+	 * imported tagged PDF (Tier 2 FPDI merge).
+	 *
+	 * Unlike addContent() / addContentForElement(), this method does NOT allocate
+	 * a new MCID — the MCID comes directly from the source PDF and must be
+	 * preserved so that the Form XObject's content stream MCIDs match the
+	 * ParentTree back-map. Callers are responsible for ensuring that the MCID
+	 * does not collide with other MCIDs registered under the same $structParents key.
+	 *
+	 * Called only by FpdiStructMerger::registerMcrInParentTree().
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 — ParentTree entry for a /StructParents key must
+	 * be a dense array indexed by MCID pointing to the owning struct element.
+	 *
+	 * @param  int              $structParents  /StructParents integer of the Form XObject
+	 * @param  int              $mcid           MCID from the source content stream
+	 * @param  StructureElement $elem           cloned host struct element owning this MCR
+	 * @return void
+	 */
+	public function registerImportedMcr($structParents, $mcid, StructureElement $elem)
+	{
+		$this->parentTree[$structParents][$mcid] = $elem;
+	}
+
 	// ================== internals ==================
 
 	/**

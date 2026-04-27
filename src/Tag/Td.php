@@ -406,6 +406,46 @@ class Td extends Tag
 		unset($c);
 		$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['s'] = 0;
 
+		// PDF/UA-1 Phase 4 — push a TD struct element and store a reference on the
+		// cell dict so that _tableWrite() can attach an MCID to it at render time.
+		//
+		// The struct element is pushed here (parse time) as a child of the current
+		// TR on the struct stack. At render time (_tableWrite()), the struct tree
+		// stack no longer has this element; addContentForElement() attaches the MCID
+		// directly to the stored reference.
+		//
+		// /Headers attribute: if the HTML headers="" attribute is present, attach it
+		// as a /Table attribute object on the TD struct element so AT can resolve
+		// complex header associations (Matterhorn 09-004/09-005).
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		// ISO 14289-1:2014 §7.5 — table header associations (Matterhorn 09-004/005).
+		if ($this->mpdf->PDFUA) {
+			$tdAttrs = [];
+			if (!empty($attr['HEADERS'])) {
+				// Build /Headers array: space-separated HTML id values → name objects.
+				$ids = preg_split('/\s+/', trim($attr['HEADERS']), -1, PREG_SPLIT_NO_EMPTY);
+				if (!empty($ids)) {
+					$tdAttrs['Headers'] = $ids;
+				}
+			}
+			$this->ua->getStructureTree()->open('TD', $tdAttrs);
+			$tdElem = $this->ua->getStructureTree()->getCurrent();
+			$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem'] = $tdElem;
+
+			// ARIA: register HTML id and queue aria-* cross-references.
+			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
+			if (!empty($attr['ID'])) {
+				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $tdElem);
+			}
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($tdElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
+		}
+
 		$cs = $rs = 1;
 		if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
 			$cs = $this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['colspan'] = $attr['COLSPAN'];
@@ -437,6 +477,16 @@ class Td extends Tag
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// PDF/UA-1 Phase 4 — pop the TD struct element from the struct tree.
+		// The element was pushed in open(). This keeps the parse-time struct stack
+		// balanced; at render time, _tableWrite() uses the stored pdfua_struct_elem
+		// reference to emit the BDC/EMC pair via addContentForElement().
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->close();
+		}
+
 		if ($this->mpdf->tableLevel) {
 			$this->mpdf->lastoptionaltag = 'TR';
 			unset($this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl]);

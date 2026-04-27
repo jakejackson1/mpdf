@@ -40,6 +40,19 @@ class Abbr extends InlineTag
 				$structAttrs['Lang'] = $attr['LANG'];
 			}
 			$this->ua->getStructureTree()->open('Span', $structAttrs);
+
+			// ARIA: register HTML id and queue aria-* cross-references.
+			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
+			$spanElem = $this->ua->getStructureTree()->getCurrent();
+			if (!empty($attr['ID'])) {
+				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $spanElem);
+			}
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($spanElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
 		}
 	}
 

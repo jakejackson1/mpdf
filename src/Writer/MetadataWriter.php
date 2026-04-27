@@ -651,6 +651,24 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						}
 
 						$this->writer->object();
+						$annotObjNum = $this->mpdf->n;
+
+						// PDF/UA-1 §7.18 — all annotations (except hidden, outside CropBox,
+						// or Popup subtype) must appear in the structure tree in reading order.
+						// This includes /FileAttachment annotations: when allowAnnotationFiles
+						// is true the annotation is written as a real PDF object and must also
+						// be tagged. Create a Note struct element as a child of the Document
+						// root, wire it to this annotation via an OBJR dict, and record the
+						// /StructParent integer for the annotation dict.
+						$noteStructElem = null;
+						$noteStructParent = null;
+						if ($this->mpdf->PDFUA) {
+							$this->ua->getStructureTree()->open('Note', []);
+							$noteStructElem = $this->ua->getStructureTree()->getCurrent();
+							$this->ua->getStructureTree()->close();
+							$noteStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($noteStructElem);
+							$noteStructElem->addObjref($noteStructParent, $annotObjNum);
+						}
 
 						$annot = '';
 						$pl['opt'] = array_change_key_case($pl['opt'], CASE_LOWER);
@@ -709,7 +727,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						$annot .= ' /CreationDate ' . $this->writer->string('D:' . date('YmdHis'));
 						$annot .= ' /Border [0 0 0]';
 
-						if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+						if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
 							$annot .= ' /F 28';
 							$annot .= ' /CA 1';
 						} elseif ($pl['opt']['ca'] > 0) {
@@ -768,6 +786,14 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						}
 
 						$annot .= ' /P ' . $pl['pageobj'] . ' 0 R';
+
+						// PDF/UA-1 — /StructParent associates this annotation with
+						// the Note struct element in the structure tree (singular key,
+						// not the array-indexed /StructParents used on page dicts).
+						if ($noteStructParent !== null) {
+							$annot .= ' /StructParent ' . $noteStructParent;
+						}
+
 						$annot .= '>>';
 						$this->writer->write($annot);
 						$this->writer->write('endobj');
@@ -827,7 +853,42 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 				// Active Forms
 				if (count($this->form->forms) > 0) {
+					// PDF/UA-1 — pre-assign /StructParent integers for widget annotations
+					// on this page before _putFormItems() writes their dicts. The
+					// annotParentCounter is shared with sticky-note Note struct elements
+					// (allocated above) ensuring unique integers across all OBJR-keyed
+					// ParentTree entries.
+					if ($this->mpdf->PDFUA) {
+						foreach ($this->form->forms as $ref => $frm) {
+							if (isset($frm['page']) && $frm['page'] == $n) {
+								$this->form->forms[$ref]['structParent']
+									= $this->ua->getStructureTree()->reserveAnnotStructParent();
+							}
+						}
+					}
+
 					$this->form->_putFormItems($n, $hPt);
+
+					// PDF/UA-1 — after _putFormItems() has captured each widget's PDF
+					// object number into forms[$ref]['obj'], create a Form struct element
+					// as a child of the Document root and register it in the ParentTree.
+					// This must happen before StructureWriter::writeStructTree() runs.
+					if ($this->mpdf->PDFUA) {
+						foreach ($this->form->forms as $ref => $frm) {
+							if (isset($frm['page'], $frm['structParent'], $frm['obj'])
+								&& $frm['page'] == $n
+							) {
+								$this->ua->getStructureTree()->open('Form', []);
+								$formElem = $this->ua->getStructureTree()->getCurrent();
+								$this->ua->getStructureTree()->close();
+								$formElem->addObjref($frm['structParent'], $frm['obj']);
+								$this->ua->getStructureTree()->registerAnnotStructParent(
+									$frm['structParent'],
+									$formElem
+								);
+							}
+						}
+					}
 				}
 			}
 		}

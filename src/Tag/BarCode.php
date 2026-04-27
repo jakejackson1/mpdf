@@ -243,6 +243,21 @@ class BarCode extends Tag
 			$objattr['barcode_height'] = $h;
 			$objattr['barcode_width'] = $w;
 
+			// PDF/UA-1 Phase 4 — capture HTML id and aria-* attributes into $objattr so
+			// the render-time code in Mpdf.php can wire registerId() and queue() on the
+			// Figure struct element that wraps the barcode content stream operators.
+			// Barcodes open their struct element at render time (not parse time), so
+			// ARIA data must travel through the serialised $objattr payload.
+			if ($this->mpdf->PDFUA) {
+				$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+					'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+					if (!empty($attr[$ariaKey])) {
+						$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
+					}
+				}
+			}
+
 			/* -- CSS-IMAGE-FLOAT -- */
 			if (!$this->mpdf->ColActive && !$this->mpdf->tableLevel && !$this->mpdf->listlvl && !$this->mpdf->kwt) {
 				if (isset($properties['FLOAT']) && (strtoupper($properties['FLOAT']) === 'RIGHT' || strtoupper($properties['FLOAT']) === 'LEFT')) {

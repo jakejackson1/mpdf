@@ -282,19 +282,33 @@ class StructureWriter
 
 		// MCR entries (marked content references).
 		// ISO 32000-1 §14.7.4.4 Table 324 — MCR dict.
-		// Single-page single-MCID: bare integer is allowed and preferred.
-		// Multi-page or multi-MCID: MCR dicts.
+		// Single-page single-MCID with no /Stm: bare integer is allowed and preferred.
+		// Multi-page, multi-MCID, or /Stm references require full MCR dicts.
 		$pageRefs = $this->buildPageRefMap();
-		if (count($mcids) === 1 && empty($objrefs) && empty($elem->getChildren())) {
-			// Single MCR on one page with no other kids: bare integer is valid.
-			// ISO 32000-1 §14.7.4.4 — bare integer /K means a simple content item on
-			// the same page as the struct element (single-page case).
+		$singleSimpleMcid = (
+			count($mcids) === 1
+			&& empty($objrefs)
+			&& empty($elem->getChildren())
+			&& isset($mcids[0]['stm'])
+			&& $mcids[0]['stm'] === 0
+		);
+		if ($singleSimpleMcid) {
+			// Single MCR on one page with no other kids and no Form XObject stream:
+			// bare integer is valid (ISO 32000-1 §14.7.4.4 — simple content item).
 			$kParts[] = (string) $mcids[0]['mcid'];
 		} else {
 			foreach ($mcids as $mcr) {
 				$pageObjNum = isset($pageRefs[$mcr['page']]) ? $pageRefs[$mcr['page']] : 0;
+				$stm = isset($mcr['stm']) ? (int) $mcr['stm'] : 0;
 				if ($pageObjNum > 0) {
-					$kParts[] = '<</Type /MCR /Pg ' . $pageObjNum . ' 0 R /MCID ' . $mcr['mcid'] . '>>';
+					if ($stm > 0) {
+						// ISO 32000-1 §14.7.4.4 Table 324 — /Stm is the Form XObject
+						// whose content stream contains the marked content; required
+						// when the BDC is inside a Form XObject, not the page stream.
+						$kParts[] = '<</Type /MCR /Pg ' . $pageObjNum . ' 0 R /Stm ' . $stm . ' 0 R /MCID ' . $mcr['mcid'] . '>>';
+					} else {
+						$kParts[] = '<</Type /MCR /Pg ' . $pageObjNum . ' 0 R /MCID ' . $mcr['mcid'] . '>>';
+					}
 				} else {
 					// Fallback: bare integer when page ref is unavailable.
 					$kParts[] = (string) $mcr['mcid'];
@@ -341,6 +355,15 @@ class StructureWriter
 			if ($key === 'BBox' && is_array($value)) {
 				// BBox is an array of four numbers in user space.
 				$parts[] = '/' . $key . ' [' . implode(' ', $value) . ']';
+			} elseif ($key === 'Headers' && is_array($value)) {
+				// /Headers is an array of name objects referencing TH struct element IDs.
+				// ISO 32000-1 Table 349 — /Headers [/id1 /id2 ...] (array of names).
+				// Matterhorn 09-004/09-005 — associates TD cells with their TH headers.
+				$nameList = [];
+				foreach ($value as $id) {
+					$nameList[] = '/' . $id;
+				}
+				$parts[] = '/' . $key . ' [' . implode(' ', $nameList) . ']';
 			} elseif (is_int($value) || is_float($value)) {
 				$parts[] = '/' . $key . ' ' . $value;
 			} else {

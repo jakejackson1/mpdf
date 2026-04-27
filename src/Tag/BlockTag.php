@@ -999,7 +999,7 @@ abstract class BlockTag extends Tag
 					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
 				}
 				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-				          'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+						  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
 					if (!empty($attr[$k])) {
 						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
 					}

@@ -149,6 +149,9 @@ final class PageWriter
 
 			// Page
 			$this->writer->object();
+			// ISO 32000-1:2008 §14.7.4.4 — StructureWriter::buildPageRefMap() looks up
+			// $mpdf->pageDim[$n]['n'] to resolve /Pg object numbers for MCR dicts.
+			$this->mpdf->pageDim[$n]['n'] = $this->mpdf->n;
 			$this->writer->write('<</Type /Page');
 			$this->writer->write('/Parent 1 0 R');
 

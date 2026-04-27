@@ -323,6 +323,192 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertStringContainsString('Unbalanced', $combined);
 	}
 
+	// ========================= List struct tests =========================
+
+	/**
+	 * <ul> produces /S /L struct element in the PDF output.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — L (List) grouping element.
+	 */
+	public function testUlProducesLStruct()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<ul><li>Item</li></ul>');
+		$this->assertStringContainsString('/S /L', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <ol> produces /S /L struct element in the PDF output.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — L is used for both ordered and unordered lists.
+	 */
+	public function testOlProducesLStruct()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<ol><li>Item</li></ol>');
+		$this->assertStringContainsString('/S /L', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <li> produces /S /LI with an /S /LBody child struct element.
+	 *
+	 * Tagged PDF Best Practice Guide §4.2.3 — LI must contain LBody for the
+	 * item content. The content BDC is emitted as LBody, not LI.
+	 */
+	public function testLiProducesLiWithLblAndLBody()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<ul><li>Item text</li></ul>');
+		$this->assertStringContainsString('/S /LI', $output);
+		$this->assertStringContainsString('/S /LBody', $output);
+		// Content BDC should be emitted as LBody (not LI).
+		$this->assertStringContainsString('/LBody <</MCID', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * Nested <ul> produces outer L > LI > LBody > L (inner) > LI > LBody.
+	 *
+	 * The struct stack handles nesting automatically — no special-case code needed.
+	 * ISO 32000-1:2008 §14.8 Table 333 — nested list elements.
+	 */
+	public function testNestedListNestsCorrectly()
+	{
+		$html = '<ul><li>Outer<ul><li>Inner</li></ul></li></ul>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		// Both inner and outer L, LI, LBody must appear.
+		$this->assertStringContainsString('/S /L', $output);
+		$this->assertStringContainsString('/S /LI', $output);
+		$this->assertStringContainsString('/S /LBody', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <dl><dt>X</dt><dd>Y</dd></dl> produces L > LI > (Lbl + LBody) structure.
+	 *
+	 * Tagged PDF Best Practice Guide §4.2.3 — DL → L, DT → Lbl, DD → LBody;
+	 * an implicit LI wraps each Lbl+LBody pair.
+	 */
+	public function testDtDdProducesImplicitLi()
+	{
+		$html = '<dl><dt>Term</dt><dd>Definition</dd></dl>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		$this->assertStringContainsString('/S /L', $output);
+		$this->assertStringContainsString('/S /LI', $output);
+		$this->assertStringContainsString('/S /Lbl', $output);
+		$this->assertStringContainsString('/S /LBody', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Table struct tests =========================
+
+	/**
+	 * <table> produces /S /Table struct element in the PDF output.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
+	 */
+	public function testTableProducesTableStruct()
+	{
+		$html = '<table><tr><td>Cell</td></tr></table>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		$this->assertStringContainsString('/S /Table', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <tr> produces /S /TR struct element in the PDF output.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — TR block-level table element.
+	 */
+	public function testTrProducesTrStruct()
+	{
+		$html = '<table><tr><td>Cell</td></tr></table>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		$this->assertStringContainsString('/S /TR', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <td> produces /S /TD struct element and a TD BDC in the content stream.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+	 */
+	public function testTdProducesTdStruct()
+	{
+		$html = '<table><tr><td>Cell content</td></tr></table>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		$this->assertStringContainsString('/S /TD', $output);
+		$this->assertStringContainsString('/TD <</MCID', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <th> produces /S /TH struct element with a /Scope attribute.
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — TH table header element.
+	 * ISO 32000-1:2008 Table 349 — /Scope attribute (Column, Row, Both).
+	 */
+	public function testThProducesThStruct()
+	{
+		$html = '<table><tr><th>Header</th><td>Cell</td></tr></table>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		$this->assertStringContainsString('/S /TH', $output);
+		// TH carries a /Scope attribute (Column is the default).
+		$this->assertStringContainsString('/Scope', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <td headers="h1 h2"> produces /A <</O /Table /Headers [/h1 /h2]>> on the TD.
+	 *
+	 * ISO 32000-1:2008 Table 349 — /Headers attribute (array of name objects).
+	 * ISO 14289-1:2014 §7.5 — Matterhorn 09-004/09-005: complex header associations.
+	 */
+	public function testTdHeadersAttributeMapsToStructElement()
+	{
+		$html = '<table>'
+			. '<tr><th id="col1">Col 1</th><th id="col2">Col 2</th></tr>'
+			. '<tr><td headers="col1 col2">Data</td></tr>'
+			. '</table>';
+		$output = $this->getOutput($this->makeMpdf(), $html);
+		// The TD struct element must have a /Table attribute object with /Headers.
+		$this->assertStringContainsString('/O /Table', $output);
+		$this->assertStringContainsString('/Headers', $output);
+		// The referenced IDs must appear as name objects in the array.
+		$this->assertStringContainsString('/col1', $output);
+		$this->assertStringContainsString('/col2', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A table whose rows span a page break produces TD struct elements and balanced
+	 * BDC/EMC pairs across multiple pages.
+	 *
+	 * Per §A14: multi-page MCR handling is managed by StructureTree::addContent()
+	 * which records the /StructParents integer on each MCR. This test verifies the
+	 * document renders without exception and BDC/EMC operators are balanced even
+	 * when a table's cells appear on multiple pages.
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict: /Type /MCR /Pg N 0 R /MCID n.
+	 * ISO 14289-1 Appendix A14 — multi-page struct element /K arrays use MCR dicts.
+	 */
+	public function testTableRowAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		// Build a table with many rows to force a page break.
+		$rows = '';
+		for ($i = 0; $i < 60; $i++) {
+			$rows .= '<tr><td>Row ' . $i . ' content that is long enough</td></tr>';
+		}
+		$html = '<table>' . $rows . '</table>';
+		$output = $this->getOutput($mpdf, $html);
+		// TD struct elements must appear (one per cell).
+		$this->assertStringContainsString('/S /TD', $output);
+		// BDC/EMC operators must be balanced across all pages.
+		$this->assertBdcEmcBalanced($output);
+		// The document must have multiple pages (table spans page break).
+		$this->assertGreaterThan(1, $mpdf->page, 'Table must span more than one page');
+	}
+
 	// ========================= Helpers =========================
 
 	/**

@@ -115,7 +115,10 @@ class Form
 		$this->formSelectDefaultOption = true; // for Select drop down box; if no option is explicitly maked as selected,
 		// this determines whether to select 1st option (as per browser)
 		// - affects whether "required" attribute is relevant
-		$this->formUseZapD = true;  // Determine whether to use ZapfDingbat icons for radio/checkboxes
+		// PDF/UA-1, PDF/A, and PDF/X all require all fonts to be embedded. ZapfDingbats
+		// is a core font that cannot be embedded, so it must not be used in any of these
+		// modes. Disable it here — radio/checkbox appearance streams will use drawn paths.
+		$this->formUseZapD = !($mpdf->PDFUA || $mpdf->PDFA || $mpdf->PDFX);  // Determine whether to use ZapfDingbat icons for radio/checkboxes
 		// FORM STYLES
 		// These can alternatively use a 4 number string to represent CMYK colours
 		$this->form_border_color = '0.6 0.6 0.72';   // RGB
@@ -1437,6 +1440,11 @@ class Form
 
 		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
 
+		// PDF/UA-1 — associate this button/checkbox widget annotation with its Form struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
+		}
+
 		if (isset($this->form_button_icon[$form['T']])) {
 			$form['BS_W'] = 0;
 		}
@@ -1752,6 +1760,11 @@ f Q ';
 			$put_js = 1;
 		}
 
+		// PDF/UA-1 — associate this choice widget annotation with its Form struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
+		}
+
 		$this->writer->write('>>');
 		$this->writer->write('endobj');
 
@@ -1803,6 +1816,13 @@ f Q ';
 
 		$this->writer->write('/T ' . $this->writer->string($form['T']));
 		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
+
+		// PDF/UA-1 — associate this widget annotation with its Form struct element.
+		// /StructParent (singular) indexes the ParentTree to the owning struct element.
+		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
+			$this->writer->write('/StructParent ' . $form['structParent']);
+		}
+
 		if ($form['V'] || $form['V'] === '0') {
 			$this->writer->write('/V ' . $this->writer->string($form['V']));
 		}

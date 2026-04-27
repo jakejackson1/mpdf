@@ -81,9 +81,14 @@ class StructureElementsTest extends PdfUaTestCase
 	public function testLangAttributeProducesLangOnStructElement()
 	{
 		$output = $this->getOutput($this->makeMpdf(), '<p lang="fr">Bonjour</p>');
-		// The struct element dict should carry /Lang (fr)
+		// StructureWriter writes /Lang values as UTF-16BE PDF strings with the BOM (\xfe\xff).
+		// The catalog carries /Lang (en-GB) from makeMpdf()'s mode argument. Asserting the
+		// UTF-16BE bytes for "fr" proves the P struct element (not just the catalog) carries
+		// the French language tag. Note: asserting bare 'fr' is insufficient — it also matches
+		// 'beginbfrange'/'endbfrange' in the font CMap section of the PDF output.
 		$this->assertStringContainsString('/Lang', $output);
-		$this->assertStringContainsString('fr', $output);
+		$utf16BeFr = "\xfe\xff\x00f\x00r"; // UTF-16BE for "fr"
+		$this->assertStringContainsString($utf16BeFr, $output);
 	}
 
 	// ========================= Lists =========================
@@ -186,12 +191,15 @@ class StructureElementsTest extends PdfUaTestCase
 	// ========================= SetProtection =========================
 
 	/**
-	 * SetProtection() with no permissions forces 'extract' permission in PDFUA mode.
+	 * SetProtection() with no permissions force-adds 'extract' in PDFUAauto mode.
 	 * The resulting /P value in the encryption dict must have bit 10 set.
+	 *
+	 * In PDFUAauto=true mode the violation is auto-corrected (extract added silently).
+	 * Strict mode (PDFUAauto=false) throws — tested in DirectPhpAndAriaTest.
 	 */
 	public function testEncryptionForcesExtractPermission()
 	{
-		$mpdf = $this->makeMpdf();
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$mpdf->SetProtection([], '', 'owner_pass');
 		$mpdf->WriteHTML('<p>Encrypted</p>');
 		$output = $mpdf->Output(null, 'S');
@@ -206,8 +214,10 @@ class StructureElementsTest extends PdfUaTestCase
 			// In PDF, /P is typically a large unsigned 32-bit integer on 64-bit PHP.
 			// Cast to unsigned 32-bit before testing the bit.
 			$pValue32 = $pValue & 0xFFFFFFFF;
-			$this->assertTrue(($pValue32 & 0x200) !== 0,
-				'Extract permission bit (bit 10) must be set. /P = ' . $pValue);
+			$this->assertTrue(
+				($pValue32 & 0x200) !== 0,
+				'Extract permission bit (bit 10) must be set. /P = ' . $pValue
+			);
 		}
 		// Also check the XMP metadata is readable (pdfuaid:part must be plaintext)
 		$this->assertStringContainsString('pdfuaid:part', $output);
@@ -239,8 +249,8 @@ class StructureElementsTest extends PdfUaTestCase
 	{
 		$mpdf = $this->makeMpdf();
 		$mpdf->AddPage();
-		// Use the bundled no-image PNG as a test fixture
-		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		// Use the bundled test fixture image
+		$imgFile = __DIR__ . '/../../data/img/bayeux2.jpg';
 		if (!file_exists($imgFile)) {
 			$this->markTestSkipped('Test image not available');
 		}
@@ -258,7 +268,7 @@ class StructureElementsTest extends PdfUaTestCase
 	{
 		$mpdf = $this->makeMpdf();
 		$mpdf->AddPage();
-		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		$imgFile = __DIR__ . '/../../data/img/bayeux2.jpg';
 		if (!file_exists($imgFile)) {
 			$this->markTestSkipped('Test image not available');
 		}
@@ -275,13 +285,13 @@ class StructureElementsTest extends PdfUaTestCase
 	{
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$mpdf->AddPage();
-		$imgFile = __DIR__ . '/../../../data/images/logoMpdf2.jpg';
+		$imgFile = __DIR__ . '/../../data/img/bayeux2.jpg';
 		if (!file_exists($imgFile)) {
 			$this->markTestSkipped('Test image not available');
 		}
 		$mpdf->Image($imgFile, 10, 10, 50, 50);
 		$output = $mpdf->Output(null, 'S');
-		$warnings = $mpdf->ua->getWarnings();
+		$warnings = $mpdf->getPdfUaWarnings();
 		$this->assertNotEmpty($warnings, 'Warning should be added when $alt is null');
 		$this->assertStringContainsString('/Artifact BMC', $output);
 		$this->assertBdcEmcBalanced($output);

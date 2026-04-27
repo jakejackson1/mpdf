@@ -32,11 +32,13 @@ class StructureElement
 	protected $children;
 
 	/**
-	 * @var array<int, array{page:int, mcid:int, pageRef:int}>
+	 * @var array<int, array{page:int, mcid:int, pageRef:int, stm:int}>
 	 *   Marked content references owned by this element. `page` is the
 	 *   /StructParents integer; `mcid` is the BDC operator's /MCID; `pageRef`
 	 *   is the PDF object number of the page (filled at write time by
-	 *   StructureWriter looking up $mpdf->offsets).
+	 *   StructureWriter looking up $mpdf->offsets); `stm` is the PDF object
+	 *   number of the Form XObject stream containing the marked content (0 when
+	 *   the content is directly on the page — ISO 32000-1:2008 §14.7.4.4 Table 324).
 	 */
 	protected $mcids;
 
@@ -118,7 +120,7 @@ class StructureElement
 		return $this->children;
 	}
 
-	/** @return array<int, array{page:int, mcid:int, pageRef:int}> MCR entries owned by this element. */
+	/** @return array<int, array{page:int, mcid:int, pageRef:int, stm:int}> MCR entries owned by this element. */
 	public function getMcids()
 	{
 		return $this->mcids;
@@ -204,14 +206,45 @@ class StructureElement
 	 * entries; StructureWriter emits them as a /K array of MCR dicts per
 	 * ISO 32000-1 §14.7.4.4 Table 324.
 	 *
+	 * When $stm is non-zero the MCR dict must also include a /Stm entry
+	 * (ISO 32000-1 §14.7.4.4 Table 324) pointing to the Form XObject that
+	 * contains the marked content — used for FPDI Tier 2 tagged-source merges.
+	 *
 	 * @param  int $page     /StructParents integer of the host page or Form XObject
 	 * @param  int $mcid     MCID integer embedded in the BDC operator's property dict
-	 * @param  int $pageRef  PDF object number of the host page; filled by StructureWriter
+	 * @param  int $pageRef  PDF object number of the host page; 0 before write
+	 * @param  int $stm      PDF object number of the Form XObject stream; 0 for direct page content
 	 * @return void
 	 */
-	public function addMcid($page, $mcid, $pageRef = 0)
+	public function addMcid($page, $mcid, $pageRef = 0, $stm = 0)
 	{
-		$this->mcids[] = ['page' => $page, 'mcid' => $mcid, 'pageRef' => $pageRef];
+		$this->mcids[] = ['page' => $page, 'mcid' => $mcid, 'pageRef' => $pageRef, 'stm' => $stm];
+	}
+
+	/**
+	 * Patch the pageRef and stm of an existing MCR entry by its array index.
+	 *
+	 * Called by FpdiStructMerger::patchMergedSubtreeObjectNumbers() after
+	 * writePages() and writeImportedPagesAndResolvedObjects() have allocated
+	 * the real PDF object numbers. At render time both values are 0 (unknown);
+	 * this method writes back the resolved values so StructureWriter emits
+	 * correct /MCR dicts with /Pg and /Stm.
+	 *
+	 * Only MCR slots that still carry both pageRef=0 and stm=0 are patched by
+	 * the merger — MCRs added via the normal HTML tagging path may also have
+	 * pageRef=0 at first but are never passed to this method.
+	 *
+	 * @param  int $idx      zero-based index into the $mcids array
+	 * @param  int $pageRef  real PDF object number of the host page dict
+	 * @param  int $stm      real PDF object number of the Form XObject stream
+	 * @return void
+	 */
+	public function patchMcr($idx, $pageRef, $stm)
+	{
+		if (isset($this->mcids[$idx])) {
+			$this->mcids[$idx]['pageRef'] = $pageRef;
+			$this->mcids[$idx]['stm']     = $stm;
+		}
 	}
 
 	/**

@@ -93,6 +93,10 @@ class AriaIdResolver
 	 */
 	public function registerId($id, StructureElement $elem)
 	{
+		// Normalize to lowercase for case-insensitive matching.
+		// mPDF's HTML parser uppercases the value of the id= attribute (Mpdf.php ~line 14204)
+		// but does NOT uppercase aria-* target values, so both sides must normalize.
+		$id = strtolower((string) $id);
 		if ($id !== '' && !isset($this->idMap[$id])) {
 			$this->idMap[$id] = $elem;
 		}
@@ -113,9 +117,12 @@ class AriaIdResolver
 	 */
 	public function queue(StructureElement $elem, $ariaAttrName, $targetIds)
 	{
+		// Normalize IDs to lowercase to match registerId() normalization.
+		// Both mPDF-uppercased ID values (from HTML id= attributes, Mpdf.php ~line 14204)
+		// and mixed-case aria-* target values resolve to the same key.
 		foreach (preg_split('/\s+/', trim((string) $targetIds)) as $id) {
 			if ($id !== '') {
-				$this->pending[] = [$elem, $ariaAttrName, $id];
+				$this->pending[] = [$elem, $ariaAttrName, strtolower($id)];
 			}
 		}
 	}
