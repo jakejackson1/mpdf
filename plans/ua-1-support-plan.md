@@ -3118,19 +3118,31 @@ PDF spec permission bit 10 is the "content copying for accessibility" flag, whic
 
 If a user calls `SetProtection([])` (no permissions) with PDFUA enabled, bit 10 would be cleared, blocking screen readers — a hard PDF/UA violation.
 
-**Fix**: In `SetProtection()` in `Mpdf.php` (~line 23375), force-add `'extract'` to the permissions array when PDFUA is active:
+**Fix**: In `SetProtection()` in `Mpdf.php`, enforce the accessibility permission bit with PDFUAauto-aware behaviour:
 
 ```php
 function SetProtection($permissions = [], $user_pass = '', $owner_pass = null, $length = 40)
 {
     if ($this->PDFUA && !in_array('extract', $permissions)) {
-        $permissions[] = 'extract';
+        if ($this->PDFUAauto) {
+            // Auto mode: warn and force-add the missing permission.
+            $this->ua->addWarning('SetProtection() called without the \'extract\' permission. '
+                . 'PDF/UA-1 (Matterhorn 07-001) requires the content-copying-for-accessibility '
+                . 'permission bit to be set. The \'extract\' permission has been force-added.');
+            $permissions[] = 'extract';
+        } else {
+            // Strict mode: violation is unrecoverable — throw immediately.
+            throw new \Mpdf\MpdfException('SetProtection() without \'extract\' permission is not '
+                . 'permitted in PDF/UA-1 mode (Matterhorn 07-001). Assistive technology must be '
+                . 'able to read document content. Add \'extract\' to the permissions array, or '
+                . 'enable PDFUAauto to auto-correct.');
+        }
     }
     $this->encrypted = $this->protection->setProtection($permissions, $user_pass, $owner_pass, $length);
 }
 ```
 
-This is silent (no exception or warning) — it is the correct conforming behaviour, not user error correction.
+In strict mode (`PDFUAauto=false`) an `MpdfException` is thrown immediately — the violation is unrecoverable and no PDF is produced. In auto mode (`PDFUAauto=true`) the missing bit is silently force-added and a diagnostic is recorded via `UaState::addWarning()` so callers can inspect it with `$mpdf->getPdfUaWarnings()`.
 
 #### Constraint 2 — XMP metadata stream must NOT be encrypted (PDF spec §14.3.2)
 
@@ -4087,6 +4099,7 @@ CI must install veraPDF before merging the final PDF/UA-1 phase — the `@group 
 ```bash
 composer test                              # full suite green
 vendor/bin/phpunit --group=snapshot        # snapshot suite must stay green
+vendor/bin/phpunit --group=verapdf         # veraPDF conformance: see tests/Mpdf/Ua/VeraPdfConformanceTest.php
 ```
 
 ---
@@ -4227,7 +4240,7 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 - **`$this->headerbuffer` resets before each header render**: `_puthtmlheaders()` renders each header (odd/even/first, header/footer) in a separate `WriteHTML()` call. Verify that `$this->headerbuffer` is reset to `''` at the start of each header render block before calling `WriteHTML()`. If it accumulates across iterations, the BDC/EMC wrapping at §3d would enclose stale content from previous pages inside the current header's artifact block. Check the existing `_puthtmlheaders()` flow — `headerbuffer` should already reset; confirm in code before Phase 3d is marked complete.
 - **`/StructParents N` integer allocation contract** (consolidated): Page dicts receive `/StructParents N` integers assigned sequentially by `PageWriter::writePages()`. The counter is `$this->ua->getStructParentsCounter()` (incremented by `nextStructParents()`). Annotation pre-assignment in the same function uses `StructureTree::$annotParentCounter` (via `nextAnnotStructParent()`). Form XObject `/StructParents` (SVG, FPDI tagged pages) uses `nextStructParents()` from the same counter. `StructureWriter::writeStructTree()` emits `/ParentTreeNextKey` = `$this->ua->getStructParentsCounter()` (its value after all pages are processed equals one more than the highest key used). The `ParentTree` NumTree has one entry per integer: pages → dense array of struct elem refs ordered by MCID; annotations/XObjects → single struct elem ref.
 - **Long-term target architecture**: The current design has `MarkedContentHelper` centralizing BDC/EMC emission with routing through `$this->writer->write()`. Any new buffer context (e.g., a new "sticky layout" buffer) requires only that `BaseWriter::write()` knows about it — no per-injection-site changes. New code must always route through `markedContentHelper->begin()`/`->end()`, never write BDC/EMC directly to buffers (except in column sentinel expansion inside `printcolumnbuffer()`, which is a special deferred-emission path).
-- **Encryption: PDF/UA allows it; PDF/A and PDF/X do not**: Do NOT extend the `if (($this->PDFA || $this->PDFX) && $this->encrypted)` exception guard to include PDFUA. Two changes are required when PDFUA + encryption coexist: (1) force-add `'extract'` (bit 10, accessibility permission) to the permissions array in `SetProtection()` silently; (2) pass `$encrypt = false` to `BaseWriter::stream()` for the XMP metadata stream — PDF spec §14.3.2 mandates XMP is NOT encrypted. All other objects (page content, struct tree dicts) are handled correctly by existing behaviour.
+- **Encryption: PDF/UA allows it; PDF/A and PDF/X do not**: Do NOT extend the `if (($this->PDFA || $this->PDFX) && $this->encrypted)` exception guard to include PDFUA. Two changes are required when PDFUA + encryption coexist: (1) enforce `'extract'` (bit 10, accessibility permission) in `SetProtection()` — in strict mode (`PDFUAauto=false`) throw `MpdfException`; in auto mode (`PDFUAauto=true`) force-add the missing bit and record a diagnostic via `UaState::addWarning()`; (2) pass `$encrypt = false` to `BaseWriter::stream()` for the XMP metadata stream — PDF spec §14.3.2 mandates XMP is NOT encrypted. All other objects (page content, struct tree dicts) are handled correctly by existing behaviour.
 - **`PDFUA` and `PDFA` can coexist** — the PDFUA XMP block is a separate `if` (not `elseif`) after the `elseif ($this->mpdf->PDFA)` block in `writeMetadata()`. PDFX and PDFA are mutually exclusive via `if/elseif`; PDFUA is independent. PDFUA does NOT need `/OutputIntents` (leave line 386 unchanged). Do not add PDFUA to the `PrintScaling` / `Duplex` / `/Subj` PDFA/PDFX exclusions — PDF/UA is based on PDF 1.7 and allows these. The `/F 28` and `/CA 1` annotation flags and the `/Metadata` catalog reference DO need PDFUA added.
 - **`_enddoc()` ordering**: `writeResources()` fires before `writeCatalog()`, so `structTreeRoot` set inside `writeStructTree()` is available when the catalog is written.
 - **Link `Contents` key**: Capture link text at `A::close()` time; store on `PageLinks` record; write in `MetadataWriter::writeAnnotations()`.
@@ -4399,7 +4412,8 @@ php -r "
 echo \$mpdf->Output('', 'S');
 " | grep -a 'pdfuaid\|MarkInfo\|DisplayDocTitle\|StructParents'
 
-# Validate with veraPDF (requires Java)
+# Validate with veraPDF (requires Java) — see tests/Mpdf/Ua/VeraPdfConformanceTest.php
+# veraPDF conformance: `vendor/bin/phpunit --group=verapdf` (set VERAPDF_BIN first)
 verapdf --flavour ua1 output.pdf
 
 # PHPStan — add any new violations to phpstan-baseline.neon

@@ -54,3 +54,57 @@ jobs:
 
       - name: "Tests"
         run: composer test
+
+  verapdf:
+
+    name: "veraPDF PDF/UA-1 conformance"
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+
+      - name: "Install PHP 8.3"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          coverage: "none"
+          php-version: "8.3"
+          extensions: "mbstring, gd, bcmath, bz2"
+          tools: composer:v2
+          ini-values: error_reporting=-1
+
+      - name: "Install dependencies"
+        run: "composer install --no-interaction --no-progress"
+
+      - name: "Install Java 17 (required by veraPDF)"
+        uses: "actions/setup-java@v4"
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: "Download and install veraPDF 1.27.1"
+        run: |
+          VERAPDF_VERSION="1.27.1"
+          VERAPDF_ZIP="verapdf-greenfield-${VERAPDF_VERSION}-installer.zip"
+          VERAPDF_URL="https://github.com/veraPDF/veraPDF-apps/releases/download/v${VERAPDF_VERSION}/${VERAPDF_ZIP}"
+          curl -fsSL -o "${VERAPDF_ZIP}" "${VERAPDF_URL}"
+          unzip -q "${VERAPDF_ZIP}"
+          # Write the IzPack automated-install descriptor to a file.
+          # The installer directory is ${HOME}/verapdf; the verapdf CLI wrapper
+          # is placed at ${HOME}/verapdf/verapdf by the IzPack installer.
+          cat > install-options.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+          <AutomatedInstallation langpack="eng">
+            <com.izforge.izpack.panels.target.TargetPanel>
+              <installpath>/home/runner/verapdf</installpath>
+            </com.izforge.izpack.panels.target.TargetPanel>
+          </AutomatedInstallation>
+          XML
+          java -jar "verapdf-greenfield-${VERAPDF_VERSION}-installer.jar" install-options.xml
+          echo "VERAPDF_BIN=/home/runner/verapdf/verapdf" >> "$GITHUB_ENV"
+
+      - name: "Run veraPDF conformance tests"
+        run: "vendor/bin/phpunit --group=verapdf"
+        env:
+          VERAPDF_BIN: ${{ env.VERAPDF_BIN }}

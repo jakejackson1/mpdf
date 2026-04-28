@@ -7585,9 +7585,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->ua->addWarning('Image is missing alt attribute; treating as decorative Artifact. Provide alt="" for decorative images or alt="description" for content images.');
 						$pdfuaImageMcid = $this->ua->getStructureTree()->addArtifact();
 					} else {
-						// Non-empty alt: open a Figure struct element with /Alt attribute.
+						// Non-empty alt: open a Figure struct element with /Alt and /BBox.
 						// ISO 32000-1 §14.7.2 Table 322 — /Alt on the StructElem dict.
-						$this->ua->getStructureTree()->open('Figure', ['Alt' => $pdfuaImageAlt]);
+						// ISO 32000-1 Table 344 / Matterhorn 13-008 — /BBox in the /Layout
+						// attribute object locates the figure in page user space.
+						// Coordinates: [llx lly urx ury] in default user space units.
+						$pdfuaFigBbox = [
+							round($objattr['INNER-X'] * Mpdf::SCALE, 3),
+							round(($this->h - ($objattr['INNER-Y'] + $obih)) * Mpdf::SCALE, 3),
+							round(($objattr['INNER-X'] + $obiw) * Mpdf::SCALE, 3),
+							round(($this->h - $objattr['INNER-Y']) * Mpdf::SCALE, 3),
+						];
+						$this->ua->getStructureTree()->open('Figure', ['Alt' => $pdfuaImageAlt, 'BBox' => $pdfuaFigBbox]);
 						// ARIA — register HTML id and queue aria-* cross-references now
 						// that the Figure struct element exists. Attrs were captured at
 						// parse time in Img::open() and carried through $objattr.
@@ -7898,6 +7907,28 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$col = $objattr['colorarray'];
 				}
 
+				// PDF/UA-1 — wrap the list marker in a Lbl BDC/EMC.
+				// The Lbl struct element was opened (then popped) in Li::open() and its
+				// reference stored in blk['pdfua_li_lbl_elem']. addContentForElement()
+				// attaches the MCID to the Lbl element without requiring it on the stack
+				// (the deferred-render pattern — same as _tableWrite()).
+				// Guard: PDFUA active, not in ColActive split, blk reference available.
+				$pdfuaLblMcid = null;
+				if ($this->PDFUA
+					&& !$this->ColActive
+					&& !$this->ua->getStructureTree()->isInArtifact()
+					&& isset($this->blk[$this->blklvl]['pdfua_li_lbl_elem'])
+				) {
+					$structParents = isset($this->pageDim[$this->page]['structParents'])
+						? $this->pageDim[$this->page]['structParents']
+						: 0;
+					$pdfuaLblMcid = $this->ua->getStructureTree()->addContentForElement(
+						$this->blk[$this->blklvl]['pdfua_li_lbl_elem'],
+						$structParents
+					);
+					$this->ua->getMarkedContentHelper()->begin('Lbl', $pdfuaLblMcid);
+				}
+
 				if (isset($objattr['bullet']) && $objattr['bullet']) { // Used for position "outside" only
 					$type = $objattr['bullet'];
 					$size = $objattr['size'];
@@ -7944,6 +7975,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					}
 					$this->Cell($w, $this->FontSize, $texto, 0, 0, $align, 0, '', 0, 0, 0, 'T', 0, false, false, 0, $objattr['lineBox']);
 					$this->SetTColor($this->colorConverter->convert(0, $this->PDFAXwarnings));
+				}
+
+				// PDF/UA-1 — close the Lbl BDC opened above.
+				if ($pdfuaLblMcid !== null) {
+					$this->ua->getMarkedContentHelper()->end();
 				}
 			}
 
@@ -9424,10 +9460,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->writer->write('/Artifact BMC');
 						$pdfuaTagOpened = 'artifact';
 					} elseif ($alt !== null) {
-						// Meaningful image — create Figure struct element
+						// Meaningful image — create Figure struct element with /BBox.
+						// ISO 32000-1 Table 344 / Matterhorn 13-008 — /BBox in /Layout
+						// attribute object locates the figure in page user space.
 						$structParents = isset($this->pageDim[$this->page]['structParents'])
 							? $this->pageDim[$this->page]['structParents'] : 0;
-						$this->ua->getStructureTree()->open('Figure', ['Alt' => $alt]);
+						$directImageBbox = [
+							round($x * Mpdf::SCALE, 3),
+							round(($this->h - ($y + $h)) * Mpdf::SCALE, 3),
+							round(($x + $w) * Mpdf::SCALE, 3),
+							round(($this->h - $y) * Mpdf::SCALE, 3),
+						];
+						$this->ua->getStructureTree()->open('Figure', ['Alt' => $alt, 'BBox' => $directImageBbox]);
 						$mcid = $this->ua->getStructureTree()->addContent($structParents);
 						$this->ua->getMarkedContentHelper()->begin('Figure', $mcid);
 						$pdfuaTagOpened = 'figure';
@@ -11080,7 +11124,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$wx = ($this->w / 2) - $adj + $offset / 3;
 		$wy = ($this->h / 2) + $opp;
 
-		// PDF/UA-1 — text watermarks are decorative; tag as Background Artifact.
+		// PDF/UA-1 — text watermarks are decorative; tag as Background Artifact
+		// per ISO 32000-1 §14.8.2.2 Table 329 (Background is one of four valid
+		// /Type values for decorative repeating overlays). See plan §"Why /Type
+		// /Background".
 		if ($this->PDFUA) {
 			$this->pages[$this->page] .= '/Artifact <</Type /Background>> BDC' . "\n";
 		}
@@ -11108,7 +11155,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->SetAlpha($alpha, $this->watermarkImgAlphaBlend);
 		}
 
-		// PDF/UA-1 — image watermarks are decorative; tag as Background Artifact.
+		// PDF/UA-1 — image watermarks are decorative; tag as Background Artifact
+		// per ISO 32000-1 §14.8.2.2 Table 329 (Background /Type for decorative
+		// overlays). See plan §"Why /Type /Background".
 		// When watermarkImgBehind=false, wrap the Image() call directly.
 		// When watermarkImgBehind=true, the image content goes into pages[] via preg_replace
 		// at print time — the Image() call with $watermark=true handles that separately

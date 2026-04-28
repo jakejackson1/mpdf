@@ -258,6 +258,61 @@ class LigatureActualTextTest extends PdfUaTestCase
 	}
 
 	/**
+	 * The exemplar sentence "fine office difficulty" must produce ActualText wrappers
+	 * for every OTL ligature DejaVuSerif forms from those words.
+	 *
+	 * Empirical analysis of DejaVuSerif OTL output for this sentence:
+	 *   - "fine"       → fi ligature:  FEFF00660069
+	 *   - "office"     → ff ligature:  FEFF00660066  (then separate 'i' via CMap)
+	 *   - "difficulty" → ff ligature:  FEFF00660066  (then separate 'i' + 'culty')
+	 *
+	 * Note: the task brief mentioned ffi/ffl for this sentence, but empirical
+	 * verification shows DejaVuSerif does NOT form an ffi ligature for "difficulty"
+	 * (it forms ff then leaves 'i' for the CMap). The ffl ligature appears in
+	 * "ruffled", which is already covered by testFflLigatureProducesActualText().
+	 * This test asserts the actual OTL output for the exemplar sentence.
+	 *
+	 * Plan §A6 (ligature ActualText completion gate).
+	 * Matterhorn Protocol 1.1 condition 24-001 — ligature glyph without ActualText.
+	 * ISO 32000-1:2008 §14.7.2 Table 322 — /ActualText attribute.
+	 *
+	 * @group pdfua
+	 */
+	public function testDejaVuSerifLigatureSentenceProducesExpectedWrappers()
+	{
+		if (!file_exists(__DIR__ . '/../../../ttfonts/DejaVuSerif.ttf')) {
+			$this->markTestSkipped('DejaVuSerif.ttf not found in ttfonts/');
+		}
+		$mpdf = $this->makeMpdf(['fontdata' => $this->dejavuSerifWithOtl()]);
+		$pdf  = $this->getOutput($mpdf, '<p style="font-family: dejavuserif;">fine office difficulty</p>');
+
+		preg_match_all('/\/Span <<\/ActualText <(FEFF[0-9A-F]+)>>>/', $pdf, $m);
+		$wrappers = $m[1];
+
+		// fi ligature (from "fine"): U+0066 U+0069.
+		$this->assertContains(
+			'FEFF00660069',
+			$wrappers,
+			'fi ligature in "fine" must produce /ActualText <FEFF00660069>'
+		);
+
+		// ff ligature (from "office"): U+0066 U+0066.
+		$ffCount = count(array_keys($wrappers, 'FEFF00660066'));
+		$this->assertGreaterThanOrEqual(
+			1,
+			$ffCount,
+			'ff ligature in "office" must produce /ActualText <FEFF00660066>'
+		);
+
+		// Total wrapper count: fi (×1) + ff (×2, from "office" and "difficulty") = 3.
+		$this->assertCount(
+			3,
+			$wrappers,
+			'Exemplar sentence must produce exactly 3 ActualText wrappers (fi from "fine", ff from "office", ff from "difficulty")'
+		);
+	}
+
+	/**
 	 * ActualText wrappers must not appear when PDFUA mode is disabled.
 	 *
 	 * The PDFUA gate in applyGPOSpdf() initialises $ligActualTextWriter only

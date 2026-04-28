@@ -333,7 +333,8 @@ class StructureElementsTest extends PdfUaTestCase
 	// ========================= Watermarks =========================
 
 	/**
-	 * Text watermark produces Artifact BDC/EMC in the page content stream.
+	 * Text watermark produces Background Artifact BDC/EMC in the page content
+	 * stream (ISO 32000-1 §14.8.2.2 Table 329; plan §"Why /Type /Background").
 	 */
 	public function testWatermarkTextIsArtifact()
 	{

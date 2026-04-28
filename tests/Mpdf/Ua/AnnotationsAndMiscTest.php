@@ -181,6 +181,8 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	 *
 	 * Watermarks are decorative repeating elements; they must be outside the
 	 * logical structure and tagged with /Artifact so AT can ignore them.
+	 * See plan §"Why /Type /Background" — Background is the correct Artifact
+	 * /Type per ISO 32000-1 §14.8.2.2 Table 329 for decorative overlays.
 	 */
 	public function testWatermarkTextIsArtifact()
 	{
@@ -194,7 +196,8 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	}
 
 	/**
-	 * An image watermark (in front, watermarkImgBehind=false) is tagged as Artifact.
+	 * An image watermark (in front, watermarkImgBehind=false) is tagged as Artifact
+	 * with /Type /Background per ISO 32000-1 §14.8.2.2 Table 329.
 	 */
 	public function testWatermarkImageFrontIsArtifact()
 	{
@@ -209,7 +212,8 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	}
 
 	/**
-	 * An image watermark (behind the page, watermarkImgBehind=true) is tagged as Artifact.
+	 * An image watermark (behind the page, watermarkImgBehind=true) is tagged as
+	 * Artifact with /Type /Background per ISO 32000-1 §14.8.2.2 Table 329.
 	 *
 	 * The behind-watermark path injects content before the ___BACKGROUND___PATTERNS
 	 * marker via preg_replace; BDC/EMC must be part of the injected string.
@@ -359,6 +363,103 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 			'<textcircle top-text="Hello" bottom-text="World" divider=" | " r="20" style="font-size: 12pt"/>'
 		);
 		$this->assertStringContainsString('/ActualText', $output);
+	}
+
+	// ========================= Widget /TU entry =========================
+
+	/**
+	 * A widget annotation for a form field must carry /TU (tooltip / user name).
+	 *
+	 * /TU provides a human-readable alternative to /T (partial field name) so
+	 * that assistive technology can announce the field's purpose to the user.
+	 * ISO 14289-1:2014 §7.18 — all widget annotations must have /TU.
+	 * Matterhorn Protocol 1.1 condition 11-002 — /TU missing from widget dict.
+	 * Plan §A9 (priority test list) — testWidgetAnnotationHasTuEntry.
+	 *
+	 * @group pdfua
+	 */
+	public function testWidgetAnnotationHasTuEntry()
+	{
+		$mpdf = $this->makeMpdf(['useActiveForms' => true]);
+		$output = $this->getOutput(
+			$mpdf,
+			'<form method="post"><input type="text" name="email" title="Email address"/></form>'
+		);
+		// /TU must appear in the annotation dict with the field's title value.
+		$this->assertStringContainsString('/TU', $output);
+		// The title value is written as a UTF-16BE PDF string with BOM (0xFEFF).
+		// utf16BigEndianTextString() prepends the BOM then encodes each character as
+		// two bytes big-endian: "Email address" → FEFF 0045 006D 0061 0069 006C ...
+		// We spot-check the BOM + first word "Email" in raw binary to confirm the
+		// value was encoded correctly (not written as plain ASCII).
+		// Pattern: /TU <whitespace> ( <BOM><E><m><a><i><l> — matching Example in
+		// testLangAttributeProducesLangOnStructElement which uses \xfe\xff\x00f\x00r.
+		$this->assertStringContainsString(
+			"/TU (\xfe\xff\x00E\x00m\x00a\x00i\x00l",
+			$output,
+			'/TU must be followed by a UTF-16BE string starting with BOM and "Email"'
+		);
+	}
+
+	// ========================= Annotation StructParent round-trip =========================
+
+	/**
+	 * The /StructParent integer on an annotation dict must resolve through the
+	 * ParentTree to a struct element whose /S is /Note.
+	 *
+	 * This test verifies the full bidirectional round-trip:
+	 *   annotation dict /StructParent N → ParentTree key N → struct elem ref → /S /Note
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 — /StructParent (singular) on annotation dicts.
+	 * ISO 32000-1:2008 §7.9.7 — NumTree format for the ParentTree.
+	 * Plan §A9 (priority test list) — testAnnotationStructParentRoundTrip.
+	 *
+	 * @group pdfua
+	 */
+	public function testAnnotationStructParentRoundTrip()
+	{
+		$mpdf = $this->makeMpdf();
+		$output = $this->getOutput(
+			$mpdf,
+			'<p>Text<annotation content="Note text" title="Author"/></p>'
+		);
+
+		// Step 1: find /StructParent N on the annotation dict.
+		$found = preg_match('/\/StructParent (\d+)/', $output, $spMatch);
+		$this->assertSame(1, $found, '/StructParent must appear on the annotation dict');
+		$spIndex = (int) $spMatch[1];
+
+		// Step 2: find the ParentTree /Nums array and look up index $spIndex.
+		// The NumTree leaf for annotation entries is: index REF (single ref, no array wrapper).
+		// Pattern: key followed by "N 0 R" (not wrapped in []).
+		$numsFound = preg_match('/\/Nums \[([^\]]+)\]/', $output, $numsMatch);
+		$this->assertSame(1, $numsFound, '/Nums array must exist in the ParentTree');
+		$numsContent = $numsMatch[1];
+
+		// Find the value for our specific index in the NumTree.
+		// Annotation entries: "N  M 0 R" (single ref); page entries: "N [...]".
+		$entryPattern = '/' . $spIndex . '\s+(\d+)\s+0\s+R\b/';
+		$entryFound = preg_match($entryPattern, $numsContent, $entryMatch);
+		$this->assertSame(
+			1,
+			$entryFound,
+			'ParentTree must have a single-ref entry at index ' . $spIndex . ' for the annotation'
+		);
+		$structElemObjNum = (int) $entryMatch[1];
+
+		// Step 3: find the struct element object and confirm /S /Note.
+		$objPattern = '/' . $structElemObjNum . '\s+0\s+obj\s*<<([^>]+(?:>[^>]+)*?)>>/';
+		$objFound = preg_match($objPattern, $output, $objMatch);
+		$this->assertSame(
+			1,
+			$objFound,
+			'Struct element object ' . $structElemObjNum . ' must be present in the PDF output'
+		);
+		$this->assertStringContainsString(
+			'/S /Note',
+			$objMatch[0],
+			'The struct element referenced by ParentTree[' . $spIndex . '] must have /S /Note'
+		);
 	}
 
 	// ========================= Helpers =========================

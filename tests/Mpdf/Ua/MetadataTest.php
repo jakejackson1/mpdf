@@ -232,6 +232,56 @@ class MetadataTest extends PdfUaTestCase
 		$this->assertStringContainsString('<pdfaid:part>', $output);
 	}
 
+	// ================== Encryption + XMP tests ==================
+
+	/**
+	 * An encrypted PDF/UA-1 document must keep its XMP metadata stream unencrypted.
+	 *
+	 * ISO 32000-1:2008 §14.3.2 — "The XMP data stream shall not be encrypted."
+	 * ISO 32000-1:2008 §7.6.5 — the Identity crypt filter is the correct mechanism:
+	 * /Filter [/Crypt] /DecodeParms <</Type /CryptFilterDecodeParms /Name /Identity>>
+	 * on the metadata stream dict tells conforming readers to pass the bytes through
+	 * without applying the document encryption.
+	 *
+	 * Plan §A5 (encryption audit) and §A9 (priority test list):
+	 * testEncryptedOutputHasXmpNotEncrypted.
+	 *
+	 * Both invariants must hold simultaneously:
+	 *   1. The metadata stream dict carries the Identity crypt filter declaration.
+	 *   2. The XMP namespace identifier (pdfuaid:part) is readable as plaintext.
+	 *
+	 * @group pdfua
+	 */
+	public function testEncryptedOutputHasXmpNotEncrypted()
+	{
+		// PDFUAauto=true so SetProtection() auto-adds 'extract' permission without
+		// throwing, keeping the test focused on the XMP encryption behaviour.
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->SetProtection(['extract'], 'user', 'owner_pass');
+		$output = $this->getOutput($mpdf, '<p>Encrypted PDF/UA-1 test</p>');
+
+		// Invariant 1: the metadata stream dict must declare the Identity crypt filter.
+		// MetadataWriter::writeMetadata() emits this when PDFUA && encrypted.
+		$this->assertStringContainsString(
+			'/Filter[/Crypt]',
+			$output,
+			'Metadata stream dict must carry /Filter [/Crypt] when document is encrypted'
+		);
+		$this->assertStringContainsString(
+			'/Name/Identity',
+			$output,
+			'Metadata stream dict must carry /Name /Identity to bypass document encryption'
+		);
+
+		// Invariant 2: XMP pdfuaid namespace must be readable as plaintext.
+		// If the stream were RC4-encrypted, 'pdfuaid:part' would appear as binary noise.
+		$this->assertStringContainsString(
+			'pdfuaid:part',
+			$output,
+			'XMP pdfuaid:part must be plaintext in the raw PDF output (not RC4-encrypted)'
+		);
+	}
+
 	// ================== Phase 2 tests ==================
 
 	/**

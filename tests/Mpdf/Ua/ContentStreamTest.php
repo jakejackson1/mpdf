@@ -509,6 +509,152 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertGreaterThan(1, $mpdf->page, 'Table must span more than one page');
 	}
 
+	// ========================= Cross-page MCR dict tests =========================
+
+	/**
+	 * A paragraph spanning a page break must produce MCR dicts (not bare integers)
+	 * in the struct element's /K array.
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006 — untagged real content. When a
+	 * single /S /P struct element has glyphs on two or more pages, its /K array
+	 * must contain MCR dicts of the form /Type /MCR /Pg N 0 R /MCID n (one per
+	 * page portion). Bare integer /K values are only valid for single-page content
+	 * (ISO 32000-1:2008 §14.7.4.4).
+	 *
+	 * FAILS: The current implementation emits a bare integer /K for cross-page
+	 * paragraphs because finishFlowingBlock() calls addContent() once (on the
+	 * first page) and the StructureWriter singleSimpleMcid path collapses it
+	 * to a bare MCID integer. Multi-page paragraphs need addContent() called once
+	 * per page portion so that each page's struct parents entry is populated and
+	 * StructureWriter can emit full MCR dicts.
+	 *
+	 * See plan §A9 (priority test list) and §A14 (MCR dict requirements).
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict: /Type /MCR /Pg N 0 R /MCID n.
+	 * Matterhorn Protocol 1.1 §01-006 — untagged real content.
+	 *
+	 * @group pdfua
+	 */
+	public function testParagraphSplitAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		// A single very long paragraph forces mPDF to split it across multiple pages.
+		$html = '<p>' . str_repeat('Lorem ipsum dolor sit amet, consectetur adipiscing elit. ', 500) . '</p>';
+		$output = $this->getOutput($mpdf, $html);
+
+		// Document must span more than one page.
+		$this->assertGreaterThan(1, $mpdf->page, 'Paragraph must span more than one page');
+		// The output must contain /Type /MCR dicts to link the struct element to each page.
+		$this->assertStringContainsString(
+			'/Type /MCR',
+			$output,
+			'Cross-page paragraph must produce MCR dicts (/Type /MCR) in struct element /K array'
+		);
+		// There must be at least two distinct /Pg N 0 R references (one per page).
+		preg_match_all('/\/Pg (\d+) 0 R/', $output, $pgMatches);
+		$distinctPages = array_unique($pgMatches[1]);
+		$this->assertGreaterThanOrEqual(
+			2,
+			count($distinctPages),
+			'MCR dicts must reference at least two distinct page objects for a cross-page paragraph'
+		);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= Figure BBox tests =========================
+
+	/**
+	 * A Figure struct element must carry a /BBox attribute in a /Layout attr object.
+	 *
+	 * ISO 32000-1:2008 Table 344 (Layout attribute owner) — /BBox is required for
+	 * any Figure appearing in its entirety on a single page so that assistive
+	 * technology can locate it within the page coordinate system.
+	 * Matterhorn Protocol 1.1 condition 13-008 — Figure /BBox missing.
+	 * Plan §A4 — BBox emitted via open('Figure', ['Alt' => ..., 'BBox' => [...]]).
+	 *
+	 * The BBox array is [llx lly urx ury] in default user space units (pt).
+	 *
+	 * @group pdfua
+	 */
+	public function testFigureStructElementHasBBox()
+	{
+		$mpdf = $this->makeMpdf();
+		$imgPath = __DIR__ . '/../../data/img/issue1609.png';
+		if (!file_exists($imgPath)) {
+			$this->markTestSkipped('Test image not available: ' . $imgPath);
+		}
+		$output = $this->getOutput(
+			$mpdf,
+			'<img src="' . $imgPath . '" alt="Test caption" width="100" height="50">'
+		);
+		// The Figure struct element must carry a /Layout attribute object.
+		$this->assertStringContainsString('/O /Layout', $output);
+		// The /BBox key must appear inside the attribute object.
+		$this->assertStringContainsString('/BBox', $output);
+		// The BBox must be a four-element array of numbers.
+		$this->assertMatchesRegularExpression(
+			'/\/BBox \[[\d\.\- ]+\]/',
+			$output,
+			'Figure /BBox must be a four-element number array [llx lly urx ury]'
+		);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	// ========================= List Lbl+LBody tests =========================
+
+	/**
+	 * Each list item must produce both Lbl (bullet/marker) and LBody (content)
+	 * child struct elements inside the LI struct element.
+	 *
+	 * Tagged PDF Best Practice Guide §4.2.3 — LI must contain Lbl for the list
+	 * marker and LBody for the item content. Two list items must therefore produce
+	 * two /S /LI elements, each containing at least one /S /Lbl child.
+	 *
+	 * Matterhorn Protocol 1.1 condition 21-001 — list numbering attribute missing,
+	 * which indicates incomplete list structure tagging.
+	 * Plan §A9 (priority test list) — testLiStructureHasLblAndLBody.
+	 *
+	 * Implementation: Li::open() opens a Lbl struct element as a child of LI,
+	 * stores a reference to it in blk['pdfua_li_lbl_elem'], and immediately closes
+	 * it (deferred-render pattern). When printobjectbuffer() later renders the
+	 * 'listmarker' object, it calls StructureTree::addContentForElement() with the
+	 * stored reference to attach the MCID to Lbl and wraps the marker drawing
+	 * commands in a Lbl BDC/EMC. Li::open() then opens LBody as the content
+	 * container. Both Lbl and LBody are direct children of LI in the struct tree.
+	 *
+	 * Deliberate limitation: position:inside markers, list-style-type:none, and
+	 * CSS image markers do not produce a Lbl element. _setListMarker() sets
+	 * $mpdf->listitem to a non-empty array only for position:outside text/symbol
+	 * markers (disc, circle, square, ordered counters, U+ symbols), so Li::open()
+	 * skips Lbl for the other cases to avoid empty struct elements. This is a known
+	 * gap — Matterhorn 21-001 coverage is limited to the position:outside path.
+	 *
+	 * @group pdfua
+	 */
+	public function testLiStructureHasLblAndLBody()
+	{
+		$output = $this->getOutput($this->makeMpdf(), '<ul><li>First</li><li>Second</li></ul>');
+		// Two LI struct elements (one per list item).
+		$this->assertGreaterThanOrEqual(
+			2,
+			substr_count($output, '/S /LI'),
+			'Each <li> must produce a /S /LI struct element'
+		);
+		// Each LI must have an LBody child (content wrapper).
+		$this->assertGreaterThanOrEqual(
+			2,
+			substr_count($output, '/S /LBody'),
+			'Each <li> must produce a /S /LBody child struct element'
+		);
+		// Each LI must also have a Lbl child (marker/bullet wrapper).
+		$this->assertGreaterThanOrEqual(
+			2,
+			substr_count($output, '/S /Lbl'),
+			'Each <li> must produce a /S /Lbl child struct element for the list marker'
+		);
+		$this->assertBdcEmcBalanced($output);
+	}
+
 	// ========================= Helpers =========================
 
 	/**
