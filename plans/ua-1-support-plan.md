@@ -2033,36 +2033,37 @@ if ($this->PDFUA && $this->ua->getMarkedContentHelper()->getDepth() !== 0) {
 
 **Column mode — sentinel strategy (see §6 below):** During column collection (`ColActive=1`), tag handlers do NOT call `markedContentHelper->begin()` / `->end()`. Instead they write sentinel entries to `columnbuffer[]` which are expanded to real BDC/EMC operators in the final output loop of `printcolumnbuffer()`. This means `markedContentHelper->getDepth()` does not track column-mode emissions; the balance assertion remains valid because all column buffers are flushed (via `SetColumns(0)` or page-end handling) before `_enddoc()` runs.
 
-### 3b. Block content tagging — `newFlowingBlock()` and `finishFlowingBlock()`
+### 3b. Block content tagging — `newFlowingBlock()`, `WriteFlowingBlock()`, and `finishFlowingBlock()`
 
-`newFlowingBlock()` (line 6428) initialises `$this->flowingBlockAttr`. Add two new keys:
+`newFlowingBlock()` (in `src/Mpdf.php`) initialises `$this->flowingBlockAttr`. Four PDFUA keys are present:
 
 ```php
-$this->flowingBlockAttr['pdfua_struct_open'] = false;  // true when a struct element is on the stack
-$this->flowingBlockAttr['pdfua_type'] = 'P';
+$this->flowingBlockAttr['pdfua_struct_open']  = false;  // true when a tagged block is active
+$this->flowingBlockAttr['pdfua_type']         = 'P';     // struct type for BDC operator
+$this->flowingBlockAttr['pdfua_artifact_open'] = false; // mirrors pdfua_struct_open for artifact scope
+$this->flowingBlockAttr['pdfua_bdc_active']   = false;  // §A14 — per-page lazy-open tracker
+$this->flowingBlockAttr['pdfua_struct_elem']  = null;   // §A14 — block's struct element ref
 ```
 
-**MCID assignment belongs in `finishFlowingBlock()`, not at tag-open time.** A block can span pages; each page the block appears on needs its own MCID pointing to the same struct element. At tag-open, the struct element is pushed onto the StructureTree stack. At `finishFlowingBlock()` time, the page is known and the MCID is assigned:
+The block's struct element is captured at tag-open time onto `$blk[$blklvl]['pdfua_struct_elem']` by `BlockTag::open()` (mirroring `Tag/Td.php`'s `pdfua_struct_elem` pattern). The empty-block restoration site in `BlockTag::open()` and the `writeBlock()` restoration site in `Mpdf.php` propagate it back onto `flowingBlockAttr` for each block-rendering pass.
 
-In `finishFlowingBlock()` (line 6460), just before the first `Cell()` call emits content:
-```php
-if ($this->PDFUA && $this->flowingBlockAttr['pdfua_struct_open']) {
-    $structParents = isset($this->pageDim[$this->page]['structParents'])
-        ? $this->pageDim[$this->page]['structParents']
-        : 0;
-    $mcid = $this->ua->getStructureTree()->addContent($structParents);
-    $this->ua->getMarkedContentHelper()->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
-}
-```
+**Per-page lazy BDC/EMC bracketing.** A block can span pages; each page the block touches needs its own MCID pointing to the same struct element. The `Mpdf` class exposes two private helpers that implement the contract:
 
-After the last `Cell()` for the block (at `$endofblock === true`):
-```php
-if ($this->PDFUA && $endofblock && $this->flowingBlockAttr['pdfua_struct_open']) {
-    $this->ua->getMarkedContentHelper()->end();
-}
-```
+- `Mpdf::ensureBlockBdcOpen()` — idempotent within a page; called from `finishFlowingBlock()` (just before the content loop) AND from `WriteFlowingBlock()` (just before each per-line `Cell()` foreach). Allocates an MCID via `StructureTree::addContentForElement($elem, $structParents)` against the captured BLOCK element (NOT the StructureTree stack top, which may belong to a nested inline span/link). Emits `/<type> <</MCID N>> BDC` or `/Artifact BMC` per the active flag.
+- `Mpdf::closeBlockBdcIfOpen()` — idempotent; emits `EMC` if `pdfua_bdc_active` is set. Called BEFORE every mid-block `AddPage()`: `finishFlowingBlock` page-break check, `WriteFlowingBlock` page-break check, and the `Cell()` auto-page-break.
 
-**Multi-page blocks:** At the page-break point inside `finishFlowingBlock()`, close the current BDC with EMC, then on the new page call `addContent($newStructParents)` again for a new MCID — the same struct element records both MCIDs.
+**Pre-allocate `/StructParents` at page-creation time.** `_beginpage()` allocates `$this->pageDim[$this->page]['structParents'] = $this->ua->nextStructParents()` immediately after the page increment. This makes the value available to `addContentForElement()` during HTML rendering. `PageWriter::writePages` reads it back at output finalization (with a fallback to `nextStructParents()` for legacy paths that bypass `_beginpage`).
+
+**Multi-page block emission flow:**
+1. First page: `WriteFlowingBlock` (or `finishFlowingBlock`) → `ensureBlockBdcOpen()` → BDC + MCID for `structParents` of page 1.
+2. Page-break check fires → `closeBlockBdcIfOpen()` → EMC; `AddPage()`; new page.
+3. Second page: next `Cell()`-bound emission → `ensureBlockBdcOpen()` → BDC + MCID for `structParents` of page 2.
+4. Repeats per page.
+5. `finishFlowingBlock(true)` at block end → `closeBlockBdcIfOpen()` → final EMC.
+
+The struct element accumulates one `(structParents, mcid)` entry per page; `StructureWriter::writeElement()` emits one `/Type /MCR /Pg N 0 R /MCID n` per entry. The `singleSimpleMcid` collapse rule still produces a bare-integer `/K` for blocks that fit on one page (one MCR entry only).
+
+**Same-page multi-line bug fix (incidental).** Before this fix, `WriteFlowingBlock` emitted `Cell()` per line directly without any BDC bracket; only the FINAL line of any multi-line paragraph (the line reaching `finishFlowingBlock(true)`) was tagged. The lazy opener inserted at the WriteFlowingBlock per-line `foreach $chunkorder` site closes that gap as a side-effect.
 
 ### 3c. Image tagging (`src/Tag/Img.php`)
 
@@ -4202,7 +4203,8 @@ After each phase: **`composer test` AND `vendor/bin/phpunit --group=snapshot` mu
 - **`var` properties are public**: Writer code accesses `$this->mpdf->PDFUA` directly — same pattern as `$this->mpdf->PDFA`. Do NOT use `getPDFUA()` — no such getter exists. The only helper methods added live on `\Mpdf\Ua\UaState`: `addWarning($msg)` and `nextStructParents()`. `Mpdf.php` itself gains zero new methods.
 - **New config options must be in `ConfigVariables.php`** — constructor merges config using that class as the defaults source.
 - **New services in `ServiceFactory`** must appear in both `getServices()` return array and `getServiceIds()` array.
-- **MCID assignment in `finishFlowingBlock()`** — not at tag-open time. Tag `open()` pushes the struct element; `finishFlowingBlock()` assigns the MCID using the page's `/StructParents` integer. One MCID per page per struct element.
+- **Struct element ref captured at tag-open** — `BlockTag::open()` writes `$blk[$blklvl]['pdfua_struct_elem'] = $elem`, mirroring the `Tag/Td.php` pattern. The reference outlives the parse-time stack pop so render-time code can attach MCIDs to it.
+- **MCID + BDC emitted lazily per page** — `Mpdf::ensureBlockBdcOpen()` is called from BOTH `finishFlowingBlock()` (before content emission) and `WriteFlowingBlock()` (before each per-line `Cell()` foreach). It allocates one MCID per page via `StructureTree::addContentForElement($elem, $structParents)` and is idempotent within a page. `Mpdf::closeBlockBdcIfOpen()` is the matching EMC emitter; it fences EVERY mid-block `AddPage()` call so per-page BDC/EMC pairs reside in the same `/Contents` stream (PDF §14.6). One MCID per page per struct element; multi-page blocks emit MCR dicts (§A14).
 - **`/StructParents N` on every page dict** — not just annotated pages. Missing = immediate veraPDF failure.
 - **ParentTree keys are `/StructParents` integers** (sequential, starting from 0, assigned in `PageWriter`), not 1-based page numbers.
 - **Multi-page struct element /K arrays** use MCR dicts (`/Type /MCR /Pg N 0 R /MCID n`), not bare integers.

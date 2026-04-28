@@ -45,17 +45,17 @@ span.three.four.five {
 		$this->mpdf->SetCompression(false);
 		$output = $this->mpdf->OutputBinaryData();
 
-		$this->assertStringContainsString("BT /F2 11.000 Tf ET\nq 0.000 g  0 Tr BT 42.520 785.363 Td  (First paragraph) Tj ET Q", $output);
-		$this->assertStringContainsString("BT /F3 11.000 Tf ET\nq 0.000 g  0 Tr BT 42.520 759.197 Td  (Second paragraph) Tj ET Q", $output);
-		$this->assertStringContainsString("BT /F4 11.000 Tf ET\nq 1.000 0.000 0.000 rg  0 Tr BT 42.520 732.635 Td  (Third paragraph) Tj ET Q", $output);
+		$this->assertStringContainsString("/F2 11.000 Tf\nq 0.000 g  0 Tr BT 42.520 785.363 Td  (First paragraph) Tj ET Q", $output);
+		$this->assertStringContainsString("/F3 11.000 Tf\nq 0.000 g  0 Tr BT 42.520 759.197 Td  (Second paragraph) Tj ET Q", $output);
+		$this->assertStringContainsString("/F4 11.000 Tf\nq 1.000 0.000 0.000 rg  0 Tr BT 42.520 732.635 Td  (Third paragraph) Tj ET Q", $output);
 
-		$this->assertStringContainsString("BT /F1 11.000 Tf ET\n" .
+		$this->assertStringContainsString("/F1 11.000 Tf\n" .
 			"/GS1 gs\n" .
 			"q 0.000 0.502 0.000 rg  0 Tr BT 42.520 705.867 Td  (A wild fox) Tj ET Q\n" .
 			"q 0.000 g  0 Tr BT 90.183 705.867 Td  ( jumped over ) Tj ET Q\n" .
-			"BT /F2 11.000 Tf ET\n" .
+			"/F2 11.000 Tf\n" .
 			"q 0.000 0.502 0.000 rg  0 Tr BT 150.980 705.867 Td  (a lazy dog) Tj ET Q", $output);
 
-		$this->assertStringContainsString("BT /F4 7.700 Tf ET\nq 1.000 0.000 0.000 rg  0 Tr BT 42.520 682.556 Td  (This should be really small) Tj ET Q", $output);
+		$this->assertStringContainsString("/F4 7.700 Tf\nq 1.000 0.000 0.000 rg  0 Tr BT 42.520 682.556 Td  (This should be really small) Tj ET Q", $output);
 	}
 }

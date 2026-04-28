@@ -4299,7 +4299,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->FontSize = $size / Mpdf::SCALE;
 			$this->CurrentFont = &$this->fonts[$fontkey];
 			if ($write) {
-				$fontout = (sprintf('BT /F%d %.3F Tf ET', $this->CurrentFont['i'], $this->FontSizePt));
+				// PDF/UA-1 / ISO 32000-1 §9.3.1 — Tf is a text-state operator that may
+// appear outside a text object (BT/ET). Emitting an empty `BT ... Tf ET`
+// pre-amble inside an open BDC creates a SimpleContentItem that veraPDF
+// flags as "untagged real content" (ISO 14289-1 §7.1 test 3). Bare `Tf`
+// sets the font state without producing any text-object content; the next
+// genuine BT/Td/Tj/ET painting block inherits the font.
+				$fontout = (sprintf('/F%d %.3F Tf', $this->CurrentFont['i'], $this->FontSizePt));
 				if ($this->page > 0 && ((isset($this->pageoutput[$this->page]['Font']) && $this->pageoutput[$this->page]['Font'] != $fontout) || !isset($this->pageoutput[$this->page]['Font']))) {
 					$this->writer->write($fontout);
 				}
@@ -4367,7 +4373,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->FontSize = $size / Mpdf::SCALE;
 			$this->CurrentFont = &$this->fonts[$fontkey];
 			if ($write) {
-				$fontout = (sprintf('BT /F%d %.3F Tf ET', $this->CurrentFont['i'], $this->FontSizePt));
+				// PDF/UA-1 / ISO 32000-1 §9.3.1 — Tf is a text-state operator that may
+// appear outside a text object (BT/ET). Emitting an empty `BT ... Tf ET`
+// pre-amble inside an open BDC creates a SimpleContentItem that veraPDF
+// flags as "untagged real content" (ISO 14289-1 §7.1 test 3). Bare `Tf`
+// sets the font state without producing any text-object content; the next
+// genuine BT/Td/Tj/ET painting block inherits the font.
+				$fontout = (sprintf('/F%d %.3F Tf', $this->CurrentFont['i'], $this->FontSizePt));
 				if ($this->page > 0 && ((isset($this->pageoutput[$this->page]['Font']) && $this->pageoutput[$this->page]['Font'] != $fontout) || !isset($this->pageoutput[$this->page]['Font']))) {
 					$this->writer->write($fontout);
 				}
@@ -4392,7 +4404,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->FontSize = $size / Mpdf::SCALE;
 		$this->currentfontsize = $size;
 		if ($write) {
-			$fontout = (sprintf('BT /F%d %.3F Tf ET', $this->CurrentFont['i'], $this->FontSizePt));
+			// PDF/UA-1 / ISO 32000-1 §9.3.1 — Tf is a text-state operator that may
+// appear outside a text object (BT/ET). Emitting an empty `BT ... Tf ET`
+// pre-amble inside an open BDC creates a SimpleContentItem that veraPDF
+// flags as "untagged real content" (ISO 14289-1 §7.1 test 3). Bare `Tf`
+// sets the font state without producing any text-object content; the next
+// genuine BT/Td/Tj/ET painting block inherits the font.
+			$fontout = (sprintf('/F%d %.3F Tf', $this->CurrentFont['i'], $this->FontSizePt));
 			// Edited mPDF 3.0
 			if ($this->page > 0 && ((isset($this->pageoutput[$this->page]['Font']) && $this->pageoutput[$this->page]['Font'] != $fontout) || !isset($this->pageoutput[$this->page]['Font']))) {
 				$this->writer->write($fontout);
@@ -6564,7 +6582,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->textparam = $saved['textparam'];
 		if ($write) {
 			$this->SetFont($saved['family'], $saved['style'], $saved['sizePt'], true, true); // force output
-			$fontout = (sprintf('BT /F%d %.3F Tf ET', $this->CurrentFont['i'], $this->FontSizePt));
+			// PDF/UA-1 / ISO 32000-1 §9.3.1 — Tf is a text-state operator that may
+// appear outside a text object (BT/ET). Emitting an empty `BT ... Tf ET`
+// pre-amble inside an open BDC creates a SimpleContentItem that veraPDF
+// flags as "untagged real content" (ISO 14289-1 §7.1 test 3). Bare `Tf`
+// sets the font state without producing any text-object content; the next
+// genuine BT/Td/Tj/ET painting block inherits the font.
+			$fontout = (sprintf('/F%d %.3F Tf', $this->CurrentFont['i'], $this->FontSizePt));
 			if ($this->page > 0 && ((isset($this->pageoutput[$this->page]['Font']) && $this->pageoutput[$this->page]['Font'] != $fontout) || !isset($this->pageoutput[$this->page]['Font']))) {
 				$this->writer->write($fontout);
 			}

@@ -45,6 +45,19 @@ class StructureWriter
 	private $tree;
 
 	/**
+	 * PDF object number reserved for the StructTreeRoot dict.
+	 *
+	 * Pre-allocated at the start of writeStructTree() so that writeElement()
+	 * can emit `/P <rootObjNum> 0 R` on the document-root struct element,
+	 * satisfying ISO 32000-1 §14.7.2 Table 322 (P required on every struct
+	 * element). The actual StructTreeRoot dict is opened at this number after
+	 * all child struct elements have been written.
+	 *
+	 * @var int  0 between writeStructTree() invocations
+	 */
+	private $rootObjNum = 0;
+
+	/**
 	 * @param Mpdf          $mpdf   host Mpdf for object-number allocation and page-ref lookups
 	 * @param BaseWriter    $writer PDF byte emitter
 	 * @param StructureTree $tree   in-memory element stack + ParentTree accumulator to serialise
@@ -83,6 +96,17 @@ class StructureWriter
 	 */
 	public function writeStructTree($parentTreeNextKey = 0)
 	{
+		// ---- 0. Pre-reserve the StructTreeRoot object number ----
+		//
+		// ISO 32000-1 §14.7.2 Table 322 requires /P (parent ref) on EVERY struct
+		// element except the StructTreeRoot itself. The Document root element's
+		// parent IS the StructTreeRoot — so writeElement() needs the root's
+		// object number to emit `/P <root> 0 R` on Document. Reserve it here
+		// before writeElement() walks the tree. BaseWriter::object($onlynewobj=true)
+		// only increments $mpdf->n; we read it back to capture the reserved id.
+		$this->writer->object(false, true);
+		$this->rootObjNum = $this->mpdf->n;
+
 		// ---- 1. Pre-allocate object numbers for all struct elements ----
 		//
 		// BaseWriter::object($id, $onlynewobj = true) increments $mpdf->n and stores
@@ -121,8 +145,10 @@ class StructureWriter
 		// ---- 5. StructTreeRoot dict (last — references everything above) ----
 		//
 		// ISO 32000-1 §14.7.2 Table 322 — StructTreeRoot dict entries.
-		$this->writer->object();
-		$rootObjNum = $this->mpdf->n;
+		// Open the slot reserved at step 0 so the offset is recorded at the
+		// current write position and the "N 0 obj" header is emitted exactly once.
+		$this->writer->object($this->rootObjNum, false);
+		$rootObjNum = $this->rootObjNum;
 
 		$rootElem = $this->tree->getRoot();
 
@@ -207,6 +233,14 @@ class StructureWriter
 		$parent = $elem->getParent();
 		if ($parent !== null) {
 			$this->writer->write('/P ' . $parent->getObjNum() . ' 0 R');
+		} else {
+			// ISO 32000-1 §14.7.2 Table 322 — /P (parent) is required on every
+			// struct element. The document-root element has no struct-element
+			// parent in the tree; its /P MUST point to the StructTreeRoot dict
+			// (the root's parent in the PDF object hierarchy). Without /P here,
+			// veraPDF cannot traverse from the root downward and reports every
+			// content item as "untagged" (ISO 14289-1 §7.1 test 3).
+			$this->writer->write('/P ' . $this->rootObjNum . ' 0 R');
 		}
 
 		// /ID — direct key (ISO 32000-1 Table 322).
@@ -295,6 +329,15 @@ class StructureWriter
 		if ($singleSimpleMcid) {
 			// Single MCR on one page with no other kids and no Form XObject stream:
 			// bare integer is valid (ISO 32000-1 §14.7.4.4 — simple content item).
+			// ISO 32000-1 §14.7.2 Table 322 — /Pg is REQUIRED on the StructElem
+			// when /K references a bare-integer MCID, so the validator can map
+			// the MCID back to the correct page's content stream. Without /Pg,
+			// veraPDF reports the contentItem as "neither marked as Artifact nor
+			// tagged as real content" (ISO 14289-1 §7.1 test 3 / Matterhorn 01-006).
+			$singlePageObjNum = isset($pageRefs[$mcids[0]['page']]) ? $pageRefs[$mcids[0]['page']] : 0;
+			if ($singlePageObjNum > 0) {
+				$this->writer->write('/Pg ' . $singlePageObjNum . ' 0 R');
+			}
 			$kParts[] = (string) $mcids[0]['mcid'];
 		} else {
 			foreach ($mcids as $mcr) {
