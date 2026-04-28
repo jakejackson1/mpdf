@@ -1147,8 +1147,14 @@ abstract class BlockTag extends Tag
 
 			$this->mpdf->listitem = [];
 
-			// Listitem-type
-			$this->mpdf->_setListMarker($currblk['list_style_type'], $currblk['list_style_image'], $currblk['list_style_position']);
+			// Listitem-type — guard with isset() because a bare <li> outside a <ul>/<ol>
+			// may arrive here without the list_style_* keys being initialised (mPDF
+			// PHP-5.6-compatible null-coalesce with ternary; long-standing latent notice
+			// exposed by PHPUnit's strict error handler).
+			$listStyleType     = isset($currblk['list_style_type'])     ? $currblk['list_style_type']     : 'disc';
+			$listStyleImage    = isset($currblk['list_style_image'])    ? $currblk['list_style_image']    : 'none';
+			$listStylePosition = isset($currblk['list_style_position']) ? $currblk['list_style_position'] : 'outside';
+			$this->mpdf->_setListMarker($listStyleType, $listStyleImage, $listStylePosition);
 		}
 
 		// mPDF 6 Bidirectional formatting for block elements

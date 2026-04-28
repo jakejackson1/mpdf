@@ -6641,6 +6641,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// MCID assignment is deferred to finishFlowingBlock() — not tag-open time —
 		// because multi-page blocks need one MCID per page, all referencing the same
 		// struct element. ISO 32000-1 §14.7.4.4 — ParentTree MCID array per page.
+		//
+		// PDF/UA-1 §A14 — close any open BDC before resetting the per-line tracker.
+		// When printbuffer() processes a <BR> inside a block, it calls
+		// finishFlowingBlock(false) (non-endofblock, so no close-fence fires) and
+		// then calls newFlowingBlock() for the next line. Without this close here,
+		// the BDC opened for the first line is abandoned: pdfua_bdc_active is set
+		// to false without emitting the matching EMC, leaving depth > 0 at document
+		// end. This is the root cause of the "Unbalanced marked content operators
+		// (depth=2)" exception from multi-line <pre> blocks (and any other block
+		// that uses <BR> internally). ISO 32000-1 §14.6 — BDC/EMC must be balanced
+		// within the same content stream.
+		$this->closeBlockBdcIfOpen();
 		$this->flowingBlockAttr['pdfua_struct_open'] = false;
 		$this->flowingBlockAttr['pdfua_type'] = 'P';
 		$this->flowingBlockAttr['pdfua_artifact_open'] = false;

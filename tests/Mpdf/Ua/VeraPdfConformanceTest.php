@@ -245,8 +245,8 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		}
 
 		$mpdf = $this->makeMpdf(['enableImports' => true, 'PDFUAauto' => true]);
-		$mpdf->SetImportUse();
-		$pageId = $mpdf->ImportPage(1, $sourceFixture);
+		$mpdf->setSourceFile($sourceFixture);
+		$pageId = $mpdf->importPage(1);
 		// Import a page from the untagged source as a background template.
 		// FpdiStructMerger Tier 1: wraps the Do operator as /Artifact BDC...EMC.
 		$mpdf->SetPageTemplate($pageId);
