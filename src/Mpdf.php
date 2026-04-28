@@ -4871,6 +4871,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$charspacing = $this->charspacing; // Character Spacing
 			$this->ResetSpacing();
 
+			// PDF/UA-1 §A14 — Defensive close-fence for the Cell() auto-page-break.
+			// If a per-block BDC happens to be open at the moment Cell() decides to
+			// page-break (rare in practice — most block-level paths fence in
+			// finishFlowingBlock/WriteFlowingBlock first), close it before AddPage
+			// so the EMC stays in the current page's stream. Idempotent.
+			$this->closeBlockBdcIfOpen();
+
 			$this->AddPage($this->CurOrientation);
 
 			// Added to correct for OddEven Margins
@@ -6613,6 +6620,84 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->flowingBlockAttr['pdfua_struct_open'] = false;
 		$this->flowingBlockAttr['pdfua_type'] = 'P';
 		$this->flowingBlockAttr['pdfua_artifact_open'] = false;
+		// PDF/UA-1 §A14 — per-page lazy-open tracker. True iff a BDC for this
+		// block has been emitted on the current page and an EMC is owed before
+		// AddPage / endofblock. Independent of MarkedContentHelper::getDepth()
+		// (which is global across nested inline marks). Cleared by AddPage
+		// close-fences and by the EMC at endofblock.
+		$this->flowingBlockAttr['pdfua_bdc_active']  = false;
+		// Reference to the block's struct element, captured by BlockTag::open()
+		// onto $blk[$blklvl]['pdfua_struct_elem'] and restored here so
+		// ensureBlockBdcOpen() can call StructureTree::addContentForElement()
+		// against the BLOCK element (not the StructureTree stack top, which may
+		// belong to a nested inline span/link).
+		$this->flowingBlockAttr['pdfua_struct_elem'] = null;
+	}
+
+	/**
+	 * PDF/UA-1 §A14 — Lazy per-page BDC opener for block-level content.
+	 *
+	 * Allocates one MCID per page (per /StructParents key) and emits BDC the
+	 * first time content is about to be written on a given page. Subsequent
+	 * calls within the same page are no-ops (gated by pdfua_bdc_active).
+	 *
+	 * Uses StructureTree::addContentForElement() — not addContent() — because
+	 * the stack top may belong to a nested element (inline span, link, etc.).
+	 * Same pattern as _tableWrite() for table cells.
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 — multi-page elements produce /K arrays of MCR
+	 * dicts (StructureWriter::singleSimpleMcid collapse fails once $mcids has
+	 * more than one entry).
+	 *
+	 * @return void
+	 */
+	private function ensureBlockBdcOpen()
+	{
+		if (!$this->PDFUA) {
+			return;
+		}
+		if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])) {
+			return;
+		}
+		if (!empty($this->flowingBlockAttr['pdfua_artifact_open'])) {
+			$this->ua->getMarkedContentHelper()->begin('Artifact', -1);
+			$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+			return;
+		}
+		if (empty($this->flowingBlockAttr['pdfua_struct_open'])) {
+			return;
+		}
+		$elem = isset($this->flowingBlockAttr['pdfua_struct_elem'])
+			? $this->flowingBlockAttr['pdfua_struct_elem']
+			: null;
+		if ($elem === null) {
+			return;
+		}
+		$structParents = isset($this->pageDim[$this->page]['structParents'])
+			? $this->pageDim[$this->page]['structParents']
+			: 0;
+		$mcid = $this->ua->getStructureTree()->addContentForElement($elem, $structParents);
+		$this->ua->getMarkedContentHelper()->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
+		$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+	}
+
+	/**
+	 * PDF/UA-1 §A14 — Close the open per-page BDC for a block, if any. Idempotent.
+	 *
+	 * ISO 32000-1 §14.6 — BDC and matching EMC must occupy the same content stream.
+	 *
+	 * @return void
+	 */
+	private function closeBlockBdcIfOpen()
+	{
+		if (!$this->PDFUA) {
+			return;
+		}
+		if (empty($this->flowingBlockAttr['pdfua_bdc_active'])) {
+			return;
+		}
+		$this->ua->getMarkedContentHelper()->end();
+		$this->flowingBlockAttr['pdfua_bdc_active'] = false;
 	}
 
 	function finishFlowingBlock($endofblock = false, $next = '')
@@ -6819,6 +6904,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$charspacing = $this->charspacing; // Character Spacing
 			$this->ResetSpacing();
 
+			// PDF/UA-1 §A14 — Close per-page BDC BEFORE AddPage so the EMC
+			// lands in the current page's content stream (PDF §14.6 — BDC
+			// and EMC must be in the same /Contents stream). The next
+			// ensureBlockBdcOpen() call (above this PAGEBREAK code on the
+			// next finishFlowingBlock entry, or in WriteFlowingBlock per-line)
+			// will reopen on the new page with a fresh MCID.
+			$this->closeBlockBdcIfOpen();
+
 			$this->AddPage($this->CurOrientation);
 
 			$this->x = $bak_x;
@@ -6914,22 +7007,19 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		/* -- END CSS-IMAGE-FLOAT -- */
 
 
-		// PDF/UA-1 §3b — Emit BDC/BMC before content output begins.
-		// pdfua_struct_open path: allocate MCID for the struct element and emit
-		//   /<type> <</MCID N>> BDC. MCID is deferred here (not tag-open time) so
-		//   multi-page blocks get one MCID per page pointing to the same struct element.
-		//   ISO 32000-1 §14.7.4.4 — the ParentTree dense array per /StructParents.
-		// pdfua_artifact_open path: emit /Artifact BMC (no property dict) for blocks
-		//   that carry role=none/presentation/separator or aria-hidden=true.
-		//   ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no MCID).
-		if ($this->PDFUA && $this->flowingBlockAttr['pdfua_struct_open']) {
-			$structParents = isset($this->pageDim[$this->page]['structParents'])
-				? $this->pageDim[$this->page]['structParents']
-				: 0;
-			$mcid = $this->ua->getStructureTree()->addContent($structParents);
-			$this->ua->getMarkedContentHelper()->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
-		} elseif ($this->PDFUA && !empty($this->flowingBlockAttr['pdfua_artifact_open'])) {
-			$this->ua->getMarkedContentHelper()->begin('Artifact', -1);
+		// PDF/UA-1 §3b/§A14 — Emit BDC/BMC lazily before content output begins.
+		// Routed through ensureBlockBdcOpen() so cross-page blocks reopen on each
+		// new page (one MCID per page → /K MCR dicts via StructureWriter rather
+		// than a bare integer collapsed by the singleSimpleMcid rule). The lazy
+		// helper attaches MCIDs to the captured BLOCK struct element via
+		// addContentForElement() — not the StructureTree stack top — because
+		// the stack top may belong to a nested inline. Empty blocks emit
+		// nothing because we gate on $content (not on $endofblock); empty
+		// $content means there is no Cell() about to fire.
+		// ISO 32000-1 §14.7.4.4 — ParentTree dense array per /StructParents.
+		// ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no MCID).
+		if ($content) {
+			$this->ensureBlockBdcOpen();
 		}
 
 		if ($content) {
@@ -7220,14 +7310,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->ResetSpacing();
 		} // END IF CONTENT
 
-		// PDF/UA-1 §3b — Emit EMC after the final content chunk of the block.
-		// Only close when $endofblock is true (the last chunk of a multi-line block);
-		// intermediate finishFlowingBlock() calls for continued lines use separate
-		// BDC/EMC pairs so each page portion has its own MCID. ISO 32000-1 §14.6.
-		// Also closes the /Artifact BMC opened by the pdfua_artifact_open path above.
-		if ($this->PDFUA && $endofblock
-				&& ($this->flowingBlockAttr['pdfua_struct_open'] || !empty($this->flowingBlockAttr['pdfua_artifact_open']))) {
-			$this->ua->getMarkedContentHelper()->end();
+		// PDF/UA-1 §3b/§A14 — Close the per-page BDC opened by ensureBlockBdcOpen()
+		// at endofblock. AddPage close-fences (in finishFlowingBlock and
+		// WriteFlowingBlock) close mid-block when a page break happens — between
+		// fences, the same BDC stays open for all content emitted on that page.
+		// closeBlockBdcIfOpen() is idempotent so calling it on blocks that never
+		// opened (empty content) is a no-op. ISO 32000-1 §14.6.
+		if ($endofblock) {
+			$this->closeBlockBdcIfOpen();
 		}
 
 		/* -- CSS-IMAGE-FLOAT -- */
@@ -8844,6 +8934,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$charspacing = $this->charspacing; // Character Spacing
 						$this->ResetSpacing();
 
+						// PDF/UA-1 §A14 — Close per-page BDC BEFORE AddPage so the
+						// EMC lands in the current page's content stream. The next
+						// per-line ensureBlockBdcOpen() call (just before the
+						// foreach $chunkorder Cell loop further down) will reopen
+						// on the new page with a fresh MCID, producing one MCR
+						// per page in the struct element's /K array.
+						$this->closeBlockBdcIfOpen();
+
 						$this->AddPage($this->CurOrientation);
 
 						$this->x = $bak_x;
@@ -8923,6 +9021,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$ti = $this->sizeConverter->convert($this->blk[$this->blklvl]['text_indent'], $this->blk[$this->blklvl]['inner_width'], $this->blk[$this->blklvl]['InlineProperties']['size'], false);  // mPDF 5.7.4
 						$this->x += $ti;
 					}
+
+					// PDF/UA-1 §A14 — Lazy-open the per-page BDC just before the
+					// first Cell() emission of this completed line. Fixes the prior
+					// bug where only the FINAL line of a multi-line paragraph (the
+					// one reaching finishFlowingBlock(true)) was tagged; non-final
+					// lines emitted by WriteFlowingBlock here were untagged real
+					// content (Matterhorn 01-006, same-page case). Idempotent: a
+					// no-op when a BDC for the current page is already open.
+					$this->ensureBlockBdcOpen();
 
 					// BIDI magic_reverse moved upwards from here
 					foreach ($chunkorder as $aord => $k) { // mPDF 5.7
@@ -10812,6 +10919,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->pageDim[$this->page]['w'] = $this->w;
 		$this->pageDim[$this->page]['h'] = $this->h;
+
+		// PDF/UA-1 §A14 — pre-allocate the page's /StructParents integer at page
+		// creation time (rather than at PageWriter::writePages output finalization).
+		// This makes the value available to addContentForElement() during HTML
+		// rendering, so cross-page blocks accumulate one MCR per page with the
+		// correct per-page /StructParents key. PageWriter::writePages reads this
+		// pre-allocated value back when it emits the page dict.
+		// ISO 32000-1:2008 §14.7.4.4 — /StructParents on the page dict.
+		if ($this->PDFUA && !isset($this->pageDim[$this->page]['structParents'])) {
+			$this->pageDim[$this->page]['structParents'] = $this->ua->nextStructParents();
+		}
 
 		$this->pageDim[$this->page]['outer_width_LR'] = $this->page_box['outer_width_LR'] ?: 0;
 		$this->pageDim[$this->page]['outer_width_TB'] = $this->page_box['outer_width_TB'] ?: 0;
@@ -16518,6 +16636,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				&& empty($this->blk[$this->blklvl]['pdfua_artifact'])) {
 			$this->flowingBlockAttr['pdfua_struct_open'] = true;
 			$this->flowingBlockAttr['pdfua_type']        = $this->blk[$this->blklvl]['pdfua_type'];
+			// PDF/UA-1 §A14 — restore the captured struct element ref so
+			// ensureBlockBdcOpen() can attach MCIDs per page.
+			$this->flowingBlockAttr['pdfua_struct_elem'] = isset($this->blk[$this->blklvl]['pdfua_struct_elem'])
+				? $this->blk[$this->blklvl]['pdfua_struct_elem']
+				: null;
 		} elseif ($this->PDFUA && !$is_table && !empty($this->blk[$this->blklvl]['pdfua_artifact'])) {
 			$this->flowingBlockAttr['pdfua_artifact_open'] = true;
 		}

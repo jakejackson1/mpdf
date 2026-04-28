@@ -561,6 +561,183 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
+	/**
+	 * A paragraph that wraps onto multiple lines on a SINGLE page must still
+	 * collapse to a single bare-integer /K (no MCR dicts) — `singleSimpleMcid`
+	 * collapse rule (StructureWriter.php:288). Regression guard: the per-page
+	 * lazy opener (Mpdf::ensureBlockBdcOpen) must be idempotent within a page
+	 * so it allocates exactly one MCID for a multi-line same-page block.
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 — bare-integer /K is valid for single-page,
+	 * single-MCID elements.
+	 *
+	 * @group pdfua
+	 */
+	public function testParagraphMultiLineSinglePageStillSingleMcid()
+	{
+		$mpdf = $this->makeMpdf();
+		// Long enough to force several line wraps but short enough to fit on one page.
+		$html = '<p>' . str_repeat('Lorem ipsum dolor sit amet. ', 8) . '</p>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertSame(1, $mpdf->page, 'Paragraph must fit on one page');
+		// Exactly ONE /P BDC should appear for the paragraph.
+		preg_match_all('|/P <</MCID \d+>> BDC|', $output, $pBdcMatches);
+		$this->assertSame(1, count($pBdcMatches[0]), 'Single-page paragraph must produce exactly one /P BDC');
+		// No MCR dicts — bare integer should be used in /K.
+		$this->assertStringNotContainsString('/Type /MCR', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A `<ul>` whose items span a page break must produce MCR dicts on at
+	 * least one of the LI struct elements that crosses the boundary — i.e.,
+	 * the LI's /K array contains /Type /MCR entries with /Pg refs to two
+	 * distinct page objects.
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006 — untagged real content.
+	 * Plan §A14 — MCR /Pg per page.
+	 *
+	 * @group pdfua
+	 */
+	public function testListSplitAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		$rows = '';
+		for ($i = 0; $i < 60; $i++) {
+			$rows .= '<li>Item ' . $i . ' — Lorem ipsum dolor sit amet, consectetur adipiscing elit.</li>';
+		}
+		$output = $this->getOutput($mpdf, '<ul>' . $rows . '</ul>');
+
+		$this->assertGreaterThan(1, $mpdf->page, 'List must span more than one page');
+		$this->assertStringContainsString('/Type /MCR', $output);
+		preg_match_all('|/Pg (\d+) 0 R|', $output, $pgMatches);
+		$distinctPages = array_unique($pgMatches[1]);
+		$this->assertGreaterThanOrEqual(
+			2,
+			count($distinctPages),
+			'MCR dicts must reference at least two distinct page objects for a cross-page list'
+		);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A `<blockquote>` whose text spans a page break must produce MCR dicts
+	 * with at least two distinct /Pg references on the BlockQuote struct
+	 * element's /K array.
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006.
+	 *
+	 * @group pdfua
+	 */
+	public function testBlockquoteSplitAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<blockquote>' . str_repeat('Lorem ipsum dolor sit amet, consectetur adipiscing elit. ', 500) . '</blockquote>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertGreaterThan(1, $mpdf->page, 'Blockquote must span more than one page');
+		$this->assertStringContainsString('/Type /MCR', $output);
+		preg_match_all('|/Pg (\d+) 0 R|', $output, $pgMatches);
+		$this->assertGreaterThanOrEqual(2, count(array_unique($pgMatches[1])));
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A `<div role="region">` whose content spans a page break must produce
+	 * MCR dicts with two distinct /Pg refs on the Sect struct element.
+	 * Confirms the cross-page fix applies generically to ANY block element
+	 * with a struct mapping (not only paragraphs / lists / blockquotes).
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006.
+	 *
+	 * @group pdfua
+	 */
+	public function testDivWithRoleSplitAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<div role="region">' . str_repeat('Lorem ipsum dolor sit amet. ', 500) . '</div>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertGreaterThan(1, $mpdf->page, 'Div content must span more than one page');
+		$this->assertStringContainsString('/Type /MCR', $output);
+		preg_match_all('|/Pg (\d+) 0 R|', $output, $pgMatches);
+		$this->assertGreaterThanOrEqual(2, count(array_unique($pgMatches[1])));
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * An `<h1>` whose wrapped text spans a page break must produce MCR dicts
+	 * with two distinct /Pg refs on the H1 struct element. Headings can wrap
+	 * across pages when the font is large enough or the text long enough.
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006.
+	 *
+	 * @group pdfua
+	 */
+	public function testHeadingSplitAcrossPageBreakMcrDicts()
+	{
+		$mpdf = $this->makeMpdf();
+		// Large font + lots of text forces a multi-page H1.
+		$html = '<h1 style="font-size:48pt">' . str_repeat('Heading text line ', 200) . '</h1>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertGreaterThan(1, $mpdf->page, 'Heading must span more than one page');
+		$this->assertStringContainsString('/Type /MCR', $output);
+		preg_match_all('|/Pg (\d+) 0 R|', $output, $pgMatches);
+		$this->assertGreaterThanOrEqual(2, count(array_unique($pgMatches[1])));
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A `<div>` containing a `<p>` whose content spans a page break must keep
+	 * BDC/EMC balanced across the page transition. The inner P struct element
+	 * accumulates an MCR-dict /K array. The outer div (no role) is untagged
+	 * (no struct type), so only the inner paragraph contributes BDCs.
+	 *
+	 * Matterhorn Protocol 1.1 condition 01-006 + ISO 32000-1 §14.6 (BDC/EMC
+	 * matched within the same page content stream).
+	 *
+	 * @group pdfua
+	 */
+	public function testNestedBlockAcrossPageBreakBdcBalance()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<div><p>' . str_repeat('Lorem ipsum dolor sit amet. ', 500) . '</p></div>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertGreaterThan(1, $mpdf->page, 'Nested block must span more than one page');
+		$this->assertStringContainsString('/Type /MCR', $output);
+		preg_match_all('|/Pg (\d+) 0 R|', $output, $pgMatches);
+		$this->assertGreaterThanOrEqual(2, count(array_unique($pgMatches[1])));
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * An artifact-scope block (`<div role="presentation">`) whose content spans
+	 * a page break must keep `/Artifact BMC` and `EMC` balanced across pages
+	 * and must NOT produce a struct element MCR-dict /K array (artifact scope
+	 * suppresses struct creation).
+	 *
+	 * ISO 32000-1 §14.8.2.2 — artifact marked-content sequences.
+	 *
+	 * @group pdfua
+	 */
+	public function testArtifactBlockAcrossPageBreakBmcBalance()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<div role="presentation">' . str_repeat('Decorative text. ', 500) . '</div>';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertGreaterThan(1, $mpdf->page, 'Artifact div must span more than one page');
+		// /Artifact BMC must appear on multiple pages (one BMC per page).
+		preg_match_all('|/Artifact BMC|', $output, $bmcMatches);
+		$this->assertGreaterThanOrEqual(2, count($bmcMatches[0]), 'Artifact must rebracket on each page');
+		// No struct element for the presentation div.
+		$this->assertStringNotContainsString('/S /Div', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
 	// ========================= Figure BBox tests =========================
 
 	/**

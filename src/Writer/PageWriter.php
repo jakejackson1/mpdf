@@ -266,9 +266,18 @@ final class PageWriter
 			// has a StructTreeRoot (Matterhorn Protocol 1.1 condition 28-002).
 			// /Tabs /S (structure order) is required on every page dict by ISO 14289-1:2014 §7.1
 			// (Matterhorn Protocol 1.1 condition 28-001) — NOT only on annotated pages.
+			//
+			// PDF/UA-1 §A14 — Mpdf::_beginpage() pre-allocates pageDim[$n]['structParents']
+			// at page creation time so the value is available to addContentForElement()
+			// during HTML rendering. We read it back here. Fallback to nextStructParents()
+			// preserves behaviour for pages created via legacy paths that bypass _beginpage.
 			if ($this->mpdf->PDFUA) {
-				$structParents = $this->ua->nextStructParents();
-				$this->mpdf->pageDim[$n]['structParents'] = $structParents;
+				if (isset($this->mpdf->pageDim[$n]['structParents'])) {
+					$structParents = $this->mpdf->pageDim[$n]['structParents'];
+				} else {
+					$structParents = $this->ua->nextStructParents();
+					$this->mpdf->pageDim[$n]['structParents'] = $structParents;
+				}
 				$this->writer->write('/StructParents ' . $structParents);
 				$this->writer->write('/Tabs /S');
 			}

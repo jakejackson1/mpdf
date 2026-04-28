@@ -995,6 +995,11 @@ abstract class BlockTag extends Tag
 
 				// ARIA ID registration and deferred-reference queuing
 				$elem = $this->ua->getStructureTree()->getCurrent();
+				// PDF/UA-1 §A14 — capture the struct element reference so the
+				// per-page lazy opener (Mpdf::ensureBlockBdcOpen) can call
+				// addContentForElement() against THIS block element each time
+				// content emits on a new page. Mirrors Tag/Td.php:434.
+				$currblk['pdfua_struct_elem'] = $elem;
 				if (!empty($attr['ID'])) {
 					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
 				}
@@ -1374,6 +1379,11 @@ abstract class BlockTag extends Tag
 				if (!empty($blk['pdfua_type']) && empty($blk['pdfua_artifact'])) {
 					$this->mpdf->flowingBlockAttr['pdfua_struct_open'] = true;
 					$this->mpdf->flowingBlockAttr['pdfua_type']        = $blk['pdfua_type'];
+					// PDF/UA-1 §A14 — restore the captured struct element ref so
+					// ensureBlockBdcOpen() can attach MCIDs per page.
+					$this->mpdf->flowingBlockAttr['pdfua_struct_elem'] = isset($blk['pdfua_struct_elem'])
+						? $blk['pdfua_struct_elem']
+						: null;
 				} elseif (!empty($blk['pdfua_artifact'])) {
 					$this->mpdf->flowingBlockAttr['pdfua_artifact_open'] = true;
 				}
