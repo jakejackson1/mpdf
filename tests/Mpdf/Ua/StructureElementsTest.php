@@ -34,11 +34,14 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <h2> produces /S /H2 struct element.
+	 * <h2> produces /S /H2 struct element (preceded by <h1> for a valid heading sequence).
+	 *
+	 * ISO 14289-1:2014 §7.4.2 rule 1 — the first heading must be H1.
+	 * A stand-alone <h2> without a prior H1 would be a conformance violation.
 	 */
 	public function testH2ProducesH2StructElement()
 	{
-		$output = $this->getOutput($this->makeMpdf(), '<h2>Heading</h2>');
+		$output = $this->getOutput($this->makeMpdf(), '<h1>Title</h1><h2>Heading</h2>');
 		$this->assertStringContainsString('/S /H2', $output);
 	}
 
@@ -123,12 +126,15 @@ class StructureElementsTest extends PdfUaTestCase
 
 	/**
 	 * role="heading" aria-level="2" on a div produces /S /H2 struct element.
+	 *
+	 * A valid H1 is placed first so the document satisfies §7.4.2 rule 1
+	 * (first heading must be H1) in strict mode.
 	 */
 	public function testRoleHeadingOverridesTag()
 	{
 		$output = $this->getOutput(
 			$this->makeMpdf(),
-			'<div role="heading" aria-level="2">Custom Heading</div>'
+			'<h1>Title</h1><div role="heading" aria-level="2">Custom Heading</div>'
 		);
 		$this->assertStringContainsString('/S /H2', $output);
 		$this->assertBdcEmcBalanced($output);

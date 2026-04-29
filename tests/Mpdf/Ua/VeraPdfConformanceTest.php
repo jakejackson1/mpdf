@@ -233,16 +233,16 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 * FpdiStructMerger Tier 1 path wraps the Form XObject Do operator as
 	 * /Artifact <</Type /Layout>> BDC...EMC (Matterhorn 01-007).
 	 *
-	 * Uses tests/data/pdfs/2-Page-PDF_1_4.pdf as the untagged source fixture.
+	 * The source fixture is generated inline (rather than read from
+	 * tests/data/pdfs/) so the source PDF's fonts are guaranteed to be
+	 * embedded — PDF/UA-1 §7.21.4.1 requires every font used for rendering to
+	 * be embedded, and FPDI inherits font references from the source verbatim.
 	 *
 	 * @return void
 	 */
 	public function testFpdiTier1ImportPassesUa1()
 	{
-		$sourceFixture = __DIR__ . '/../../data/pdfs/2-Page-PDF_1_4.pdf';
-		if (!is_file($sourceFixture)) {
-			$this->markTestSkipped('FPDI test fixture not found: ' . $sourceFixture);
-		}
+		$sourceFixture = $this->makeUntaggedSourceFixture();
 
 		$mpdf = $this->makeMpdf(['enableImports' => true, 'PDFUAauto' => true]);
 		$mpdf->setSourceFile($sourceFixture);
@@ -251,7 +251,29 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		// FpdiStructMerger Tier 1: wraps the Do operator as /Artifact BDC...EMC.
 		$mpdf->SetPageTemplate($pageId);
 		$pdf = $this->getOutput($mpdf, '<h1>Imported Page</h1><p>Content over imported background.</p>');
+		@unlink($sourceFixture);
 		$this->assertVeraPdfCompliant($pdf, 'FPDI Tier 1 import');
+	}
+
+	/**
+	 * Generate an untagged source PDF whose fonts are embedded.
+	 *
+	 * Used by testFpdiTier1ImportPassesUa1. Produces the file under sys_get_temp_dir()
+	 * so the test does not depend on a checked-in fixture whose font-embedding state
+	 * we cannot easily guarantee.
+	 *
+	 * @return string  absolute path to the generated source PDF
+	 */
+	private function makeUntaggedSourceFixture()
+	{
+		// mode => 'utf-8' + a TrueType font (DejaVuSansCondensed is bundled in
+		// ttfonts/) ensures the source PDF embeds its font subset rather than
+		// referencing a core PDF font, which would fail PDF/UA-1 §7.21.4.1.
+		$source = new \Mpdf\Mpdf(['mode' => 'utf-8', 'default_font' => 'DejaVuSansCondensed']);
+		$source->WriteHTML('<p>Untagged source page generated for FPDI Tier 1 import testing.</p>');
+		$path = tempnam(sys_get_temp_dir(), 'mpdf_ua_fpdi_source_') . '.pdf';
+		file_put_contents($path, $source->Output('', 'S'));
+		return $path;
 	}
 
 	/**

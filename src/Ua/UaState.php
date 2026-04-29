@@ -84,6 +84,20 @@ class UaState
 	 */
 	protected $openedImplicitLI = false;
 
+	/**
+	 * The last heading level (1-6) emitted into the struct tree, or 0 if no
+	 * heading has been seen yet in the current document.
+	 *
+	 * Used by the heading-order auto-clamp (ISO 14289-1:2014 §7.4.2 rule 1):
+	 * the first heading must be H1 and descending sequences must not skip
+	 * intervening levels. BlockTag::open() reads and updates this value via
+	 * getLastHeadingLevel() / setLastHeadingLevel() whenever it processes an
+	 * H1-H6 struct element outside a table context.
+	 *
+	 * @var int  0 = no heading seen yet; 1-6 = last assigned struct heading level.
+	 */
+	protected $lastHeadingLevel = 0;
+
 	// --- collaborators (injected once via __construct; no setters) ---
 
 	/** @var MarkedContentHelper */
@@ -261,6 +275,35 @@ class UaState
 	public function setOpenedImplicitLI($v)
 	{
 		$this->openedImplicitLI = (bool) $v;
+	}
+
+	/**
+	 * Return the last heading level (1-6) recorded in the struct tree, or 0
+	 * if no heading has been emitted yet.
+	 *
+	 * ISO 14289-1:2014 §7.4.2 rule 1 — used by BlockTag to enforce heading
+	 * sequence validity before pushing each H1-H6 struct element.
+	 *
+	 * @return int
+	 */
+	public function getLastHeadingLevel()
+	{
+		return $this->lastHeadingLevel;
+	}
+
+	/**
+	 * Record the heading level just assigned to the struct tree.
+	 *
+	 * Called by BlockTag::open() immediately after the final (possibly
+	 * auto-clamped) heading struct type has been determined, so that the next
+	 * heading can check continuity.
+	 *
+	 * @param  int $level  1-6
+	 * @return void
+	 */
+	public function setLastHeadingLevel($level)
+	{
+		$this->lastHeadingLevel = (int) $level;
 	}
 
 	// The six collaborator fields (markedContentHelper, structureTree,

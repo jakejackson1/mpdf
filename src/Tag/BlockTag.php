@@ -977,6 +977,55 @@ abstract class BlockTag extends Tag
 				$structType = '__artifact__';
 			}
 
+			// PDF/UA-1 §7.4.2 rule 1 — heading sequence enforcement.
+			// The first heading must be H1; descending sequences must not skip
+			// intervening levels (e.g. H1→H3 is invalid; auto-clamp to H1→H2).
+			// Only applies to struct types H1-H6 outside tables (tableLevel guard
+			// is already applied at the if ($this->mpdf->PDFUA …) gate above).
+			if ($structType !== null && $structType !== '__artifact__'
+				&& preg_match('/^H([1-6])$/', $structType, $hm)
+			) {
+				$requestedLevel = (int) $hm[1];
+				$lastLevel      = $this->ua->getLastHeadingLevel();
+
+				if ($lastLevel === 0 && $requestedLevel > 1) {
+					// First heading in the document is not H1 — violation.
+					if ($this->mpdf->PDFUAauto) {
+						$this->ua->addWarning(
+							'PDF/UA-1 §7.4.2: first heading must be H1; '
+							. $structType . ' auto-promoted to H1.'
+						);
+						$structType = 'H1';
+					} else {
+						throw new \Mpdf\MpdfException(
+							'PDF/UA-1 §7.4.2: first heading in the document must be H1; '
+							. $structType . ' found. Enable PDFUAauto to auto-correct.'
+						);
+					}
+				} elseif ($lastLevel > 0 && $requestedLevel > $lastLevel + 1) {
+					// Descending sequence skips a level — violation.
+					$clampedLevel = $lastLevel + 1;
+					if ($this->mpdf->PDFUAauto) {
+						$this->ua->addWarning(
+							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+							. ' to ' . $structType . '; auto-clamped to H' . $clampedLevel . '.'
+						);
+						$structType = 'H' . $clampedLevel;
+					} else {
+						throw new \Mpdf\MpdfException(
+							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+							. ' to ' . $structType . ' (skips H' . $clampedLevel . '). '
+							. 'Enable PDFUAauto to auto-correct.'
+						);
+					}
+				}
+
+				// Record the final assigned level (after any clamping).
+				if (preg_match('/^H([1-6])$/', $structType, $fm)) {
+					$this->ua->setLastHeadingLevel((int) $fm[1]);
+				}
+			}
+
 			if ($structType === '__artifact__') {
 				$this->ua->getStructureTree()->openArtifact();
 				$currblk['pdfua_artifact'] = true;

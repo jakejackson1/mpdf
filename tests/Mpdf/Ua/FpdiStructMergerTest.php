@@ -56,10 +56,12 @@ class FpdiStructMergerTest extends PdfUaTestCase
 	 * Used by Tier 2 tests as the "tagged source" fixture. The generated PDF has
 	 * a /StructTreeRoot in its catalog, so sourceIsTagged() returns true for it.
 	 *
-	 * Uses <h2> and <h3> (struct types H2 and H3) deliberately — the host document
+	 * Uses <h1>, <h2>, and <h3> (struct types H1, H2, H3) — the host document
 	 * only ever writes <p> (struct type P), so /S /H2 and /S /H3 in the output can
-	 * only originate from the merged subtree. Using two elements also exercises the
-	 * multi-element reuse path in addPerPageMcrKids().
+	 * only originate from the merged subtree. The leading <h1> satisfies the
+	 * ISO 14289-1:2014 §7.4.2 rule 1 heading-sequence requirement (first heading
+	 * must be H1) so no PDFUAauto clamping is needed. Using three elements also
+	 * exercises the multi-element reuse path in addPerPageMcrKids().
 	 *
 	 * @return string  absolute path to the temp file
 	 */
@@ -67,7 +69,11 @@ class FpdiStructMergerTest extends PdfUaTestCase
 	{
 		$source = $this->makeMpdf();
 		$source->AddPage();
-		$source->WriteHTML('<h2>Tagged source heading</h2><h3>Tagged source subheading</h3>');
+		$source->WriteHTML(
+			'<h1>Tagged source title</h1>'
+			. '<h2>Tagged source heading</h2>'
+			. '<h3>Tagged source subheading</h3>'
+		);
 		$tmp = tempnam(sys_get_temp_dir(), 'mpdf_tagged_') . '.pdf';
 		$source->Output($tmp, 'F');
 		return $tmp;
