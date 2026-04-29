@@ -589,8 +589,22 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						$rect = sprintf('%.3F %.3F %.3F %.3F', $pl[0], $pl[1], $pl[0] + $pl[2], $pl[1] - $pl[3]);
 
 						$annot .= '<</Type /Annot /Subtype /Link /Rect [' . $rect . ']';
-						// Removed as causing undesired effects in Chrome PDF viewer https://github.com/mpdf/mpdf/issues/283
-						// $annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl[4]);
+						// PDF/UA-1 §7.18.5 test 2 — link annotations require /Contents (alternate
+						// description) per ISO 32000-1 §14.9.3. Previously removed due to a Chrome
+						// PDF viewer cosmetic bug (issue #283); re-enabled for PDFUA only because the
+						// Chrome issue is a cosmetic tooltip problem, not a data-integrity issue, and
+						// PDF/UA-1 conformance takes precedence over viewer workarounds.
+						if ($this->mpdf->PDFUA) {
+							$contents = '';
+							if (is_string($pl[4]) && strpos($pl[4], '@') !== 0) {
+								$contents = $pl[4];
+							} elseif (is_string($pl[4]) && strpos($pl[4], '@') === 0) {
+								$contents = 'Internal link';
+							} else {
+								$contents = 'Internal link';
+							}
+							$annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($contents);
+						}
 						$annot .= ' /NM ' . $this->writer->string(sprintf('%04u-%04u', $n, $key));
 						$annot .= ' /M ' . $this->writer->string('D:' . date('YmdHis'));
 
