@@ -1131,6 +1131,28 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->services[] = $key;
 		}
 
+		// PDF/UA-1 §7.1 — every piece of real content must be tagged. With
+		// useActiveForms=false (the default), <input>/<textarea>/<select>
+		// render as drawn chrome that bypasses StructureTree entirely, which
+		// produces an untagged-real-content violation that veraPDF flags as
+		// rule 7.1#3. The PDFUA-aware code paths in src/Form.php live inside
+		// useActiveForms branches, so the only correctness-preserving option
+		// is to require active forms whenever PDFUA is on.
+		if ($this->PDFUA && !$this->useActiveForms) {
+			if (empty($this->PDFUAauto)) {
+				throw new \Mpdf\MpdfException(
+					'PDF/UA-1 requires useActiveForms=true so form widgets are tagged. '
+					. 'Either set "useActiveForms" => true in your config, or enable '
+					. 'PDFUAauto to have mPDF auto-correct (active forms get force-enabled).'
+				);
+			}
+			$this->useActiveForms = true;
+			$this->ua->addWarning(
+				'useActiveForms auto-enabled because PDF/UA-1 requires every form '
+				. 'widget to be a tagged annotation (ISO 14289-1 §7.1).'
+			);
+		}
+
 		$this->time0 = microtime(true);
 
 		$this->writingToC = false;

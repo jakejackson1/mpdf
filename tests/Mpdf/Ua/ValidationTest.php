@@ -201,8 +201,9 @@ class ValidationTest extends PdfUaTestCase
 	public function testMissingLangThrowsInStrictMode()
 	{
 		// Construct without 'mode' (the language) — bypass makeMpdf which
-		// hard-codes mode='en-GB'.
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'title' => 'Test']);
+		// hard-codes mode='en-GB'. useActiveForms=true is required because
+		// PDFUA on without it now throws at construction (see Mpdf::__construct).
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'title' => 'Test', 'useActiveForms' => true]);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<h1>Hello</h1>');
 
@@ -218,7 +219,7 @@ class ValidationTest extends PdfUaTestCase
 	 */
 	public function testMissingLangFallsBackInAutoMode()
 	{
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => true, 'title' => 'Test']);
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => true, 'title' => 'Test', 'useActiveForms' => true]);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<h1>Hello</h1>');
 		$out = $mpdf->Output('', 'S');
