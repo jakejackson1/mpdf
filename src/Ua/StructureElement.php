@@ -283,6 +283,24 @@ class StructureElement
 	}
 
 	/**
+	 * Remove the most recently added child from this element's children list.
+	 *
+	 * Used when a tag handler discovers it pushed the wrong struct type (e.g.
+	 * Th::open() inherits Td's TD push and then needs to swap it for a TH).
+	 * Without this method the discarded TD would remain in the parent's /K
+	 * array, leaving a phantom cell that breaks ISO 14289-1 §7.2 test 43
+	 * (table rows must have the same number of columns).
+	 *
+	 * Idempotent when no children exist.
+	 *
+	 * @return void
+	 */
+	public function popLastChild()
+	{
+		array_pop($this->children);
+	}
+
+	/**
 	 * Record an ARIA relationship attribute value referencing another struct element.
 	 *
 	 * Used by AriaIdResolver to wire up resolved aria-labelledby, aria-describedby,

@@ -59,6 +59,14 @@ class A extends Tag
 						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
 					}
 				}
+
+				// Capture the Link struct element so Mpdf::Link() can attach the
+				// element reference to the PageLinks entry. writeAnnotations()
+				// reads it back, allocates a /StructParent integer for the link
+				// annotation, and adds an OBJR kid to the element so the link
+				// annotation is reachable from the structure tree (ISO 14289-1
+				// §7.18.5 / Matterhorn 02-003).
+				$this->mpdf->pdfuaLinkStructElem = $elem;
 			}
 		}
 	}
@@ -69,6 +77,11 @@ class A extends Tag
 		if ($this->mpdf->PDFUA && $this->mpdf->HREF !== '') {
 			$this->ua->getStructureTree()->close();
 		}
+
+		// PDF/UA-1 — clear the captured Link struct element ref. Any subsequent
+		// Mpdf::Link() call (outside an <a href> scope) must not pick up a stale
+		// reference from the previous link.
+		$this->mpdf->pdfuaLinkStructElem = null;
 
 		$this->mpdf->HREF = '';
 		if (isset($this->mpdf->InlineProperties['A'])) {

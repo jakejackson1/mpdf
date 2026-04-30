@@ -170,6 +170,12 @@ class ServiceFactory
 			$fpdiStructMerger
 		);
 
+		// Inject the facade back into StructureTree so its annotation-level
+		// ParentTree-key allocator (nextAnnotStructParent/reserveAnnotStructParent)
+		// shares the same counter as page /StructParents — see StructureTree
+		// docblock for the collision rationale.
+		$structureTree->setUaState($uaState);
+
 		$tag = new Tag(
 			$mpdf,
 			$cache,

@@ -58,11 +58,19 @@ class StructureTree
 	 */
 	protected $artifactDepth;
 
-	/** @var int  Sequential /StructParent integer for annotations (singular key per annotation dict). */
-	protected $annotParentCounter;
-
 	/** @var array<int, StructureElement>  Annotation /StructParent integer → owning struct element. */
 	protected $annotParentTree;
+
+	/**
+	 * @var \Mpdf\Ua\UaState|null  Facade injected after construction (ServiceFactory
+	 *   builds StructureTree before UaState — see ServiceFactory bootstrap order).
+	 *   Used to obtain the next /StructParent integer from the same pool that pages
+	 *   draw from, avoiding collisions where a page's /StructParents N and an
+	 *   annotation's /StructParent N both target the same ParentTree key
+	 *   (ISO 32000-1 §14.7.4.4 — page-level plural keys and annotation singular
+	 *   keys SHARE the ParentTree NumTree).
+	 */
+	protected $uaState;
 
 	/**
 	 * @var array<string,string>
@@ -87,9 +95,23 @@ class StructureTree
 		$this->mcidByPage         = [];
 		$this->parentTree         = [];
 		$this->artifactDepth      = 0;
-		$this->annotParentCounter = 0;
 		$this->annotParentTree    = [];
 		$this->roleMappings       = [];
+		$this->uaState            = null;
+	}
+
+	/**
+	 * Inject the UaState facade so ParentTree-key allocation can share a single
+	 * counter with page /StructParents. Called once by ServiceFactory after the
+	 * UaState facade is built (the build order is StructureTree → UaState, so a
+	 * constructor-time injection is impossible).
+	 *
+	 * @param  \Mpdf\Ua\UaState $uaState
+	 * @return void
+	 */
+	public function setUaState(UaState $uaState)
+	{
+		$this->uaState = $uaState;
 	}
 
 	// ================== Getters ==================
@@ -205,6 +227,61 @@ class StructureTree
 			return;
 		}
 		array_pop($this->stack);
+	}
+
+	/**
+	 * Push an existing struct element onto the open-element stack without
+	 * creating a new one or appending it as a child of the current top.
+	 *
+	 * Used when the deferred-render path needs to make a previously-pushed
+	 * element (e.g. a TD cell saved during HTML parse) the parent of new
+	 * children that are opened during render time. Without this, opens of
+	 * Figure / Span / etc. inside a cell would attach those children to the
+	 * wrong parent (the parse-time stack top — usually Document or Table).
+	 *
+	 * The caller MUST balance the push with a close() call (which simply pops
+	 * the element off the stack — the structure-tree linkage was established
+	 * when the element was originally pushed via open()).
+	 *
+	 * @param  StructureElement $elem
+	 * @return void
+	 */
+	public function pushExisting(StructureElement $elem)
+	{
+		if ($this->isInArtifact()) {
+			return;
+		}
+		$this->stack[] = $elem;
+	}
+
+	/**
+	 * Pop the top struct element AND remove it from its parent's children.
+	 *
+	 * Use when a tag handler needs to discard a previously-opened element
+	 * (for example Th::open() inherits a TD push from Td::open() and must
+	 * replace it with TH). A plain close() leaves the discarded element in
+	 * the parent's /K array, which breaks ISO 14289-1 §7.2 test 43 by adding
+	 * phantom column counts.
+	 *
+	 * Idempotent: no-op when only the Document root is on the stack or when
+	 * we are inside an artifact scope.
+	 *
+	 * @return void
+	 */
+	public function discardTop()
+	{
+		if (count($this->stack) <= 1) {
+			return;
+		}
+		if ($this->isInArtifact()) {
+			return;
+		}
+		$top = end($this->stack);
+		$parent = $top->getParent();
+		array_pop($this->stack);
+		if ($parent !== null) {
+			$parent->popLastChild();
+		}
 	}
 
 	// ================== content / artifact ==================
@@ -349,7 +426,12 @@ class StructureTree
 	 */
 	public function nextAnnotStructParent(StructureElement $elem)
 	{
-		$idx = $this->annotParentCounter++;
+		// Allocate from the SHARED ParentTree pool (UaState's counter, also
+		// used by page /StructParents). A separate counter would let an annot
+		// /StructParent collide with a page /StructParents N — both index the
+		// same NumTree, so the second writer would overwrite the first entry
+		// and either the page MCID array or the annotation map would vanish.
+		$idx = $this->uaState->nextStructParents();
 		$this->annotParentTree[$idx] = $elem;
 		return $idx;
 	}
@@ -368,7 +450,7 @@ class StructureTree
 	 */
 	public function reserveAnnotStructParent()
 	{
-		return $this->annotParentCounter++;
+		return $this->uaState->nextStructParents();
 	}
 
 	/**

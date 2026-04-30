@@ -429,6 +429,20 @@ class Td extends Tag
 					$tdAttrs['Headers'] = $ids;
 				}
 			}
+			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the
+			// same number of columns once colspan and rowspan are taken into
+			// account. veraPDF computes that count by reading /ColSpan and
+			// /RowSpan attributes off TD/TH struct elements; missing keys mean
+			// "1" by default. Without /ColSpan and /RowSpan, a row that uses
+			// colspan="3" is reported as 1-column wide and the row-equality
+			// check fails (§7.2 test 43). Read the HTML attrs (mirroring the
+			// validation a few lines below) and forward them to StructureTree.
+			if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
+				$tdAttrs['ColSpan'] = (int) $attr['COLSPAN'];
+			}
+			if (isset($attr['ROWSPAN']) && preg_match('/^\d+$/', $attr['ROWSPAN']) && $attr['ROWSPAN'] > 1) {
+				$tdAttrs['RowSpan'] = (int) $attr['ROWSPAN'];
+			}
 			$this->ua->getStructureTree()->open('TD', $tdAttrs);
 			$tdElem = $this->ua->getStructureTree()->getCurrent();
 			$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem'] = $tdElem;

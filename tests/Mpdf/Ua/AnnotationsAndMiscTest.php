@@ -24,19 +24,21 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	// ========================= Sticky-note Annotations =========================
 
 	/**
-	 * A sticky-note annotation produces /S /Note in the struct tree.
+	 * A sticky-note annotation produces /S /Annot in the struct tree.
 	 *
-	 * The annotation's struct element must appear in the PDF output as a
-	 * /Type /StructElem with /S /Note.
+	 * ISO 14289-1:2014 §7.18.1 (Matterhorn 02-001) — Text and FileAttachment
+	 * annotations must be nested within an Annot struct element. The previous
+	 * implementation used Note, which is the footnote tag and triggers a
+	 * §7.9 / Matterhorn 09-006 failure (Note tag must have /ID).
 	 */
-	public function testAnnotationProducesNoteStructElement()
+	public function testAnnotationProducesAnnotStructElement()
 	{
 		$mpdf = $this->makeMpdf();
 		$output = $this->getOutput(
 			$mpdf,
 			'<p>Text<annotation content="Review this section" title="Editor"/></p>'
 		);
-		$this->assertStringContainsString('/S /Note', $output);
+		$this->assertStringContainsString('/S /Annot', $output);
 	}
 
 	/**
@@ -73,12 +75,12 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	}
 
 	/**
-	 * The Note struct element has an OBJR kid pointing at the annotation object.
+	 * The Annot struct element has an OBJR kid pointing at the annotation object.
 	 *
-	 * /Type /OBJR in the /K array of the Note struct element is how the struct
+	 * /Type /OBJR in the /K array of the Annot struct element is how the struct
 	 * tree references the annotation object — not an MCID-based content item.
 	 */
-	public function testAnnotationNoteStructElementHasObjr()
+	public function testAnnotationAnnotStructElementHasObjr()
 	{
 		$mpdf = $this->makeMpdf();
 		$output = $this->getOutput(
@@ -89,14 +91,14 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	}
 
 	/**
-	 * A file-attachment annotation also produces a Note struct element.
+	 * A file-attachment annotation also produces an Annot struct element.
 	 *
 	 * ISO 14289-1:2014 §7.18 — all annotation subtypes (except hidden, outside
 	 * CropBox, or Popup) must be in the structure tree. /FileAttachment is not in
 	 * the exempt list; when allowAnnotationFiles=true the annotation is a real
 	 * PDF object and must carry /StructParent and appear in the struct tree.
 	 */
-	public function testFileAttachmentAnnotationProducesNoteStructElement()
+	public function testFileAttachmentAnnotationProducesAnnotStructElement()
 	{
 		$mpdf = $this->makeMpdf(['allowAnnotationFiles' => true]);
 		$mpdf->WriteHTML('<p>See attached</p>');
@@ -114,7 +116,7 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 			__DIR__ . '/../../data/img/issue1609.png'
 		);
 		$output = $mpdf->Output(null, 'S');
-		$this->assertStringContainsString('/S /Note', $output);
+		$this->assertStringContainsString('/S /Annot', $output);
 		$this->assertStringContainsString('/StructParent', $output);
 		$this->assertStringContainsString('/Type /OBJR', $output);
 	}
@@ -432,22 +434,34 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		// Step 2: find the ParentTree /Nums array and look up index $spIndex.
 		// The NumTree leaf for annotation entries is: index REF (single ref, no array wrapper).
 		// Pattern: key followed by "N 0 R" (not wrapped in []).
-		$numsFound = preg_match('/\/Nums \[([^\]]+)\]/', $output, $numsMatch);
+		// Note: the /Nums array contains both page-level entries (`N [REFS]` with
+		// nested brackets) and annotation-level entries (`N M 0 R`). A naive
+		// `\[([^\]]+)\]` would stop at the first nested `]`. The closing of the
+		// outer /Nums array is `]>>` (followed by /Limits or end-of-dict), so
+		// match up to that exact terminator.
+		$numsFound = preg_match('/\/Nums \[(.*?)\]\s*>>/s', $output, $numsMatch);
 		$this->assertSame(1, $numsFound, '/Nums array must exist in the ParentTree');
 		$numsContent = $numsMatch[1];
 
 		// Find the value for our specific index in the NumTree.
 		// Annotation entries: "N  M 0 R" (single ref); page entries: "N [...]".
-		$entryPattern = '/' . $spIndex . '\s+(\d+)\s+0\s+R\b/';
+		// Anchor on a leading whitespace/newline to avoid matching inside a
+		// page-level array element with the same trailing digit.
+		$entryPattern = '/(^|\s)' . $spIndex . '\s+(\d+)\s+0\s+R\b/m';
 		$entryFound = preg_match($entryPattern, $numsContent, $entryMatch);
 		$this->assertSame(
 			1,
 			$entryFound,
 			'ParentTree must have a single-ref entry at index ' . $spIndex . ' for the annotation'
 		);
-		$structElemObjNum = (int) $entryMatch[1];
+		// $entryMatch[1] is the leading whitespace/anchor; $entryMatch[2] is the
+		// struct element object number captured by the second `(\d+)` group.
+		$structElemObjNum = (int) $entryMatch[2];
 
-		// Step 3: find the struct element object and confirm /S /Note.
+		// Step 3: find the struct element object and confirm /S /Annot.
+		// ISO 14289-1 §7.18.1 (Matterhorn 02-001) — sticky-note annotations are
+		// nested in an Annot struct element (Note is the footnote tag and triggers
+		// §7.9 / Matterhorn 09-006 because the Note tag requires /ID).
 		$objPattern = '/' . $structElemObjNum . '\s+0\s+obj\s*<<([^>]+(?:>[^>]+)*?)>>/';
 		$objFound = preg_match($objPattern, $output, $objMatch);
 		$this->assertSame(
@@ -456,9 +470,9 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 			'Struct element object ' . $structElemObjNum . ' must be present in the PDF output'
 		);
 		$this->assertStringContainsString(
-			'/S /Note',
+			'/S /Annot',
 			$objMatch[0],
-			'The struct element referenced by ParentTree[' . $spIndex . '] must have /S /Note'
+			'The struct element referenced by ParentTree[' . $spIndex . '] must have /S /Annot'
 		);
 	}
 

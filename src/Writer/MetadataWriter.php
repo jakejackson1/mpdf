@@ -370,17 +370,29 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		// ISO 14289-1:2014 §7.2 (Matterhorn Protocol 1.1 condition 04-001) — /Lang is required
 		// in the document catalog when PDFUA is active. Fall back to en-US with a warning in
 		// PDFUAauto mode, or throw in strict mode when neither currentLang nor default_lang is set.
+		//
+		// /Lang carries a PDF text string (ISO 32000-1 §14.9.2). When the document is
+		// encrypted, the bytes inside `(...)` MUST be RC4-encrypted with the catalog's
+		// object key — writer->string() handles that; writing the raw literal
+		// `/Lang (en-US)` into an encrypted catalog leaves the bytes plain and veraPDF
+		// then decrypts them and reads garbage, failing §7.2 test 29. When unencrypted,
+		// writer->string() returns plain ASCII so existing fixture-based tests asserting
+		// `/Lang (cs_CZ)` continue to match.
+		$langTag = null;
 		if (is_string($this->mpdf->currentLang) && $this->mpdf->currentLang !== '') {
-			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->currentLang));
+			$langTag = $this->mpdf->currentLang;
 		} elseif (is_string($this->mpdf->default_lang) && $this->mpdf->default_lang !== '') {
-			$this->writer->write(sprintf('/Lang (%s)', $this->mpdf->default_lang));
+			$langTag = $this->mpdf->default_lang;
 		} elseif ($this->mpdf->PDFUA) {
 			if ($this->mpdf->PDFUAauto) {
 				$this->ua->addWarning('PDF/UA-1 requires a /Lang entry in the document catalog. Defaulting to en-US.');
-				$this->writer->write('/Lang (en-US)');
+				$langTag = 'en-US';
 			} else {
 				throw new \Mpdf\MpdfException('PDF/UA-1 requires a /Lang entry in the document catalog. Pass a language mode such as \'en-GB\' to the Mpdf constructor.');
 			}
+		}
+		if ($langTag !== null) {
+			$this->writer->write('/Lang ' . $this->writer->string($langTag));
 		}
 
 		if ($this->mpdf->ZoomMode === 'fullpage') {
@@ -584,6 +596,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 					foreach ($this->mpdf->PageLinks[$n] as $key => $pl) {
 
 						$this->writer->object();
+						$linkAnnotObjNum = $this->mpdf->n;
 						$annot = '';
 
 						$rect = sprintf('%.3F %.3F %.3F %.3F', $pl[0], $pl[1], $pl[0] + $pl[2], $pl[1] - $pl[3]);
@@ -618,8 +631,23 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// $annot .= ' >>';
 						// $annot .= ' /C [1 0 0]';	// Color RGB
 
-						if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+						if ($this->mpdf->PDFA || $this->mpdf->PDFX || $this->mpdf->PDFUA) {
+							// /F 28 — bits 3 (Print), 4 (NoZoom), 5 (NoRotate). PDF/UA-1
+							// §7.18.5 / Matterhorn 02-003 require these flags on link annots.
 							$annot .= ' /F 28';
+						}
+
+						// PDF/UA-1 §7.18.5 — wire the link annotation to its Link struct
+						// element via OBJR + /StructParent so AT can resolve the annotation
+						// to the surrounding Link tag. The 6th PageLinks element is the
+						// captured StructureElement reference from Tag\A::open(); absent for
+						// links emitted outside an <a href> scope (e.g. from a TOC entry,
+						// in which case the annotation is left untagged and verapdf will
+						// flag it — those call sites must be updated similarly).
+						if ($this->mpdf->PDFUA && isset($pl[5]) && $pl[5] !== null) {
+							$linkStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($pl[5]);
+							$pl[5]->addObjref($linkStructParent, $linkAnnotObjNum);
+							$annot .= ' /StructParent ' . $linkStructParent;
 						}
 
 						if (strpos($pl[4], '@') === 0) {
@@ -671,13 +699,15 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// or Popup subtype) must appear in the structure tree in reading order.
 						// This includes /FileAttachment annotations: when allowAnnotationFiles
 						// is true the annotation is written as a real PDF object and must also
-						// be tagged. Create a Note struct element as a child of the Document
-						// root, wire it to this annotation via an OBJR dict, and record the
-						// /StructParent integer for the annotation dict.
+						// be tagged. ISO 14289-1 §7.18.1 (Matterhorn 02-001) — Text and
+						// FileAttachment annotations shall be nested within an Annot struct
+						// element. Previously this used Note (which is a footnote tag and
+						// requires an /ID per §7.9 / Matterhorn 09-006). Annot is the correct
+						// general-purpose container for non-Widget/Link/PrinterMark annots.
 						$noteStructElem = null;
 						$noteStructParent = null;
 						if ($this->mpdf->PDFUA) {
-							$this->ua->getStructureTree()->open('Note', []);
+							$this->ua->getStructureTree()->open('Annot', []);
 							$noteStructElem = $this->ua->getStructureTree()->getCurrent();
 							$this->ua->getStructureTree()->close();
 							$noteStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($noteStructElem);

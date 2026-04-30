@@ -540,6 +540,20 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $ws; // Word spacing
 
 	var $HREF;
+
+	/**
+	 * PDF/UA-1 — current Link struct element captured by Tag\A::open() for
+	 * the active <a href>. Mpdf::Link() copies this reference onto the
+	 * PageLinks entry so writeAnnotations() can wire an OBJR kid + the
+	 * /StructParent integer back from the annotation to the Link element.
+	 * Cleared in Tag\A::close(). May be null when PDFUA is off or the link
+	 * is a destination anchor (<a name>).
+	 *
+	 * ISO 32000-1:2008 §14.8.4.4.2 Table 338 — Link element OBJR.
+	 *
+	 * @var \Mpdf\Ua\StructureElement|null
+	 */
+	var $pdfuaLinkStructElem;
 	var $pgwidth;
 	var $fontlist;
 	var $oldx;
@@ -1538,6 +1552,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 		$this->HREF = '';
+		$this->pdfuaLinkStructElem = null;
 		$this->oldy = -1;
 		$this->B = 0;
 		$this->I = 0;
@@ -2412,6 +2427,20 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		ksort($this->pageBackgrounds);
 
+		// PDF/UA-1 — page backgrounds (block bg fills, gradients, bg images)
+		// rendered at the ___BEFORE_BORDERS___ placeholder are decorative chrome.
+		// ISO 14289-1 §7.1 / Matterhorn 01-002 — wrap them as a single Artifact
+		// sequence so AT skips them. The opening BMC and trailing EMC bracket
+		// every drawing op the foreach loops below append. The header/footer
+		// guard is intentionally absent (see PaintDivBB rationale) — header
+		// streams already live inside an outer /Artifact pagination sequence
+		// and a nested artifact here is consistent with ISO 32000-1 §14.6.
+		$pdfuaArtifactOpened = false;
+		if ($this->PDFUA && !empty($this->pageBackgrounds)) {
+			$s .= "/Artifact BMC\n";
+			$pdfuaArtifactOpened = true;
+		}
+
 		foreach ($this->pageBackgrounds as $bl => $pbs) {
 
 			foreach ($pbs as $pb) {
@@ -2670,6 +2699,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			/* -- END BACKGROUNDS -- */
 		}
 
+		// PDF/UA-1 — close the /Artifact BMC opened above.
+		// ISO 32000-1 §14.6 — every BMC must be paired with exactly one EMC.
+		if ($pdfuaArtifactOpened) {
+			$s .= "EMC\n";
+		}
+
 		return $s;
 	}
 
@@ -2678,6 +2713,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$s = '';
 		/* -- BACKGROUNDS -- */
 		ksort($this->tableBackgrounds);
+
+		// PDF/UA-1 — table cell/row/column backgrounds and gradients are
+		// decorative chrome behind table content. ISO 14289-1 §7.1 / Matterhorn
+		// 01-002 — wrap them as a single Artifact sequence so AT skips them.
+		// The opening BMC and trailing EMC bracket the q/re/f/Q operators
+		// emitted by the foreach loops below.
+		$pdfuaArtifactOpened = false;
+		if ($this->PDFUA && !empty($this->tableBackgrounds)) {
+			$s .= "/Artifact BMC\n";
+			$pdfuaArtifactOpened = true;
+		}
 		foreach ($this->tableBackgrounds as $bl => $pbs) {
 			foreach ($pbs as $pb) {
 				if ((!isset($pb['gradient']) || !$pb['gradient']) && (!isset($pb['image_id']) || !$pb['image_id'])) {
@@ -2849,6 +2895,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 		}
 		/* -- END BACKGROUNDS -- */
+
+		// PDF/UA-1 — close the /Artifact BMC opened above.
+		// ISO 32000-1 §14.6 — every BMC must be paired with exactly one EMC.
+		if ($pdfuaArtifactOpened) {
+			$s .= "EMC\n";
+		}
+
 		return $s;
 	}
 
@@ -4442,6 +4495,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	function Link($x, $y, $w, $h, $link)
 	{
 		$l = [$x * Mpdf::SCALE, $this->hPt - $y * Mpdf::SCALE, $w * Mpdf::SCALE, $h * Mpdf::SCALE, $link];
+		// PDF/UA-1 — extra 6th element captures the Link struct element pushed
+		// by Tag\A::open() so writeAnnotations() can wire OBJR + /StructParent
+		// per ISO 14289-1 §7.18.5 / Matterhorn 02-003. Header/footer links and
+		// keep-with-table buffered links go through the same array so the elem
+		// ref tags along on every routing path.
+		if ($this->PDFUA && $this->pdfuaLinkStructElem !== null) {
+			$l[5] = $this->pdfuaLinkStructElem;
+		}
 		if ($this->keep_block_together) { // don't write yet
 			return;
 		} elseif ($this->table_rotate) { // *TABLES*
@@ -6543,6 +6604,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$saved['bord'] = $this->spanborder;
 		$saved['border'] = $this->spanborddet;
 		$saved['HREF'] = $this->HREF;
+		// PDF/UA-1 — capture the active Link struct element alongside HREF so
+		// the per-chunk save/restore cycle in WriteFlowingBlock preserves the
+		// reference all the way through to the deferred Cell()→Link() call in
+		// finishFlowingBlock. Otherwise the global pdfuaLinkStructElem reflects
+		// only the LAST chunk's state and trailing non-link chunks erase the
+		// reference before the link annotation is created.
+		$saved['pdfuaLinkStructElem'] = $this->pdfuaLinkStructElem;
 		$saved['textvar'] = $this->textvar; // mPDF 5.7.1
 		$saved['textshadow'] = $this->textshadow;
 		$saved['linewidth'] = $this->LineWidth;
@@ -6573,6 +6641,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->spanborddet = $saved['border'];
 		$this->ColorFlag = ($this->FillColor != $this->TextColor); // Restore ColorFlag as well
 		$this->HREF = $saved['HREF'];
+		// PDF/UA-1 — restore the Link struct element captured by saveFont() so
+		// Mpdf::Link() (called from Cell() further along this code path) sees
+		// the right reference even though the chunks were buffered earlier.
+		if (array_key_exists('pdfuaLinkStructElem', $saved)) {
+			$this->pdfuaLinkStructElem = $saved['pdfuaLinkStructElem'];
+		}
 		$this->fixedlSpacing = $saved['fixedlSpacing'];
 		$this->minwSpacing = $saved['minwSpacing'];
 		$this->textvar = $saved['textvar'];  // mPDF 5.7.1
@@ -6734,6 +6808,45 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		$this->ua->getMarkedContentHelper()->end();
 		$this->flowingBlockAttr['pdfua_bdc_active'] = false;
+	}
+
+	/**
+	 * PDF/UA-1 §A14 — Restore the per-block pdfua state onto $flowingBlockAttr.
+	 *
+	 * newFlowingBlock() unconditionally resets pdfua_struct_open / pdfua_type /
+	 * pdfua_artifact_open / pdfua_struct_elem to their "no struct yet" defaults.
+	 * This helper re-populates them from the block's $blk[$blklvl] fields
+	 * (which are set once by the tag handler's open() and survive the reset)
+	 * so that ensureBlockBdcOpen() can re-emit a BDC for each new line / page.
+	 *
+	 * Must be called after every newFlowingBlock() that occurs *inside* an
+	 * already-open block tag. Without it, lines after a `<br>` (or an inline
+	 * object that triggers a wrap) emit untagged real content (Matterhorn
+	 * 01-006). is_table mode bypasses block tagging entirely and is excluded.
+	 *
+	 * @param  bool $is_table  true when called from inside table-cell content
+	 * @return void
+	 */
+	private function restoreFlowingBlockPdfuaState($is_table = false)
+	{
+		if (!$this->PDFUA || $is_table) {
+			return;
+		}
+		if (!isset($this->blk[$this->blklvl])) {
+			return;
+		}
+		$blk = $this->blk[$this->blklvl];
+		if (!empty($blk['pdfua_artifact'])) {
+			$this->flowingBlockAttr['pdfua_artifact_open'] = true;
+			return;
+		}
+		if (!empty($blk['pdfua_type'])) {
+			$this->flowingBlockAttr['pdfua_struct_open'] = true;
+			$this->flowingBlockAttr['pdfua_type']        = $blk['pdfua_type'];
+			$this->flowingBlockAttr['pdfua_struct_elem'] = isset($blk['pdfua_struct_elem'])
+				? $blk['pdfua_struct_elem']
+				: null;
+		}
 	}
 
 	function finishFlowingBlock($endofblock = false, $next = '')
@@ -7506,6 +7619,20 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 			// HR
 			if ($objattr['type'] == 'hr') {
+				// PDF/UA-1 — `<hr>` produces a purely decorative horizontal rule.
+				// The HTML5 spec lets it convey a paragraph-level thematic break
+				// (a structural meaning) but veraPDF only sees a stroke operator
+				// (m … l S) and flags it as untagged real content under §7.1
+				// test 3. Wrap the stroke in /Artifact BMC … EMC so the rule is
+				// classified as decoration. Skip the wrapper when an enclosing
+				// real-content BDC is already open (Matterhorn 01-001/002 forbid
+				// nesting Artifact inside tagged content).
+				$pdfuaHrArtifactOpen = false;
+				if ($this->PDFUA
+					&& $this->ua->getMarkedContentHelper()->getDepth() === 0) {
+					$this->ua->getMarkedContentHelper()->begin('Artifact', -1);
+					$pdfuaHrArtifactOpen = true;
+				}
 				$this->SetDColor($objattr['color']);
 				switch ($objattr['align']) {
 					case 'C':
@@ -7524,6 +7651,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->Line($x, $this->y, $x + $objattr['INNER-WIDTH'], $this->y);
 				$this->SetLineWidth($oldlinewidth);
 				$this->SetDColor($this->colorConverter->convert(0, $this->PDFAXwarnings));
+				if ($pdfuaHrArtifactOpen) {
+					$this->ua->getMarkedContentHelper()->end();
+				}
 			}
 			// IMAGE
 			if ($objattr['type'] == 'image') {
@@ -7698,8 +7828,23 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// ISO 32000-1 §14.7.2 Table 322 — /Alt is a StructElem key (not BDC dict).
 				// ISO 32000-1 §14.8.2.2 — Artifact BMC (no dict) for decorative images.
 				$pdfuaImageMcid = null;
+				$pdfuaImageClosedBlockBdc = false;
 				if ($this->PDFUA) {
 					$pdfuaImageAlt = isset($objattr['pdfua_alt']) ? $objattr['pdfua_alt'] : null;
+					if ($pdfuaImageAlt === '' || $pdfuaImageAlt === null) {
+						// Decorative image (empty or missing alt). The /Artifact BMC
+						// emitted below MUST NOT live inside a real-content BDC —
+						// ISO 14289-1 §7.1 / Matterhorn 01-001/002 forbid Artifact
+						// inside Tagged. When the host block has a per-page BDC
+						// open (the auto-P case in printbuffer, or any explicit
+						// block tag emitting via ensureBlockBdcOpen), close it
+						// here, emit the artifact, then let the block's lazy
+						// opener re-emit a new BDC for any text that follows.
+						if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])) {
+							$this->closeBlockBdcIfOpen();
+							$pdfuaImageClosedBlockBdc = true;
+						}
+					}
 					if ($pdfuaImageAlt === '') {
 						// Explicitly declared decorative image — addArtifact() returns -1
 						// which causes begin() to emit /Artifact BMC (no property dict).
@@ -7759,6 +7904,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					if ($pdfuaImageMcid !== -1) {
 						$this->ua->getStructureTree()->close();
 					}
+				}
+				// PDF/UA-1 — restore the host block's BDC if we closed it to
+				// emit a decorative-image Artifact above. ensureBlockBdcOpen()
+				// is idempotent and allocates a fresh MCID, so subsequent text
+				// in the same block becomes a new MCR entry on the same struct
+				// element. ISO 32000-1 §14.7.4.4 — multiple MCRs on one element
+				// are allowed for content that spans multiple BDC sequences.
+				if ($pdfuaImageClosedBlockBdc) {
+					$this->ensureBlockBdcOpen();
 				}
 
 				// LINK
@@ -16525,6 +16679,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		else {
 			$arr[18] = null;
 		}
+		// PDF/UA-1 — capture the active Link struct element so the textbuffer
+		// entry carries a stable reference even after Tag\A::close() clears
+		// $this->pdfuaLinkStructElem. printbuffer() restores it onto $mpdf
+		// before delegating to WriteFlowingBlock so Mpdf::Link() picks it up
+		// when the link annotation is finally created. Required for ISO 14289-1
+		// §7.18.5 / Matterhorn 02-003 — link annot must carry /StructParent.
+		if ($this->PDFUA && $this->pdfuaLinkStructElem !== null) {
+			$arr[19] = $this->pdfuaLinkStructElem;
+		}
 		// mPDF 6  Lists
 		if ($return) {
 			return ($arr);
@@ -16587,6 +16750,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		} // mPDF 5.7.1
 		else {
 			$arr[18] = null;
+		}
+		// PDF/UA-1 — capture the active Link struct element (mirrors
+		// _saveTextBuffer above) so links inside table cells carry the elem
+		// reference all the way to the eventual Mpdf::Link() call.
+		if ($this->PDFUA && $this->pdfuaLinkStructElem !== null) {
+			$arr[19] = $this->pdfuaLinkStructElem;
 		}
 		$this->cell[$this->row][$this->col]['textbuffer'][] = $arr;
 	}
@@ -16658,27 +16827,63 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->newFlowingBlock($this->divwidth, $this->divheight, $align, $is_table, $blockstate, true, $blockdir, $table_draft);
 
-		// PDF/UA-1 Phase 4 — restore the struct element / artifact flags that
-		// newFlowingBlock() resets on every call.
-		// pdfua_struct_open path: the struct element was pushed by the tag handler's
-		//   open() onto the StructureTree stack. finishFlowingBlock() reads
-		//   pdfua_struct_open to emit the BDC operator. Multi-page blocks call
-		//   finishFlowingBlock() once per page; each call needs the flag set.
-		// pdfua_artifact_open path: mirrors pdfua_artifact on $currblk so that
-		//   finishFlowingBlock() emits /Artifact BMC for role=none/presentation
-		//   and aria-hidden subtrees.
-		if ($this->PDFUA && !$is_table && isset($this->blk[$this->blklvl]['pdfua_type'])
-				&& $this->blk[$this->blklvl]['pdfua_type'] !== null
-				&& empty($this->blk[$this->blklvl]['pdfua_artifact'])) {
-			$this->flowingBlockAttr['pdfua_struct_open'] = true;
-			$this->flowingBlockAttr['pdfua_type']        = $this->blk[$this->blklvl]['pdfua_type'];
-			// PDF/UA-1 §A14 — restore the captured struct element ref so
-			// ensureBlockBdcOpen() can attach MCIDs per page.
-			$this->flowingBlockAttr['pdfua_struct_elem'] = isset($this->blk[$this->blklvl]['pdfua_struct_elem'])
-				? $this->blk[$this->blklvl]['pdfua_struct_elem']
-				: null;
-		} elseif ($this->PDFUA && !$is_table && !empty($this->blk[$this->blklvl]['pdfua_artifact'])) {
-			$this->flowingBlockAttr['pdfua_artifact_open'] = true;
+		$this->restoreFlowingBlockPdfuaState($is_table);
+
+		// PDF/UA-1 — auto-wrap loose body-level inline text in an implicit P
+		// struct element. ISO 14289-1 §7.1 requires every text glyph to be
+		// either tagged or marked /Artifact. HTML5 allows text directly inside
+		// <body> with no wrapping block tag (e.g. "Some text<h3>Title</h3>").
+		// mPDF's BlockTag handler only sets pdfua_type for explicit tags, so
+		// when printbuffer flushes textbuffer for a non-tagged container the
+		// content emerges untagged. Opening a Sect-or-P struct here, recording
+		// it onto blk[blklvl] (so BR-restore in WriteFlowingBlock picks it up),
+		// and closing it after the final finishFlowingBlock keeps every line
+		// reachable from the structure tree.
+		//
+		// Skip the auto-wrap when arrayaux contains only OBJECT_IDENTIFIER
+		// entries (images, form widgets, barcodes, etc.) — those route through
+		// their own struct-element handling (Figure/Form/Span/Artifact) inside
+		// _printobjects() and must not be re-parented under an implicit P.
+		// Wrapping a decorative image (empty alt → Artifact) inside an implicit
+		// P creates an Artifact-inside-tagged sequence (Matterhorn 01-001/002).
+		$pdfuaAutoP = false;
+		if ($this->PDFUA && !$is_table && !$table_draft
+			&& !empty($arrayaux)
+			&& empty($this->flowingBlockAttr['pdfua_struct_open'])
+			&& empty($this->flowingBlockAttr['pdfua_artifact_open'])
+			&& !$this->ua->getStructureTree()->isInArtifact()) {
+			// Trigger auto-P when ANY non-OBJECT_IDENTIFIER entry is present —
+			// including whitespace-only entries. Whitespace chunks between
+			// inline images (e.g. between three rotated <img> tags) emit Tj
+			// operators that need to live inside *some* tagged sequence;
+			// without auto-P those Tj ops are untagged real content per
+			// ISO 14289-1 §7.1 test 3. Inside the auto-P, artifact-only
+			// images close+reopen the BDC (see _printobjects) so PDF/UA's
+			// no-overlap rule between Tagged and Artifact is preserved.
+			$hasNonObject = false;
+			foreach ($arrayaux as $entry) {
+				if (!isset($entry[0])) {
+					continue;
+				}
+				$t = $entry[0];
+				if (substr($t, 0, 3) === Mpdf::OBJECT_IDENTIFIER) {
+					continue; // image/widget/etc — emits its own struct
+				}
+				$hasNonObject = true;
+				break;
+			}
+			if ($hasNonObject) {
+				$this->ua->getStructureTree()->open('P', []);
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				$this->flowingBlockAttr['pdfua_struct_open'] = true;
+				$this->flowingBlockAttr['pdfua_type']        = 'P';
+				$this->flowingBlockAttr['pdfua_struct_elem'] = $elem;
+				// Mirror onto the current block so restoreFlowingBlockPdfuaState()
+				// (called after BR-triggered newFlowingBlock) can re-read it.
+				$this->blk[$this->blklvl]['pdfua_type']        = 'P';
+				$this->blk[$this->blklvl]['pdfua_struct_elem'] = $elem;
+				$pdfuaAutoP = true;
+			}
 		}
 
 		$array_size = count($arrayaux);
@@ -16874,6 +17079,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$vetor[1] = $this->internallink[$vetor[1]];
 				}
 				$this->HREF = $vetor[1];     // HREF link style set here ******
+				// PDF/UA-1 — restore the captured Link struct element so the
+				// subsequent Mpdf::Link() call (deeper in WriteFlowingBlock)
+				// stamps the elem ref onto the PageLinks entry. Tag\A::close()
+				// already cleared $mpdf->pdfuaLinkStructElem by the time the
+				// buffered text is flushed, so the only surviving reference
+				// is on the textbuffer entry itself.
+				if ($this->PDFUA && isset($vetor[19])) {
+					$this->pdfuaLinkStructElem = $vetor[19];
+				} else {
+					$this->pdfuaLinkStructElem = null;
+				}
 			}
 
 			// SPECIAL CONTENT - IMAGES & FORM OBJECTS
@@ -16933,6 +17149,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						}
 
 						$this->newFlowingBlock($this->divwidth, $this->divheight, $align, $is_table, $blockstate, false, $blockdir, $table_draft);
+						$this->restoreFlowingBlockPdfuaState($is_table);
 					}
 				} else {
 					/* -- END TABLES -- */
@@ -16963,6 +17180,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					if (($skipln == 1 || $skipln == -2) && !isset($objattr['float'])) {
 						$this->finishFlowingBlock(false, $objattr['type']);
 						$this->newFlowingBlock($this->divwidth, $this->divheight, $align, $is_table, $blockstate, false, $blockdir, $table_draft);
+						$this->restoreFlowingBlockPdfuaState($is_table);
 					}
 
 					if (!$table_draft) {
@@ -17200,6 +17418,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					}
 					/* -- END COLUMNS -- */
 					$this->newFlowingBlock($this->divwidth, $this->divheight, $align, $is_table, $blockstate, false, $blockdir, $table_draft);
+					$this->restoreFlowingBlockPdfuaState($is_table);
 				} else {
 					$this->WriteFlowingBlock($vetor[0], $vetor[18]);  // mPDF 5.7.1
 					// Added to correct for OddEven Margins
@@ -17277,6 +17496,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->spanborder = false;
 			$this->spanborddet = [];
 			$this->HREF = '';
+		$this->pdfuaLinkStructElem = null;
 			$this->textparam = [];
 			$this->SetTextOutline();
 
@@ -17328,6 +17548,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->x = $bak_x;
 			return $ch;
 		}
+
+		// PDF/UA-1 — close the implicit P struct element opened above for
+		// loose body-level text. Idempotent: $pdfuaAutoP is false when the
+		// containing block already had a tag-supplied struct element, so
+		// nothing happens in that case. Also clear blk[blklvl] markers so
+		// later printbuffer calls on the same parent block do not see stale
+		// state — the next loose-text run gets its own implicit P.
+		if (!empty($pdfuaAutoP)) {
+			$this->ua->getStructureTree()->close();
+			$this->blk[$this->blklvl]['pdfua_type']        = null;
+			$this->blk[$this->blklvl]['pdfua_struct_elem'] = null;
+		}
 	}
 
 	function _setDashBorder($style, $div, $cp, $side)
@@ -17374,6 +17606,29 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (isset($this->blk[$blvl]['bb_painted'][$this->page]) && $this->blk[$blvl]['bb_painted'][$this->page]) {
 			return;
 		} // *CSS-FLOAT*
+
+		// PDF/UA-1 — block background fills and border strokes are decorative
+		// chrome around content, not real content. ISO 14289-1 §7.1 (Matterhorn
+		// 01-002) requires them to be wrapped as artifacts so AT skips them.
+		// Wrap the entire body of PaintDivBB in /Artifact BMC … EMC. PaintDivBB
+		// is always called between block content (never inside a struct-element
+		// BDC), so opening BMC here cannot create overlapping marked-content
+		// sequences. The corresponding EMC fires before every return path at
+		// the bottom of this function.
+		//
+		// Fixed/absolute position blocks set writingHTMLheader/Footer = true
+		// during WriteFixedPosHTML to suppress page-break logic, but their
+		// PaintDivBB output is still real-decoration that needs artifact
+		// wrapping. Header/footer content streams already live inside an
+		// outer /Artifact <</Type /Pagination …>> sequence (emitted by the
+		// header/footer writer), so a nested /Artifact here is consistent
+		// with ISO 32000-1 §14.6 (BDC/BMC may nest) and does not violate
+		// PDF/UA's no-overlap rule between real content and artifacts.
+		$pdfuaArtifactOpened = false;
+		if ($this->PDFUA) {
+			$this->writer->write('/Artifact BMC');
+			$pdfuaArtifactOpened = true;
+		}
 
 		if (isset($this->blk[$blvl]['x0'])) {
 			$x0 = $this->blk[$blvl]['x0'];
@@ -18480,6 +18735,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// Float DIV
 		$this->blk[$blvl]['bb_painted'][$this->page] = true;
+
+		// PDF/UA-1 — close the /Artifact BMC opened at the top of this function.
+		// ISO 32000-1 §14.6 — every BMC must be paired with exactly one EMC.
+		if ($pdfuaArtifactOpened) {
+			$this->writer->write('EMC');
+		}
 	}
 	/* -- BORDER-RADIUS -- */
 
@@ -18750,6 +19011,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->ResetStyles();
 
 		$this->HREF = '';
+		$this->pdfuaLinkStructElem = null;
 		$this->textparam = [];
 		$this->SetTextOutline();
 
@@ -21488,6 +21750,29 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	{
 		$cellBorderOverlay = [];
 
+		// PDF/UA-1 — table cell/table borders drawn here are decorative chrome
+		// around the cell/table content. ISO 14289-1 §7.1 / Matterhorn 01-002
+		// require them to be wrapped as artifacts so AT skips them.
+		//
+		// Two guards before wrapping:
+		//   1. `$buffer && !$bSeparate` is the buffer-into-cellBorderBuffer
+		//      fast path which does not write to the content stream — skip
+		//      to avoid an empty BMC … EMC sequence.
+		//   2. MarkedContentHelper depth > 0 means a real-content BDC (an
+		//      enclosing TD/THead/etc.) is already open. Nesting an Artifact
+		//      sequence inside a real-content sequence violates ISO 14289-1
+		//      §7.1 (Matterhorn 01-001/01-002 — no overlap of tagged and
+		//      artifact content). Nested-table cell borders rendered while
+		//      the outer cell's BDC is open fall into this case.
+		$pdfuaArtifactOpened = false;
+		if ($this->PDFUA
+			&& !($buffer && !$bSeparate)
+			&& $this->ua->getMarkedContentHelper()->getDepth() === 0
+		) {
+			$this->writer->write('/Artifact BMC');
+			$pdfuaArtifactOpened = true;
+		}
+
 		if ($bord == -1) {
 			$this->Rect($x, $y, $w, $h);
 		} elseif ($this->simpleTables && ($cort == 'cell')) {
@@ -21554,6 +21839,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							$this->cellBorderBuffer[] = pack("A16nCnda6A10d14", str_pad(sprintf("%08.7f", ($dom + 4)), 16, "0", STR_PAD_LEFT), $cbord, ord($side), $details[$side]['s'], $details[$side]['w'], $details[$side]['c'], $details[$side]['style'], $x, $y, $w, $h, $details['mbw']['BL'], $details['mbw']['BR'], $details['mbw']['RT'], $details['mbw']['RB'], $details['mbw']['TL'], $details['mbw']['TR'], $details['mbw']['LT'], $details['mbw']['LB'], $details['cellposdom'], 1);
 						}
 					}
+				}
+				// PDF/UA-1 — buffer fast path returned; close any /Artifact BMC.
+				// This branch was guarded against opening BMC, so this EMC is
+				// defensive (the flag is false in this branch) — emit only if
+				// we actually opened.
+				if ($pdfuaArtifactOpened) {
+					$this->writer->write('EMC');
 				}
 				return;
 			}
@@ -22009,6 +22301,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 			// $this->SetLineWidth($oldlinewidth);
 			// $this->SetDColor($this->colorConverter->convert(0, $this->PDFAXwarnings));
+		}
+
+		// PDF/UA-1 — close /Artifact BMC opened at top of function.
+		// ISO 32000-1 §14.6 — every BMC must be paired with exactly one EMC.
+		if ($pdfuaArtifactOpened) {
+			$this->writer->write('EMC');
 		}
 	}
 
@@ -23601,6 +23899,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							$pdfuaCellStructParents
 						);
 						$this->ua->getMarkedContentHelper()->begin($pdfuaCellElem->getType(), $pdfuaCellMcid);
+						// PDF/UA-1 — push the cell's struct element onto the
+						// open-element stack so that any nested struct opens
+						// during cell rendering (Figure for <img>, Span for
+						// inline elements, Link for <a>, etc.) attach as
+						// children of the TD/TH instead of the parse-time top
+						// (Document/Table). Without this, ISO 14289-1 §7.2 test
+						// 3 fails because Table directly contains Figure
+						// children rather than going through TR > TD.
+						$this->ua->getStructureTree()->pushExisting($pdfuaCellElem);
 					}
 					if (!empty($cell['textbuffer'])) {
 						$this->cellTextAlign = $align;
@@ -23766,6 +24073,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// PDF/UA-1 Phase 4 — close the TD/TH BDC opened above.
 					if ($pdfuaCellElem !== null && !empty($cell['textbuffer'])) {
 						$this->ua->getMarkedContentHelper()->end();
+						// Pop the cell's struct element off the stack — it was
+						// pushed before printbuffer ran so deferred Figure /
+						// Span / Link opens used the right parent.
+						$this->ua->getStructureTree()->close();
 					}
 
 					/* -- BACKGROUNDS -- */

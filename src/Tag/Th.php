@@ -33,8 +33,11 @@ class Th extends Td
 
 		if ($this->mpdf->PDFUA) {
 			// parent::open() pushed 'TD' onto the struct tree. Replace it with 'TH':
-			// pop the TD and push TH (which is the correct type for a header cell).
-			$this->ua->getStructureTree()->close();
+			// discardTop() pops the TD AND removes it from the parent TR's
+			// children, otherwise the discarded TD remains in /K and adds a
+			// phantom cell that breaks ISO 14289-1 §7.2 test 43 (rows must have
+			// equal column counts).
+			$this->ua->getStructureTree()->discardTop();
 
 			// Determine scope from HTML scope attribute (default: Column).
 			// ISO 32000-1 Table 349 — /Scope values: Column, Row, Both.
@@ -49,6 +52,15 @@ class Th extends Td
 			}
 
 			$thAttrs = ['Scope' => $scope];
+			// ISO 14289-1 §7.5 / Matterhorn 09-008 — see Td::open() for the
+			// rationale. TH is treated identically to TD by veraPDF for the
+			// row-column-count check.
+			if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
+				$thAttrs['ColSpan'] = (int) $attr['COLSPAN'];
+			}
+			if (isset($attr['ROWSPAN']) && preg_match('/^\d+$/', $attr['ROWSPAN']) && $attr['ROWSPAN'] > 1) {
+				$thAttrs['RowSpan'] = (int) $attr['ROWSPAN'];
+			}
 
 			$this->ua->getStructureTree()->open('TH', $thAttrs);
 

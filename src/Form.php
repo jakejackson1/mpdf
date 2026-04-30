@@ -1438,7 +1438,15 @@ class Form
 			$this->writer->write('/T ' . $this->writer->string($form['T']));
 		}
 
-		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
+		// PDF/UA-1 §7.18.1 — fall back to field name when /TU is empty
+		// (BOM-only treated as empty — see _putform_tx for the rationale).
+		$tu = isset($form['TU']) ? $form['TU'] : '';
+		if ($this->mpdf->PDFUA && (strlen($tu) === 0 || $tu === "\xFE\xFF")) {
+			$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T']
+				: ($form['subtype'] === 'radio' ? 'Radio button' : 'Button');
+			$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+		}
+		$this->writer->write('/TU ' . $this->writer->string($tu));
 
 		// PDF/UA-1 — associate this button/checkbox widget annotation with its Form struct element.
 		if ($this->mpdf->PDFUA && isset($form['structParent'])) {
@@ -1722,6 +1730,18 @@ f Q ';
 		$this->writer->write('/M ' . $this->writer->string('D:' . date('YmdHis')));
 
 		$this->writer->write('/T ' . $this->writer->string($form['T']));
+		// PDF/UA-1 §7.18.1 (Matterhorn 11-002) — choice/select widgets must
+		// carry /TU. Fall back to the field name when no tooltip was supplied.
+		// $form['TU'] is normalised to UTF-16BE-with-BOM at intake; the 2-byte
+		// BOM means "empty" — see _putform_tx for the rationale.
+		if ($this->mpdf->PDFUA) {
+			$tu = isset($form['TU']) ? $form['TU'] : '';
+			if (strlen($tu) === 0 || $tu === "\xFE\xFF") {
+				$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T'] : 'Choice field';
+				$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+			}
+			$this->writer->write('/TU ' . $this->writer->string($tu));
+		}
 		$this->writer->write('/DA (/F' . $this->mpdf->fonts[$form['style']['font']]['i'] . ' ' . $form['style']['fontsize'] . ' Tf ' . $form['style']['fontcolor'] . ')');
 
 		$opt = '';
@@ -1815,7 +1835,19 @@ f Q ';
 		$this->writer->write('/MK <<' . $temp . ' >>');
 
 		$this->writer->write('/T ' . $this->writer->string($form['T']));
-		$this->writer->write('/TU ' . $this->writer->string($form['TU']));
+		// PDF/UA-1 §7.18.1 (Matterhorn 11-002) — every form-widget annotation
+		// must carry a non-empty /TU (alternate description / tooltip) so AT
+		// can announce the field. mPDF normalises $form['TU'] to UTF-16BE with
+		// a BOM at intake (line 913 above), so an "empty" value is the 2-byte
+		// BOM `\xFE\xFF`. Treat strings ≤ 2 bytes as empty for the fallback
+		// check, then re-encode the field name through utf8ToUtf16BigEndian to
+		// preserve the same string format used for `T`.
+		$tu = isset($form['TU']) ? $form['TU'] : '';
+		if ($this->mpdf->PDFUA && (strlen($tu) === 0 || $tu === "\xFE\xFF")) {
+			$fallback = isset($form['T']) && $form['T'] !== '' ? $form['T'] : 'Form field';
+			$tu = $this->writer->utf8ToUtf16BigEndian($fallback);
+		}
+		$this->writer->write('/TU ' . $this->writer->string($tu));
 
 		// PDF/UA-1 — associate this widget annotation with its Form struct element.
 		// /StructParent (singular) indexes the ParentTree to the owning struct element.
