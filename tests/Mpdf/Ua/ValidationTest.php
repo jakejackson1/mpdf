@@ -308,6 +308,12 @@ class ValidationTest extends PdfUaTestCase
 				// Each example gets its own Mpdf instance — state from one
 				// example must not leak into the next.
 				$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+				// example09_forms exercises AcroForm widget tagging; without
+				// useActiveForms=true mPDF falls back to core fonts for the
+				// widgets (Helvetica) which throws under PDFUA.
+				if ($name === 'example09_forms') {
+					$mpdf->useActiveForms = true;
+				}
 				$mpdf->WriteHTML(file_get_contents($fixture));
 				$bytes = $mpdf->Output(null, 'S');
 				$this->assertNotEmpty($bytes, $name . ' produced empty output');

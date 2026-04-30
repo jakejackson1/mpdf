@@ -805,6 +805,18 @@ class Form
 			$this->writer->write('/V /' . $state . ' ');
 			$this->writer->write('/DV /' . $state . ' ');
 			$this->writer->write('/T ' . $this->writer->string($name) . ' ');
+			// PDF/UA-1 §7.18.1 / Matterhorn 19-003 — every form field must have
+			// a non-empty /TU (alternate description). Radio groups inherit no
+			// title from per-kid widgets, so emit /TU explicitly here. Falls back
+			// to the field name when no explicit TU was supplied (matching the
+			// fallback in _putform_tx / _putform_bt / _putform_ch).
+			if ($this->mpdf->PDFUA) {
+				$tu = isset($frg['TU']) ? $frg['TU'] : '';
+				if (strlen($tu) === 0 || $tu === "\xFE\xFF") {
+					$tu = $this->writer->utf8ToUtf16BigEndian($name);
+				}
+				$this->writer->write('/TU ' . $this->writer->string($tu));
+			}
 			$this->writer->write('>>');
 			$this->writer->write('endobj');
 		}

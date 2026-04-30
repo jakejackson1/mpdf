@@ -7,8 +7,8 @@ repository for use in `VeraPdfConformanceTest` veraPDF conformance tests.
 
 - **Source repository**: https://github.com/mpdf/mpdf-examples
 - **Branch**: master
-- **Commit SHA at time of extraction**: `4f1e09d1cfda5ddc1205ceed8a7821c1edb2e4b8`
-- **Date of extraction**: 2026-04-28
+- **Commit SHA at time of extraction**: `4f1e09d1cfda5ddc1205ceed8a7821c1edb2e4b8` (initial 16 fixtures)
+- **Date of extraction**: 2026-04-28 (initial), 2026-04-30 (round 2: examples 03, 09, 11, 18, 19, 20, 21, 23, 24, 38)
 
 Each fixture corresponds to the `$html` variable passed to `WriteHTML()` in the upstream
 example, with the following adaptations applied consistently:
@@ -26,6 +26,16 @@ example, with the following adaptations applied consistently:
 | Fixture | Source example | What it exercises |
 |---|---|---|
 | `example01_basic.html` | `example01_basic.php` | H1–H6, P, A (hyperlink), DIV, BLOCKQUOTE, ADDRESS, PRE, HR, OL, UL, DL, TABLE |
+| `example03_backgrounds_and_borders.html` | `example03_backgrounds_and_borders.php` | Body-level background gradient, linear/radial gradients, rounded borders |
+| `example09_forms.html` | `example09_forms.php` | Comprehensive AcroForm widgets (textarea, select, radio, checkbox, text, password, submit/button/reset) |
+| `example11_overflow_auto.html` | `example11_overflow_auto.php` | Fixed-position block element with overflow:auto autofit |
+| `example18_headers_method_4.html` | `example18_headers_method_4.php` | Method-4 header API via inline `<!--mpdf ... mpdf-->` HTML comments with `<htmlpageheader>`/`<sethtmlpageheader>` |
+| `example19_page_sizes.html` | `example19_page_sizes.php` | Multiple page sizes within one document via `<pagebreak sheet-size="...">` |
+| `example20_justify.html` | `example20_justify.php` | Text justification with mixed inline styles, justified table cells with explicit /Headers |
+| `example21_hyphenation.html` | `example21_hyphenation.php` | Automatic hyphenation in 4-column layout (CSS hyphens: auto + SetColumns) |
+| `example23_orientation.html` | `example23_orientation.php` | Mid-document orientation switch via `<pagebreak orientation="L">` / orientation="P" |
+| `example24_orientation_2.html` | `example24_orientation_2.php` | Orientation switch with a landscape table (Table/THead/TR/TH/TD with /Headers) |
+| `example38_dot_tab.html` | `example38_dot_tab.php` | `<dottab>` directive emits a row of leader dots between two text runs |
 | `example04_images.html` | `example04_images.php` | Various image formats (all replaced with data URIs); opacity; rotation; alt text |
 | `example05_tables.html` | `example05_tables.php` | Simple tables; THEAD/TFOOT/TH; cell backgrounds |
 | `example06_tables_nested.html` | `example06_tables_nested.php` | Nested tables (Table-in-TD) |

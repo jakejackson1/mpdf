@@ -2406,6 +2406,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 		}
 		/* -- END BACKGROUNDS -- */
+
+		// PDF/UA-1 §7.1 / Matterhorn 01-002 — body backgrounds (color, gradient,
+		// background-image) are decorative chrome. Wrap the entire run as
+		// /Artifact BMC...EMC so AT skips it. PrintPageBackgrounds() already
+		// wraps its output the same way; this keeps the two layers consistent.
+		if ($this->PDFUA && $s !== '') {
+			$s = "/Artifact BMC\n" . $s . "EMC\n";
+		}
+
 		return $s;
 	}
 

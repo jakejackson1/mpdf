@@ -726,6 +726,200 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$this->assertVeraPdfCompliant($pdf, 'example64_protected_document.php');
 	}
 
+	/**
+	 * mpdf-examples: example03_backgrounds_and_borders.php — CSS backgrounds,
+	 * linear and radial gradients, rounded borders.
+	 *
+	 * PDFUAauto=true so the body-level background gradient and the gradient/
+	 * background-color decorations are wrapped as /Artifact (Matterhorn 01-007).
+	 *
+	 * @return void
+	 */
+	public function testExample03BackgroundsAndBordersPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example03_backgrounds_and_borders');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example03_backgrounds_and_borders.php');
+	}
+
+	/**
+	 * mpdf-examples: example09_forms.php — comprehensive AcroForm widgets:
+	 * textarea, select, radio, checkbox, text input, password, submit/button/reset.
+	 *
+	 * useActiveForms=true is required to emit AcroForm widget annotations for the
+	 * input/select/textarea elements. Each widget annotation must carry
+	 * /StructParent and have an OBJR kid in the corresponding Form struct elem
+	 * (Matterhorn 02-003 / 19-003).
+	 *
+	 * @return void
+	 */
+	public function testExample09FormsPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example09_forms');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->useActiveForms = true;
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example09_forms.php');
+	}
+
+	/**
+	 * mpdf-examples: example11_overflow_auto.php — fixed-position block element
+	 * with overflow:auto autofit; long body wrapped in <div style="position:fixed">
+	 * to force shrink-to-fit on a single page.
+	 *
+	 * Tests that fixed-position content does not break the struct tree — children
+	 * of the fixed block are still real content (P/H1/H4/etc.) when alt text is
+	 * present, not artifact (Matterhorn 01-007).
+	 *
+	 * @return void
+	 */
+	public function testExample11OverflowAutoPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example11_overflow_auto');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example11_overflow_auto.php');
+	}
+
+	/**
+	 * mpdf-examples: example18_headers_method_4.php — Method-4 header/footer API
+	 * via inline <!--mpdf ... mpdf--> comments holding <htmlpageheader> and
+	 * <sethtmlpageheader> directives.
+	 *
+	 * Tests that headers defined via Method-4 (HTML comment block) emit pagination
+	 * artifacts on every page (Matterhorn 01-007) and that the <pagebreak> with
+	 * odd-/even-header switching does not introduce untagged real content.
+	 *
+	 * @return void
+	 */
+	public function testExample18HeadersMethod4PassesUa1()
+	{
+		$html = $this->loadExampleFixture('example18_headers_method_4');
+		$mpdf = $this->makeMpdf([
+			'PDFUAauto'     => true,
+			'margin_left'   => 32,
+			'margin_right'  => 25,
+			'margin_top'    => 47,
+			'margin_bottom' => 47,
+			'margin_header' => 10,
+			'margin_footer' => 10,
+		]);
+		$mpdf->mirrorMargins = 1;
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example18_headers_method_4.php');
+	}
+
+	/**
+	 * mpdf-examples: example19_page_sizes.php — multiple page sizes within one
+	 * document: A4 portrait, A4-L, A5-L, Letter, custom 150mm square, custom inches.
+	 *
+	 * Each <pagebreak sheet-size="..."> changes the page size. Every page dict must
+	 * carry /StructParents (Matterhorn 01-005) regardless of sheet size; this test
+	 * exercises the page-dict-emission path under variable /MediaBox values.
+	 *
+	 * @return void
+	 */
+	public function testExample19PageSizesPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example19_page_sizes');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example19_page_sizes.php');
+	}
+
+	/**
+	 * mpdf-examples: example20_justify.php — text justification with mixed inline
+	 * styles, justified table cells with explicit /Headers associations.
+	 *
+	 * Exercises the justification path (J/Tj operator interaction with
+	 * letter-spacing and word-spacing) and verifies that justified runs still
+	 * produce parsable text content (Matterhorn 09-001/24-001 spacing).
+	 *
+	 * @return void
+	 */
+	public function testExample20JustifyPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example20_justify');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example20_justify.php');
+	}
+
+	/**
+	 * mpdf-examples: example21_hyphenation.php — automatic hyphenation in a
+	 * multi-column layout (CSS hyphens: auto + SetColumns(4,'J')).
+	 *
+	 * Hyphens inserted by the Hyphenator must be reachable as text via the
+	 * struct tree — Matterhorn 24-001 (ActualText) and the soft-hyphen
+	 * Cmap-coverage path (Matterhorn 09-006).
+	 *
+	 * @return void
+	 */
+	public function testExample21HyphenationPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example21_hyphenation');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->SetColumns(4, 'J');
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example21_hyphenation.php');
+	}
+
+	/**
+	 * mpdf-examples: example23_orientation.php — mid-document orientation switch
+	 * via <pagebreak orientation="L"> / orientation="P".
+	 *
+	 * Each orientation transition must propagate /Tabs /S, /StructParents, and
+	 * /Lang on the new page dict (Matterhorn 09-001/04-001/01-005).
+	 *
+	 * @return void
+	 */
+	public function testExample23OrientationPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example23_orientation');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->mirrorMargins = 1;
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example23_orientation.php');
+	}
+
+	/**
+	 * mpdf-examples: example24_orientation_2.php — orientation switch with a
+	 * landscape table (Table/THead/TR/TH/TD with explicit /Headers).
+	 *
+	 * Verifies that the struct tree across an orientation transition keeps the
+	 * Table struct intact and that TD cells in the landscape page resolve their
+	 * /Headers references to the THead row's TH /ID values (Matterhorn 09-005).
+	 *
+	 * @return void
+	 */
+	public function testExample24Orientation2PassesUa1()
+	{
+		$html = $this->loadExampleFixture('example24_orientation_2');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->displayDefaultOrientation = true;
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example24_orientation_2.php');
+	}
+
+	/**
+	 * mpdf-examples: example38_dot_tab.php — <dottab> directive emits a row of
+	 * leader dots between two text runs (a menu-style price layout).
+	 *
+	 * Each <dottab> renders as a sequence of dots in the content stream; those
+	 * dots are decorative and must be wrapped as /Artifact, not real text content
+	 * (Matterhorn 01-007). Verifies the dottab artifact wrapping path.
+	 *
+	 * @return void
+	 */
+	public function testExample38DotTabPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example38_dot_tab');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example38_dot_tab.php');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================

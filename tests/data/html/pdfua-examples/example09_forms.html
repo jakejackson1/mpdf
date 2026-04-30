@@ -1,0 +1,57 @@
+<h1>mPDF</h1>
+<h2>Forms</h2>
+
+<form>
+<p><b>Textarea</b></p>
+<textarea name="authors" rows="3" cols="60" wrap="virtual">Quisque viverra. Etiam id libero at magna pellentesque aliquet. Nulla sit amet ipsum id enim tempus dictum.</textarea>
+<br /><br />
+
+<p><b>Select</b></p>
+<select size="1" name="status"><option value="A">Active</option><option value="W">New item</option><option value="I" selected="selected">Incomplete</option><option value="X">Flagged for Deletion</option></select>
+<br /><br />
+
+<p><b>Input Radio</b></p>
+<input type="radio" name="pre_publication" value="0" checked="checked"> No
+<input type="radio" name="pre_publication" value="1"> Yes
+<br /><br />
+
+<p><b>Input Radio</b></p>
+<input type="radio" name="recommended" value="0"> No
+<input type="radio" name="recommended" value="1"> Keep
+<input type="radio" name="recommended" value="2" checked="checked"> Choice
+<br /><br />
+
+<p><b>Input Text</b></p>
+<input type="text" size="40" name="doi" value="10.1258/jrsm.100.5.211">
+<br /><br />
+
+<p><b>Input Password</b></p>
+<input type="password" size="40" name="password" value="secret">
+<br /><br />
+
+<input type="checkbox" name="QPC" value="ON" /> Checkboxes<br>
+<input type="checkbox" name="QPA" value="ON" disabled="disabled" /> Disabled<br>
+<input type="checkbox" name="QLY" value="ON" checked="checked" /> Selected
+<br /><br />
+
+<input type="submit" name="submit" value="Submit" />
+<input type="button" name="btn" value="Button" />
+<input type="reset" name="reset" value="Reset" />
+</form>
+
+<hr style="width:80%;" />
+
+<h3>Form within a table</h3>
+<form>
+<table border="1" style="padding:2px;">
+<tr><th id="col_label">Label</th><th id="col_field">Field</th></tr>
+<tr><td headers="col_label"><b>Textarea</b></td>
+<td headers="col_field"><textarea name="title" rows="3" cols="40" wrap="virtual">TEXTINTABLE Quisque viverra.</textarea></td></tr>
+<tr><td headers="col_label"><b>Select</b></td>
+<td headers="col_field"><select size="1" name="status"><option value="A">Active</option><option value="I" selected="selected">Incomplete</option></select></td></tr>
+<tr><td headers="col_label"><b>Input Radio</b></td>
+<td headers="col_field"><input type="radio" name="pre_publication" value="0" checked> No <input type="radio" name="pre_publication" value="1"> Yes</td></tr>
+<tr><td headers="col_label"><b>Input Text</b></td>
+<td headers="col_field"><input type="text" size="40" name="doi" value="10.1258/jrsm.100.5.211"></td></tr>
+</table>
+</form>
