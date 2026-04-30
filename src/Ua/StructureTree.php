@@ -469,6 +469,123 @@ class StructureTree
 		$this->annotParentTree[$idx] = $elem;
 	}
 
+	// ================== post-parse pruning ==================
+
+	/**
+	 * Remove Link struct elements that ended up with no kids, no MCRs, and no
+	 * OBJR references after annotation writing has completed.
+	 *
+	 * Matterhorn 02-003 (ISO 14289-1 §7.18.5) — every Link struct element
+	 * MUST reference either marked content or an annotation via OBJR. A Link
+	 * with an empty /K array is structurally invalid; veraPDF either flags it
+	 * directly or treats the surrounding content as untagged.
+	 *
+	 * Two ways an empty Link reaches this point:
+	 *   1. <a href="x"></a> with no inner content — open() created the Link,
+	 *      no inner HTML produced an MCID, and Mpdf::Link() was never invoked
+	 *      because there is no glyph extent to draw a clickable rect over.
+	 *   2. <a href="x"><img alt=""></a> where the inner <img> is decorative —
+	 *      Img.php opens an Artifact scope, suppressing any descendant struct
+	 *      element creation, and Mpdf::Link() may still produce no annotation
+	 *      if the rendered rect is empty.
+	 *
+	 * Tag\A::close() may have set /Alt synthesised from the href in PDFUAauto
+	 * mode; that does NOT save the element from pruning here, because an
+	 * /Alt-only Link with no /K is still invalid — and there is no real
+	 * clickable annotation in the output PDF if no OBJR exists, so removing
+	 * the struct element loses no information.
+	 *
+	 * Must be called AFTER MetadataWriter::writeAnnotations() has run (so
+	 * OBJR refs are already attached) and BEFORE StructureWriter walks the
+	 * tree to allocate object numbers.
+	 *
+	 * @return void
+	 */
+	public function pruneEmptyLinks()
+	{
+		$this->pruneEmptyLinksRecursive($this->root);
+	}
+
+	/**
+	 * Recursive worker for pruneEmptyLinks().
+	 *
+	 * Walks children depth-first, then re-examines this element's children
+	 * list for Links that meet the prune predicate. Pruning happens after the
+	 * recursion so a Link nested inside another Link (rare, malformed HTML)
+	 * is still examined in correct child-before-parent order.
+	 *
+	 * @param  StructureElement $elem
+	 * @return void
+	 */
+	private function pruneEmptyLinksRecursive(StructureElement $elem)
+	{
+		foreach ($elem->getChildren() as $child) {
+			$this->pruneEmptyLinksRecursive($child);
+		}
+		// Re-fetch because recursion may have mutated grandchildren.
+		$toRemove = [];
+		foreach ($elem->getChildren() as $child) {
+			if ($child->getType() === 'Link'
+				&& count($child->getChildren()) === 0
+				&& count($child->getMcids()) === 0
+				&& count($child->getObjrefs()) === 0
+			) {
+				$toRemove[] = $child;
+			}
+		}
+		foreach ($toRemove as $child) {
+			$elem->removeChild($child);
+		}
+	}
+
+	/**
+	 * Find the first Link struct element with an empty /K (no kids, no MCRs,
+	 * AND no OBJR refs) and return its source href hint, or null if every
+	 * Link in the tree carries at least one /K kid.
+	 *
+	 * "Empty" means the element would be serialised with no /K array — that
+	 * is the Matterhorn 02-003 violation. An OBJR-only Link (the typical
+	 * shape for `<a>text</a>` where the text MCID lives on the surrounding
+	 * P element and only the annotation OBJR is attached to Link) is
+	 * acceptable; the OBJR provides the structure-tree linkage to the link
+	 * annotation, and the annotation's own /Contents (or the producer's
+	 * synthesised /Alt) carries the accessible name.
+	 *
+	 * Caller MUST run this BEFORE pruneEmptyLinks() (which would silently
+	 * remove the offending elements).
+	 *
+	 * @return string|null  href hint from the first offending Link's '_href' attribute,
+	 *                      or '<unknown>' if the hint is missing, or null when no
+	 *                      offending Link exists in the tree.
+	 */
+	public function findFirstEmptyLinkHref()
+	{
+		return $this->findFirstEmptyLinkHrefRecursive($this->root);
+	}
+
+	/**
+	 * @param  StructureElement $elem
+	 * @return string|null
+	 */
+	private function findFirstEmptyLinkHrefRecursive(StructureElement $elem)
+	{
+		if ($elem->getType() === 'Link'
+			&& count($elem->getChildren()) === 0
+			&& count($elem->getMcids()) === 0
+			&& count($elem->getObjrefs()) === 0
+		) {
+			$attrs = $elem->getAttributes();
+			return isset($attrs['_href']) ? (string) $attrs['_href'] : '<unknown>';
+		}
+		foreach ($elem->getChildren() as $child) {
+			$href = $this->findFirstEmptyLinkHrefRecursive($child);
+			if ($href !== null) {
+				return $href;
+			}
+		}
+		return null;
+	}
+
 	// ================== FPDI tagged-import registration ==================
 
 	/**

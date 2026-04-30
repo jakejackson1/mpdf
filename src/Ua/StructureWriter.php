@@ -96,6 +96,39 @@ class StructureWriter
 	 */
 	public function writeStructTree($parentTreeNextKey = 0)
 	{
+		// ---- 0a. Validate / prune empty Link struct elements ----
+		//
+		// Matterhorn 02-003 (ISO 14289-1 §7.18.5) — Link elements with no
+		// kids, no MCRs, and no OBJR refs are invalid. Two ways an empty
+		// Link survives to here: (1) <a href="x"></a> with no inner content
+		// and no rendered annotation; (2) <a href="x"><img alt=""></a> where
+		// the inner <img> is decorative AND no clickable rect is produced.
+		//
+		// Strict mode throws so the author can fix the source HTML.
+		// PDFUAauto silently prunes the offenders — Tag\A::open() already
+		// pre-set /Alt synthesised from href on every Link in auto mode, so
+		// any Link that retains an OBJR (annotation actually drawn) keeps
+		// its accessible name; the elements removed here have no content
+		// stream representation at all and lose nothing.
+		//
+		// Order: run AFTER writeAnnotations() (so OBJR refs are visible)
+		// and BEFORE object-number reservation (so pruned elements don't
+		// get numbers allocated).
+		if (empty($this->mpdf->PDFUAauto)) {
+			$href = $this->tree->findFirstEmptyLinkHref();
+			if ($href !== null) {
+				throw new \Mpdf\MpdfException(
+					'PDF/UA-1: <a href="' . $href . '"> wraps no accessible content '
+					. '(empty body or only decorative children) and produces a Link '
+					. 'struct element with no /K kids — Matterhorn 02-003. Provide '
+					. 'visible link text, a non-empty alt on the inner <img>, or an '
+					. 'aria-label on the anchor. Enable PDFUAauto to drop the empty '
+					. 'Link silently and synthesise an /Alt fallback.'
+				);
+			}
+		}
+		$this->tree->pruneEmptyLinks();
+
 		// ---- 0. Pre-reserve the StructTreeRoot object number ----
 		//
 		// ISO 32000-1 §14.7.2 Table 322 requires /P (parent ref) on EVERY struct

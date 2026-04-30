@@ -46,10 +46,24 @@ class A extends Tag
 				if (isset($attr['LANG'])) {
 					$structAttrs['Lang'] = $attr['LANG'];
 				}
+				// Matterhorn 28-002 — in PDFUAauto we pre-set /Alt synthesised
+				// from the href so a Link wrapping only decorative content
+				// (e.g. <a><img alt=""></a>) still has an accessible name.
+				// When real link text is present, the inner content remains
+				// the primary accessible name and /Alt acts as a fallback for
+				// the link annotation (legitimate per ISO 32000-1 §14.7.2 Table 322).
+				if (!empty($this->mpdf->PDFUAauto)) {
+					$structAttrs['Alt'] = 'Link to ' . $attr['HREF'];
+				}
 				$this->ua->getStructureTree()->open('Link', $structAttrs);
 
 				// Register ARIA ID references
 				$elem = $this->ua->getStructureTree()->getCurrent();
+				// Stash the source href on the element so StructureWriter's
+				// strict-mode empty-Link check can quote it in its exception.
+				// '_href' is filtered out by StructureWriter (it only emits
+				// known PDF dict keys), so it is safe to use as a private hint.
+				$elem->setAttribute('_href', $attr['HREF']);
 				if (!empty($attr['ID'])) {
 					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
 				}

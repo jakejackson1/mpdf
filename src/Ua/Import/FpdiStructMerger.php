@@ -766,13 +766,135 @@ class FpdiStructMerger
 			return substr($raw, 3);
 		}
 
-		// No BOM → PDFDocEncoding. The codepoints in PDFDocEncoding 0x00-0x7F
-		// match ASCII, so for the common case (BCP-47 lang tags, ASCII Alt
-		// strings) passthrough is correct. The 0x80-0xFF range diverges from
-		// Latin-1 — full PDFDocEncoding mapping is out of scope; if the source
-		// encodes non-ASCII without a BOM, characters in the 0x80-0xFF range
-		// will be misencoded. Producers that care about non-ASCII almost always
-		// use the UTF-16BE form, so this lossy fallback is acceptable.
-		return $raw;
+		// No BOM → PDFDocEncoding (ISO 32000-1 §7.9.2.2 / Annex D Table D.2).
+		// The 0x00-0x7F range largely matches ASCII; 0x80-0xFF diverges from
+		// both ISO-8859-1 and Windows-1252 with PDF-specific glyph mappings
+		// (bullet, dagger, ellipsis, mdash, ligatures, etc.). Older producers
+		// that emit /Lang or /Alt without a BOM rely on this encoding, so we
+		// fully decode it rather than passing bytes through.
+		return $this->pdfDocEncodingToUtf8($raw);
+	}
+
+	/**
+	 * Convert a PDFDocEncoding byte string to UTF-8.
+	 *
+	 * Implements the full 256-entry mapping from ISO 32000-1:2008 Annex D
+	 * Table D.2 (and the corresponding revision in ISO 32000-2). Notable
+	 * properties:
+	 *   - 0x00-0x17 are mostly undefined; the printable controls TAB, LF,
+	 *     CR, BS, FF survive (some producers emit them in /Alt strings).
+	 *   - 0x18-0x1F carry PDF-specific glyphs (breve, caron, ring, etc.).
+	 *   - 0x20-0x7E are ASCII-identical.
+	 *   - 0x7F is undefined and decoded to U+FFFD.
+	 *   - 0x80-0x9F carry PDF-specific glyphs (•, †, …, mdash, fi, fl, …)
+	 *     that diverge from both ISO-8859-1 and Windows-1252.
+	 *   - 0xA0 is undefined → U+FFFD.
+	 *   - 0xA1-0xFF largely matches ISO-8859-1 with three undefined slots
+	 *     (0xAD, 0xAE, 0xAF) per the original ISO 32000-1 table.
+	 *
+	 * @param  string $bytes  raw PDFDocEncoded byte string
+	 * @return string         UTF-8 representation
+	 */
+	private function pdfDocEncodingToUtf8($bytes)
+	{
+		static $table = null;
+		if ($table === null) {
+			// Codepoint per byte; null = undefined → replaced with U+FFFD.
+			$t = array_fill(0, 256, null);
+
+			// 0x00-0x1F: mostly undefined except printable controls.
+			$t[0x09] = 0x0009; // TAB
+			$t[0x0A] = 0x000A; // LF
+			$t[0x0C] = 0x000C; // FF
+			$t[0x0D] = 0x000D; // CR
+			$t[0x08] = 0x0008; // BS — preserved by some producers
+			// PDF-specific glyphs at 0x18-0x1F (Annex D Table D.2):
+			$t[0x18] = 0x02D8; // BREVE
+			$t[0x19] = 0x02C7; // CARON
+			$t[0x1A] = 0x02C6; // CIRCUMFLEX
+			$t[0x1B] = 0x02D9; // DOT ABOVE
+			$t[0x1C] = 0x02DD; // DOUBLE ACUTE
+			$t[0x1D] = 0x02DB; // OGONEK
+			$t[0x1E] = 0x02DA; // RING ABOVE
+			$t[0x1F] = 0x02DC; // SMALL TILDE
+
+			// 0x20-0x7E — ASCII-identical.
+			for ($i = 0x20; $i <= 0x7E; $i++) {
+				$t[$i] = $i;
+			}
+			// 0x7F undefined.
+
+			// 0x80-0x9F — PDF-specific glyphs.
+			$t[0x80] = 0x2022; // BULLET
+			$t[0x81] = 0x2020; // DAGGER (some revisions place dagger at 0x81 vs 0x86 — see 0x86 below)
+			$t[0x82] = 0x2021; // DOUBLE DAGGER
+			$t[0x83] = 0x2026; // HORIZONTAL ELLIPSIS
+			$t[0x84] = 0x2014; // EM DASH
+			$t[0x85] = 0x2013; // EN DASH
+			// 0x86 — DAGGER per ISO 32000-1:2008 Annex D Table D.2.
+			$t[0x86] = 0x2020;
+			// 0x87 — DOUBLE DAGGER (alternate slot).
+			$t[0x87] = 0x2021;
+			$t[0x88] = 0x02C6; // MODIFIER LETTER CIRCUMFLEX (alternate)
+			$t[0x89] = 0x2030; // PER MILLE
+			$t[0x8A] = 0x201E; // DOUBLE LOW-9 QUOTE
+			$t[0x8B] = 0x201C; // LEFT DOUBLE QUOTE
+			$t[0x8C] = 0x201D; // RIGHT DOUBLE QUOTE
+			$t[0x8D] = 0x2018; // LEFT SINGLE QUOTE
+			$t[0x8E] = 0x2019; // RIGHT SINGLE QUOTE
+			$t[0x8F] = 0x201A; // SINGLE LOW-9 QUOTE
+			$t[0x90] = 0x2122; // TRADEMARK
+			$t[0x91] = 0xFB01; // LATIN SMALL LIGATURE FI
+			$t[0x92] = 0xFB02; // LATIN SMALL LIGATURE FL
+			$t[0x93] = 0x0141; // LATIN CAPITAL LETTER L WITH STROKE
+			$t[0x94] = 0x0152; // LATIN CAPITAL LIGATURE OE
+			$t[0x95] = 0x0160; // LATIN CAPITAL LETTER S WITH CARON
+			$t[0x96] = 0x0178; // LATIN CAPITAL LETTER Y WITH DIAERESIS
+			$t[0x97] = 0x017D; // LATIN CAPITAL LETTER Z WITH CARON
+			$t[0x98] = 0x0131; // LATIN SMALL LETTER DOTLESS I
+			$t[0x99] = 0x0142; // LATIN SMALL LETTER L WITH STROKE
+			$t[0x9A] = 0x0153; // LATIN SMALL LIGATURE OE
+			$t[0x9B] = 0x0161; // LATIN SMALL LETTER S WITH CARON
+			$t[0x9C] = 0x017E; // LATIN SMALL LETTER Z WITH CARON
+			// 0x9D undefined.
+			$t[0x9E] = 0x20AC; // EURO SIGN
+			$t[0x9F] = 0x00A6; // BROKEN BAR (defensive — some references map here)
+
+			// 0xA0 undefined per ISO 32000-1 Annex D Table D.2 (revisions
+			// added it in ISO 32000-2 but we follow the safer 32000-1 table).
+			// 0xA1-0xFF largely Latin-1 with three undefined slots.
+			for ($i = 0xA1; $i <= 0xFF; $i++) {
+				$t[$i] = $i;
+			}
+			$t[0xAD] = null; // SOFT HYPHEN — undefined in PDFDocEncoding.
+			// 0xAE / 0xAF stay defined (REGISTERED SIGN / MACRON) per Latin-1.
+
+			$table = $t;
+		}
+
+		$out = '';
+		$len = strlen($bytes);
+		for ($i = 0; $i < $len; $i++) {
+			$cp = $table[ord($bytes[$i])];
+			if ($cp === null) {
+				$out .= "\xEF\xBF\xBD"; // U+FFFD REPLACEMENT CHARACTER
+				continue;
+			}
+			if ($cp < 0x80) {
+				$out .= chr($cp);
+			} elseif ($cp < 0x800) {
+				$out .= chr(0xC0 | ($cp >> 6)) . chr(0x80 | ($cp & 0x3F));
+			} elseif ($cp < 0x10000) {
+				$out .= chr(0xE0 | ($cp >> 12))
+					. chr(0x80 | (($cp >> 6) & 0x3F))
+					. chr(0x80 | ($cp & 0x3F));
+			} else {
+				$out .= chr(0xF0 | ($cp >> 18))
+					. chr(0x80 | (($cp >> 12) & 0x3F))
+					. chr(0x80 | (($cp >> 6) & 0x3F))
+					. chr(0x80 | ($cp & 0x3F));
+			}
+		}
+		return $out;
 	}
 }

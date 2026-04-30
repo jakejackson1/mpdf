@@ -194,6 +194,17 @@ class StructureElement
 	 */
 	public static function sanitiseIdForPdf($id)
 	{
+		// ISO 32000-1 §7.3.5 — a PDF name (the form used in /Headers refs)
+		// is limited to 127 bytes after the leading '/'. After #xx expansion
+		// any input character outside the safe set costs 3 output bytes, so
+		// a 50-char UTF-8 input made of multibyte chars expands to ~150
+		// bytes. Without a cap the output is silently a malformed PDF name.
+		// $truncTo + len('#2D') + $hashChars must equal $maxBytes so the
+		// distinguishing suffix fits.
+		$maxBytes  = 127;
+		$hashChars = 7;
+		$truncTo   = $maxBytes - 3 - $hashChars; // = 117
+
 		$id = (string) $id;
 		$out = '';
 		$len = strlen($id);
@@ -214,6 +225,18 @@ class StructureElement
 				$out .= sprintf('#%02X', $ord);
 			}
 		}
+
+		// Length cap: keep the first $truncTo bytes and append a #xx-escaped
+		// '-' + first $hashChars hex characters of sha1($id) so that two
+		// distinct overlong inputs that share a long common prefix still
+		// produce distinct sanitised ids. '#2D' is the escape for '-' so the
+		// joiner is byte-safe in both the byte-string and PDF-name forms.
+		if (strlen($out) > $maxBytes) {
+			$prefix = substr($out, 0, $truncTo);
+			$suffix = '#2D' . substr(sha1($id), 0, $hashChars);
+			$out    = $prefix . $suffix;
+		}
+
 		return $out;
 	}
 
@@ -347,6 +370,30 @@ class StructureElement
 	public function popLastChild()
 	{
 		array_pop($this->children);
+	}
+
+	/**
+	 * Remove a specific child element from this parent's children list.
+	 *
+	 * Used by StructureTree::pruneEmptyLinks() to drop Link struct elements
+	 * that ended up with no MCRs, no descendant struct elements, and no
+	 * OBJR kids — emitting them would violate Matterhorn 02-003 (Link
+	 * structure element with no /K reference back to an OBJR or content item).
+	 *
+	 * Identity comparison; the children array is renumbered after removal so
+	 * downstream consumers continue to see a 0-indexed list.
+	 *
+	 * @param  StructureElement $child  must be a current child of $this
+	 * @return void
+	 */
+	public function removeChild(StructureElement $child)
+	{
+		foreach ($this->children as $i => $existing) {
+			if ($existing === $child) {
+				array_splice($this->children, $i, 1);
+				return;
+			}
+		}
 	}
 
 	/**
