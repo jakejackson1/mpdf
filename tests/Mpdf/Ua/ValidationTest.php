@@ -325,6 +325,40 @@ class ValidationTest extends PdfUaTestCase
 	 *
 	 * @return void
 	 */
+	/**
+	 * ISO 14289-1:2014 §7.21.4.1 / Matterhorn 09-006 — every font referenced
+	 * for content (not just artifact) must provide a ToUnicode CMap so AT
+	 * can recover the underlying character codes from glyph indices.
+	 *
+	 * @return void
+	 */
+	public function testFontSubsetToUnicodeCoverage()
+	{
+		$mpdf = $this->makeMpdf();
+		$out = $this->getOutput($mpdf, '<h1>Hello</h1><p>Some text content.</p>');
+
+		// Every /Type /Font dict in the output must reference a /ToUnicode
+		// CMap. mPDF emits font dicts with /Subtype /TrueType, /Type0, or
+		// /CIDFontType2 — only /Type0 wrappers and /TrueType base fonts need
+		// /ToUnicode (CIDFontType2 is descendant inside /Type0 and shares
+		// the wrapper's CMap), so we count `/Type /Font` dicts that are
+		// /Subtype /Type0 or /Subtype /TrueType and assert each has
+		// /ToUnicode.
+		preg_match_all(
+			'#<<[^<>]*?/Type\s*/Font\s*[^<>]*?/Subtype\s*/(?:Type0|TrueType)[^<>]*?>>#s',
+			$out,
+			$m
+		);
+		$this->assertNotEmpty($m[0], 'PDFUA output must contain at least one embedded font dict');
+		foreach ($m[0] as $i => $dict) {
+			$this->assertStringContainsString(
+				'/ToUnicode',
+				$dict,
+				'Font dict #' . $i . ' must reference /ToUnicode CMap (Matterhorn 09-006)'
+			);
+		}
+	}
+
 	public function testMultipleViolationsAccumulateWarnings()
 	{
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
