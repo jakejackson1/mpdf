@@ -1,0 +1,285 @@
+<?php
+
+namespace Mpdf\Ua;
+
+/**
+ * Phase 5 hard-violation tests.
+ *
+ * Each violation has two paths governed by $PDFUAauto:
+ *   - PDFUAauto=true   → mPDF auto-corrects and records a warning via
+ *                        UaState::addWarning(). The document is still emitted
+ *                        and remains PDF/UA-1 conformant.
+ *   - PDFUAauto=false  → mPDF throws \Mpdf\MpdfException because the intent
+ *                        cannot be guessed safely (e.g. is this image
+ *                        decorative or a content image without alt text?).
+ *
+ * Spec references appear inline next to each test method.
+ *
+ * @see PdfUaTestCase  base class supplying makeMpdf() and getOutput()
+ */
+class ValidationTest extends PdfUaTestCase
+{
+
+	// ========================= <img> alt attribute =========================
+
+	/**
+	 * ISO 14289-1:2014 §7.3 / Matterhorn 13-004 — every non-decorative image
+	 * must carry /Alt. With PDFUAauto=true a missing alt is treated as
+	 * decorative and a warning is recorded.
+	 *
+	 * @return void
+	 */
+	public function testImageMissingAltAddsWarning()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$this->getOutput($mpdf, '<p>Before <img src="' . $png . '" width="20" height="20"> after.</p>');
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$this->assertNotEmpty($warnings, 'A warning must be recorded when alt is missing in PDFUAauto mode');
+
+		$found = false;
+		foreach ($warnings as $w) {
+			if (stripos($w, 'missing alt') !== false || stripos($w, 'decorative') !== false) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue($found, 'Warning text must reference the missing alt / decorative treatment');
+	}
+
+	/**
+	 * Same condition, strict mode — must throw because intent cannot be guessed.
+	 *
+	 * @return void
+	 */
+	public function testImageMissingAltThrowsWhenStrict()
+	{
+		$mpdf = $this->makeMpdf();
+		// PDFUAauto defaults to false (strict).
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/missing the alt attribute/');
+		$this->getOutput($mpdf, '<p>Before <img src="' . $png . '" width="20" height="20"> after.</p>');
+	}
+
+	/**
+	 * Empty alt is the documented "decorative" marker — must NOT throw, and
+	 * SHOULD NOT add a missing-alt warning.
+	 *
+	 * @return void
+	 */
+	public function testImageEmptyAltAcceptedAsDecorative()
+	{
+		$mpdf = $this->makeMpdf();
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$out = $this->getOutput($mpdf, '<p>Before <img src="' . $png . '" alt="" width="20" height="20"> after.</p>');
+		$this->assertNotEmpty($out, 'Output must be produced when alt is explicitly empty');
+
+		foreach ($mpdf->getPdfUaWarnings() as $w) {
+			$this->assertStringNotContainsString(
+				'missing alt',
+				strtolower($w),
+				'No missing-alt warning when alt="" is explicit'
+			);
+		}
+	}
+
+	// ========================= SetJS / <script> =========================
+
+	/**
+	 * ISO 14289-1:2014 §7.17 / Matterhorn 17-001 — document-level JavaScript
+	 * is not permitted. PDFUAauto=true records a warning and silently drops
+	 * the script.
+	 *
+	 * @return void
+	 */
+	public function testJavaScriptEmbedAddsWarning()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->SetJS('app.alert("hi");');
+		// Output to flush the warning system; the JS itself must be skipped.
+		$this->getOutput($mpdf, '<h1>Hello</h1>');
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$found = false;
+		foreach ($warnings as $w) {
+			if (stripos($w, 'javascript') !== false || stripos($w, 'SetJS') !== false) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue($found, 'SetJS in PDFUAauto mode must record a warning');
+	}
+
+	/**
+	 * Same condition, strict mode — must throw immediately when SetJS is called.
+	 *
+	 * @return void
+	 */
+	public function testJavaScriptEmbedThrowsWhenStrict()
+	{
+		$mpdf = $this->makeMpdf();
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/SetJS|JavaScript/i');
+		$mpdf->SetJS('app.alert("hi");');
+	}
+
+	// ========================= OverWrite() =========================
+
+	/**
+	 * OverWrite() does binary string replacement on a finished PDF. The
+	 * structure tree references object numbers and byte offsets that the
+	 * replacement cannot maintain, so PDF/UA-1 mode rejects the call
+	 * unconditionally — neither strict nor auto mode can produce a
+	 * conformant result.
+	 *
+	 * @return void
+	 */
+	public function testOverWriteThrowsInPdfuaMode()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->WriteHTML('<h1>Hello</h1>');
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/OverWrite/');
+		// File path does not need to exist — the PDFUA guard fires before
+		// any I/O happens (see Mpdf::OverWrite).
+		$mpdf->OverWrite('/tmp/does_not_matter.pdf', 'foo', 'bar', 'S', 'out');
+	}
+
+	// ========================= Heading sequence =========================
+
+	/**
+	 * ISO 14289-1:2014 §7.4.2 / Matterhorn 14-003 — heading sequence must
+	 * not skip a level. PDFUAauto clamps and warns; strict mode throws.
+	 *
+	 * @return void
+	 */
+	public function testHeadingLevelSkipAddsWarningInAutoMode()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$this->getOutput($mpdf, '<h1>A</h1><h3>B</h3>');
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$found = false;
+		foreach ($warnings as $w) {
+			if (stripos($w, 'heading sequence') !== false) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue($found, 'Skipping H2 must record a heading-sequence warning');
+	}
+
+	/**
+	 * Same condition, strict mode — must throw immediately.
+	 *
+	 * @return void
+	 */
+	public function testHeadingLevelSkipThrowsInStrictMode()
+	{
+		$mpdf = $this->makeMpdf();
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/heading sequence/');
+		$this->getOutput($mpdf, '<h1>A</h1><h3>B</h3>');
+	}
+
+	// ========================= /Lang catalog =========================
+
+	/**
+	 * ISO 14289-1:2014 §7.2 / Matterhorn 04-001 — /Lang must appear on the
+	 * document catalog. When neither currentLang nor default_lang is set,
+	 * PDFUAauto defaults to en-US with a warning; strict mode throws.
+	 *
+	 * @return void
+	 */
+	public function testMissingLangThrowsInStrictMode()
+	{
+		// Construct without 'mode' (the language) — bypass makeMpdf which
+		// hard-codes mode='en-GB'.
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'title' => 'Test']);
+		$mpdf->compress = false;
+		$mpdf->WriteHTML('<h1>Hello</h1>');
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/Lang/');
+		$mpdf->Output('', 'S');
+	}
+
+	/**
+	 * Same condition with PDFUAauto=true — defaults to en-US and warns.
+	 *
+	 * @return void
+	 */
+	public function testMissingLangFallsBackInAutoMode()
+	{
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => true, 'title' => 'Test']);
+		$mpdf->compress = false;
+		$mpdf->WriteHTML('<h1>Hello</h1>');
+		$out = $mpdf->Output('', 'S');
+
+		$this->assertStringContainsString('/Lang (en-US)', $out, 'PDFUAauto must fall back to en-US');
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$found = false;
+		foreach ($warnings as $w) {
+			if (stripos($w, 'lang') !== false) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue($found, 'A /Lang fallback warning must be recorded');
+	}
+
+	// ========================= Encryption permission bit 10 =========================
+
+	/**
+	 * ISO 14289-1:2014 §7.6 / Matterhorn 07-001 — when encryption is
+	 * applied, bit 10 ("extract text and graphics for accessibility") must
+	 * remain set so AT can read the content. mPDF auto-corrects in
+	 * PDFUAauto mode (the test below also verifies the correction sticks).
+	 *
+	 * @return void
+	 */
+	public function testEncryptionExtractBitPreservedInAutoMode()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		// 'copy' and 'print' deliberately omit 'extract' — mPDF must add it
+		// back automatically in PDFUAauto mode.
+		$mpdf->SetProtection(['copy', 'print']);
+		$out = $this->getOutput($mpdf, '<h1>Hello</h1>');
+
+		$this->assertNotEmpty($out, 'Output must still be produced when permissions need correction');
+		// Locate the encryption dict and read its /P field. Other /P keys in
+		// the document refer to struct-element parents (`/P N 0 R`); the
+		// encryption /P is always a bare integer next to /Filter /Standard.
+		$found = preg_match('/\/Filter \/Standard.*?\/P (-?\d+)/s', $out, $m);
+		$this->assertSame(1, $found, 'Encryption dict with /P must be present in the PDF');
+		$p = (int) $m[1];
+		// Bit 10 (decimal 512) is the "extract text and graphics for
+		// accessibility" flag (ISO 32000-1 §7.6.3.2 Table 22). PDF stores
+		// /P as a signed 32-bit integer; the bit check is unaffected by the
+		// sign because PHP's bitwise AND uses the two's-complement value.
+		$this->assertNotSame(0, $p & (1 << 9), '/P field must keep bit 10 set after PDFUAauto correction');
+	}
+
+	/**
+	 * Strict mode rejects the SetProtection() call when 'extract' is
+	 * missing because we cannot silently change a security setting the
+	 * caller asked for.
+	 *
+	 * @return void
+	 */
+	public function testEncryptionExtractBitMissingThrowsInStrictMode()
+	{
+		$mpdf = $this->makeMpdf();
+
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessageMatches('/extract/i');
+		$mpdf->SetProtection(['copy', 'print']);
+	}
+}

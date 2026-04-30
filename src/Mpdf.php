@@ -7850,9 +7850,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// which causes begin() to emit /Artifact BMC (no property dict).
 						$pdfuaImageMcid = $this->ua->getStructureTree()->addArtifact();
 					} elseif ($pdfuaImageAlt === null) {
-						// alt attribute absent — treat as decorative; add warning per
-						// W3C convention. ISO 14289-1:2014 §7.3 — all non-decorative
-						// images must have /Alt text in the struct element.
+						// alt attribute absent — intent unknown. ISO 14289-1:2014 §7.3
+						// (Matterhorn 13-004) — every non-decorative image must carry
+						// /Alt text. In PDFUAauto=true mode treat as decorative and
+						// record a warning so the author can correct it; in strict
+						// mode throw because the intent cannot be guessed safely.
+						if (empty($this->PDFUAauto)) {
+							throw new \Mpdf\MpdfException(
+								'PDF/UA-1: <img> is missing the alt attribute. Provide alt="" '
+								. 'for a purely decorative image or alt="description" for content. '
+								. 'Enable PDFUAauto to auto-correct (treats missing alt as decorative).'
+							);
+						}
 						$this->ua->addWarning('Image is missing alt attribute; treating as decorative Artifact. Provide alt="" for decorative images or alt="description" for content images.');
 						$pdfuaImageMcid = $this->ua->getStructureTree()->addArtifact();
 					} else {
@@ -9773,7 +9782,16 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->ua->getMarkedContentHelper()->begin('Figure', $mcid);
 						$pdfuaTagOpened = 'figure';
 					} else {
-						// null — caller did not provide alt text; warn and treat as Artifact
+						// null — caller did not provide alt text. In strict mode throw;
+						// in PDFUAauto=true mode warn and treat as Artifact.
+						// ISO 14289-1:2014 §7.3 / Matterhorn 13-004.
+						if (empty($this->PDFUAauto)) {
+							throw new \Mpdf\MpdfException(
+								'PDF/UA-1: Image() called without $alt parameter for "' . $file . '". '
+								. 'Pass $alt="" for a decorative image or $alt="description" for content. '
+								. 'Enable PDFUAauto to auto-correct (treats missing alt as decorative).'
+							);
+						}
 						$this->ua->addWarning('Image() called without $alt in PDFUA mode — treating as decorative: ' . $file);
 						$this->writer->write('/Artifact BMC');
 						$pdfuaTagOpened = 'artifact';
@@ -28512,6 +28530,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function SetJS($script)
 	{
+		// ISO 14289-1:2014 §7.17 / Matterhorn Protocol 1.1 condition 17-001 —
+		// document-level JavaScript may interfere with assistive-technology
+		// behaviour and is not permitted in PDF/UA-1 documents. Refuse the
+		// embedding in strict mode, or record a warning + skip the script in
+		// PDFUAauto=true mode so the document remains conformant.
+		if ($this->PDFUA) {
+			if (empty($this->PDFUAauto)) {
+				throw new \Mpdf\MpdfException(
+					'PDF/UA-1: SetJS() / <script> embedding is not permitted (Matterhorn 17-001). '
+					. 'Document-level JavaScript may interfere with assistive technology. '
+					. 'Remove the script, or enable PDFUAauto to auto-correct (the script will '
+					. 'be omitted with a warning recorded).'
+				);
+			}
+			$this->ua->addWarning(
+				'PDF/UA-1: SetJS() ignored — document-level JavaScript is not permitted (Matterhorn 17-001).'
+			);
+			return;
+		}
 		$this->js = $script;
 	}
 
