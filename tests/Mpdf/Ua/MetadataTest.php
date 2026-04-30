@@ -82,9 +82,7 @@ class MetadataTest extends PdfUaTestCase
 		$this->expectException(\Mpdf\MpdfException::class);
 		// Provide 'mode' so currentLang is set (avoiding the lang-missing exception)
 		// and omit 'title' so the title-missing exception fires.
-		// useActiveForms=true keeps the constructor happy so the title-missing
-		// exception is what actually fires at output time (not the form guard).
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => false, 'mode' => 'en-GB', 'useActiveForms' => true]);
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => false, 'mode' => 'en-GB']);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<p>no title</p>');
 		$mpdf->Output(null, 'S');
@@ -100,7 +98,7 @@ class MetadataTest extends PdfUaTestCase
 	public function testWarnsWhenTitleMissingWithAuto()
 	{
 		// Provide 'mode' so currentLang is set; omit 'title' so addWarning() fires.
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => true, 'mode' => 'en-GB', 'useActiveForms' => true]);
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => true, 'mode' => 'en-GB']);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<p>no title auto</p>');
 		$output = $mpdf->Output(null, 'S');
@@ -126,7 +124,7 @@ class MetadataTest extends PdfUaTestCase
 	public function testCoreFontsNotAllowed()
 	{
 		$this->expectException(\Mpdf\MpdfException::class);
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'mode' => 'c', 'title' => 'Core Font Test', 'useActiveForms' => true]);
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'mode' => 'c', 'title' => 'Core Font Test']);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<p>x</p>');
 		$mpdf->Output(null, 'S');
@@ -199,7 +197,7 @@ class MetadataTest extends PdfUaTestCase
 	public function testThrowsWhenLangMissingStrict()
 	{
 		$this->expectException(\Mpdf\MpdfException::class);
-		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => false, 'title' => 'Lang Test', 'useActiveForms' => true]);
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => false, 'title' => 'Lang Test']);
 		$mpdf->compress = false;
 		$mpdf->WriteHTML('<p>no lang</p>');
 		$mpdf->Output(null, 'S');

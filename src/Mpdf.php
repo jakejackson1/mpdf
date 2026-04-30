@@ -1131,27 +1131,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->services[] = $key;
 		}
 
-		// PDF/UA-1 §7.1 — every piece of real content must be tagged. With
-		// useActiveForms=false (the default), <input>/<textarea>/<select>
-		// render as drawn chrome that bypasses StructureTree entirely, which
-		// produces an untagged-real-content violation that veraPDF flags as
-		// rule 7.1#3. The PDFUA-aware code paths in src/Form.php live inside
-		// useActiveForms branches, so the only correctness-preserving option
-		// is to require active forms whenever PDFUA is on.
-		if ($this->PDFUA && !$this->useActiveForms) {
-			if (empty($this->PDFUAauto)) {
-				throw new \Mpdf\MpdfException(
-					'PDF/UA-1 requires useActiveForms=true so form widgets are tagged. '
-					. 'Either set "useActiveForms" => true in your config, or enable '
-					. 'PDFUAauto to have mPDF auto-correct (active forms get force-enabled).'
-				);
-			}
-			$this->useActiveForms = true;
-			$this->ua->addWarning(
-				'useActiveForms auto-enabled because PDF/UA-1 requires every form '
-				. 'widget to be a tagged annotation (ISO 14289-1 §7.1).'
-			);
-		}
+		// PDF/UA-1 §7.1 — every piece of real content must be tagged. The
+		// useActiveForms=false legacy path now wraps drawn form chrome in
+		// /Artifact BMC ... EMC (see Form::print_ob_* else-branches), so
+		// the combination PDFUA=true + useActiveForms=false is conformant
+		// without any constructor-side intervention. ISO 32000-1 §14.8.2.2
+		// classifies the chrome as artifact content, outside logical
+		// structure. See .claude/plans/2026-04-30-ua1-legacy-form-artifact-
+		// tagging.md for the full rationale.
 
 		$this->time0 = microtime(true);
 
@@ -1895,6 +1882,19 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	public function getPdfUaMarkedContentHelper()
 	{
 		return $this->ua->getMarkedContentHelper();
+	}
+
+	/**
+	 * Return the StructureTree service for collaborators outside the Mpdf
+	 * class hierarchy (notably src/Form.php, which lives in a separate class
+	 * and so cannot reach the private $ua field directly). Mirrors the
+	 * getPdfUaMarkedContentHelper() accessor pattern.
+	 *
+	 * @return \Mpdf\Ua\StructureTree
+	 */
+	public function getPdfUaStructureTree()
+	{
+		return $this->ua->getStructureTree();
 	}
 
 	/**
