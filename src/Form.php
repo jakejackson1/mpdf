@@ -232,7 +232,7 @@ class Form
 			// a StructureTree artifact-suppression scope so any nested Cell
 			// or Rect call does not try to allocate an MCID.
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -356,7 +356,7 @@ class Form
 
 			// Legacy <textarea> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -470,7 +470,7 @@ class Form
 		} else {
 			// Legacy <select> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -548,7 +548,7 @@ class Form
 		} else {
 			// Legacy <input type=image> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -608,7 +608,7 @@ class Form
 
 			// Legacy <button>/<input type=submit> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -679,7 +679,7 @@ class Form
 		} else {
 			// Legacy <input type=checkbox> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);
@@ -744,7 +744,7 @@ class Form
 		} else {
 			// Legacy <input type=radio> chrome — wrap as artifact (see print_ob_text comment).
 			$wrapArtifact = $this->mpdf->PDFUA
-				&& !$this->mpdf->getPdfUaStructureTree()->isInArtifact();
+				&& $this->mpdf->getPdfUaMarkedContentHelper()->getDepth() === 0;
 			if ($wrapArtifact) {
 				$this->mpdf->getPdfUaStructureTree()->openArtifact();
 				$this->mpdf->getPdfUaMarkedContentHelper()->begin('Artifact', -1);

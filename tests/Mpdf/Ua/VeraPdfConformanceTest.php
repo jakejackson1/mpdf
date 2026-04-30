@@ -1015,6 +1015,31 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$this->assertVeraPdfCompliant($pdf, 'example66_custom_properties.php');
 	}
 
+	/**
+	 * Legacy form chrome with `useActiveForms=false` must pass veraPDF's
+	 * UA-1 profile end-to-end. The fixture exercises every print_ob_*
+	 * code path; Phase 2 of the legacy-form artifact-tagging plan wraps
+	 * each in /Artifact BMC ... EMC so rule 7.1#3 (untagged real content)
+	 * is satisfied even though no AcroForm widget annotations exist.
+	 *
+	 * Plan: .claude/plans/2026-04-30-ua1-legacy-form-artifact-tagging.md §5.
+	 *
+	 * @return void
+	 */
+	public function testLegacyFormsUseActiveFormsFalsePassesUa1()
+	{
+		$html = $this->loadExampleFixture('legacy_forms_useactiveformsfalse');
+		// useActiveForms=false drives the legacy chrome path; PDFUAauto=true
+		// because makeMpdf() leaves it strict by default and a missing-alt
+		// or skipped-heading in the fixture would otherwise throw.
+		$mpdf = $this->makeMpdf([
+			'PDFUAauto'      => true,
+			'useActiveForms' => false,
+		]);
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'legacy_forms_useactiveformsfalse.html');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================
