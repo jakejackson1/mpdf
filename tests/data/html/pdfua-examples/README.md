@@ -8,7 +8,7 @@ repository for use in `VeraPdfConformanceTest` veraPDF conformance tests.
 - **Source repository**: https://github.com/mpdf/mpdf-examples
 - **Branch**: master
 - **Commit SHA at time of extraction**: `4f1e09d1cfda5ddc1205ceed8a7821c1edb2e4b8` (initial 16 fixtures)
-- **Date of extraction**: 2026-04-28 (initial), 2026-04-30 (round 2: examples 03, 09, 11, 18, 19, 20, 21, 23, 24, 38)
+- **Date of extraction**: 2026-04-28 (initial), 2026-04-30 (rounds 2 & 3: examples 03, 09, 11, 18, 19, 20, 21, 23, 24, 38, plus 02, 35, 37, 66)
 
 Each fixture corresponds to the `$html` variable passed to `WriteHTML()` in the upstream
 example, with the following adaptations applied consistently:
@@ -26,6 +26,7 @@ example, with the following adaptations applied consistently:
 | Fixture | Source example | What it exercises |
 |---|---|---|
 | `example01_basic.html` | `example01_basic.php` | H1–H6, P, A (hyperlink), DIV, BLOCKQUOTE, ADDRESS, PRE, HR, OL, UL, DL, TABLE |
+| `example02_CSS_styles.html` | `example02_CSS_styles.php` | CSS classes (breadcrumb), H1–H5 with custom borders/colours, font-variant: small-caps, font-kerning |
 | `example03_backgrounds_and_borders.html` | `example03_backgrounds_and_borders.php` | Body-level background gradient, linear/radial gradients, rounded borders |
 | `example09_forms.html` | `example09_forms.php` | Comprehensive AcroForm widgets (textarea, select, radio, checkbox, text, password, submit/button/reset) |
 | `example11_overflow_auto.html` | `example11_overflow_auto.php` | Fixed-position block element with overflow:auto autofit |
@@ -35,7 +36,10 @@ example, with the following adaptations applied consistently:
 | `example21_hyphenation.html` | `example21_hyphenation.php` | Automatic hyphenation in 4-column layout (CSS hyphens: auto + SetColumns) |
 | `example23_orientation.html` | `example23_orientation.php` | Mid-document orientation switch via `<pagebreak orientation="L">` / orientation="P" |
 | `example24_orientation_2.html` | `example24_orientation_2.php` | Orientation switch with a landscape table (Table/THead/TR/TH/TD with /Headers) |
+| `example35_watermarks.html` | `example35_watermarks.php` | Text watermark via `SetWatermarkText` / `showWatermarkText` (image variant omitted: needs assets/tiger.wmf) |
+| `example37_barcodes.html` | `example37_barcodes.php` | Comprehensive barcode rendering: EAN-13, ISBN, UPC-A, EAN-8, RM4SCC, POSTNET, CODE 128 B, CODE 39, QR-code |
 | `example38_dot_tab.html` | `example38_dot_tab.php` | `<dottab>` directive emits a row of leader dots between two text runs |
+| `example66_custom_properties.html` | `example66_custom_properties.php` | XMP custom properties via `customProperties` config + `AddCustomProperty()` runtime calls |
 | `example04_images.html` | `example04_images.php` | Various image formats (all replaced with data URIs); opacity; rotation; alt text |
 | `example05_tables.html` | `example05_tables.php` | Simple tables; THEAD/TFOOT/TH; cell backgrounds |
 | `example06_tables_nested.html` | `example06_tables_nested.php` | Nested tables (Table-in-TD) |
@@ -51,6 +55,36 @@ example, with the following adaptations applied consistently:
 | `example36_annotations_and_attached_files.html` | `example36_annotations_and_attached_files.php` | HTML `<annotation>` tags; span title2annots feature |
 | `example39_PDFA_compliance.html` | `example39_PDFA_compliance.php` | PDFA+PDFUA coexistence (config flags set in test method) |
 | `example64_protected_document.html` | `example64_protected_document.php` | Encrypted document (SetProtection() called in test method); stripped mode='c' |
+
+## Upstream examples intentionally not covered
+
+The upstream `mpdf/mpdf-examples` repository contains additional `exampleNN_*.php`
+files that are deliberately not mirrored here. The reasons fall into a few buckets:
+
+- **Non-bundled fonts**: example27 (Adobe CJK font pack), example28 (CJK embedded fonts
+  not in `ttfonts/`), example32 (Indic fonts not bundled), example33 (uses `damase`,
+  `aegyptus`, `sun-extA` SMP/SIP fonts), example52 (`sun-exta` and `unBatang` CJK fonts),
+  example62 (multilingual demo using fonts not in `ttfonts/`), example67 (custom font file).
+  PDF/UA-1 §7.21.4.1 requires every font to be embedded; without the source font files
+  these examples cannot be exercised.
+- **`onlyCoreFonts = true` / `mode => 'c'`**: example65 (CMYK colour chart). PDF/UA-1
+  forbids non-embeddable core fonts; the `core fonts cannot be used in PDF/UA-1` exception
+  is the entire point of the test, not an mPDF defect.
+- **FPDI source PDFs not available**: example40, 41, 42, 43, 44 (MPDFI thumbnails,
+  template, templatedoc, booklet, yearbook). Each requires a checked-in source PDF
+  whose font-embedding state we cannot guarantee. The FPDI Tier 1 (untagged) and
+  Tier 2 (tagged) paths are already exercised by `testFpdiTier1ImportPassesUa1` and
+  `testFpdiTier2TaggedImportPassesUa1` with locally generated source fixtures, so
+  the upstream MPDFI examples would add no unique tagging-tree coverage.
+- **Hard external dependency**: example70 (Guzzle HTTP client integration —
+  this is a transport-layer test, not a tagging test).
+- **PHP-only**: example69 (custom services / DI demonstration — the configuration
+  surface, not the rendering surface).
+- **Smoke / scratch**: `example_test.php`.
+
+If any of the upstream examples is renamed or restructured in the upstream repository,
+the corresponding fixture here may diverge; refresh by re-fetching the upstream PHP file
+and re-applying the adaptation rules in the next section.
 
 ## How to regenerate
 

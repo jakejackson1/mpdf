@@ -920,6 +920,101 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$this->assertVeraPdfCompliant($pdf, 'example38_dot_tab.php');
 	}
 
+	/**
+	 * mpdf-examples: example02_CSS_styles.php — basic CSS styling demo:
+	 * H1–H5 with custom borders/colours/font-variant, paragraph with kerning,
+	 * .breadcrumb class with right-aligned small grey text.
+	 *
+	 * The original example loads assets/mpdfstyleA4.css which provides the
+	 * shared site-wide stylesheet; the fixture inlines the relevant subset so
+	 * no external file dependency is required.
+	 *
+	 * @return void
+	 */
+	public function testExample02CssStylesPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example02_CSS_styles');
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example02_CSS_styles.php');
+	}
+
+	/**
+	 * mpdf-examples: example35_watermarks.php — text watermark via
+	 * SetWatermarkText() / showWatermarkText.
+	 *
+	 * Watermark text is decorative and must be wrapped as
+	 * /Artifact <</Type /Background>> BDC…EMC by mPDF in PDFUA mode (Phase 4
+	 * artifact wrapping path). The original also uses image watermarks; that
+	 * variant is omitted here because it requires assets/tiger.wmf and the
+	 * artifact wrapping logic is the same for both.
+	 *
+	 * @return void
+	 */
+	public function testExample35WatermarksPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example35_watermarks');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true, 'watermarkAngle' => 135]);
+		$mpdf->SetWatermarkText('DRAFT');
+		$mpdf->watermark_font = 'DejaVuSansCondensed';
+		$mpdf->showWatermarkText = true;
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example35_watermarks.php');
+	}
+
+	/**
+	 * mpdf-examples: example37_barcodes.php — comprehensive barcode rendering:
+	 * EAN-13, ISBN, UPC-A, EAN-8, RM4SCC, POSTNET, CODE 128 B, CODE 39, QR-code.
+	 *
+	 * Each <barcode> element is tagged as a Figure struct element with
+	 * Alt = "Barcode: <code>" (Phase 4 BarCode tag handler). veraPDF must accept
+	 * the Figure tagging without flagging untagged real content (Matterhorn
+	 * 02-004) or missing alt (Matterhorn 13-008).
+	 *
+	 * @return void
+	 */
+	public function testExample37BarcodesPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example37_barcodes');
+		$mpdf = $this->makeMpdf([
+			'PDFUAauto'          => true,
+			'margin_left'        => 20,
+			'margin_right'       => 15,
+			'margin_top'         => 25,
+			'margin_bottom'      => 25,
+			'showBarcodeNumbers' => false,
+		]);
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example37_barcodes.php');
+	}
+
+	/**
+	 * mpdf-examples: example66_custom_properties.php — XMP custom properties
+	 * via the customProperties config + AddCustomProperty() runtime calls.
+	 *
+	 * Custom properties must be embedded in the XMP metadata stream (PDF/UA-1
+	 * §7.1 / Matterhorn 06-001 Document Information Dictionary) without
+	 * disrupting the pdfuaid:part conformance assertion. AddCustomProperty()
+	 * must coexist with the constructor's customProperties array.
+	 *
+	 * @return void
+	 */
+	public function testExample66CustomPropertiesPassesUa1()
+	{
+		$html = $this->loadExampleFixture('example66_custom_properties');
+		$mpdf = $this->makeMpdf([
+			'customProperties' => [
+				'property1'         => 'value of property 1',
+				'property2'         => 'value of property 2',
+				'rewritten_property' => 'value to rewrite',
+			],
+		]);
+		$mpdf->AddCustomProperty('rewritten_property', 'rewritten_value');
+		$mpdf->AddCustomProperty('property3', 'value of property 3');
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'example66_custom_properties.php');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================
