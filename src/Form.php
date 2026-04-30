@@ -7,6 +7,30 @@ use Mpdf\Color\ColorConverter;
 use Mpdf\Writer\BaseWriter;
 use Mpdf\Writer\FormWriter;
 
+/**
+ * AcroForm widget rendering and legacy drawn-chrome rendering for HTML form
+ * elements (`<input>`, `<textarea>`, `<select>`, `<button>`, checkbox, radio,
+ * image-button). Each `print_ob_*` method has two branches:
+ *
+ *   - useActiveForms=true  — emits a real AcroForm widget annotation. Under
+ *     PDFUA the widget is referenced by an /OBJR struct kid (see the
+ *     `if ($this->mpdf->PDFUA)` blocks in _putform_*).
+ *   - useActiveForms=false — draws inert chrome (Cell, Rect, glyphs)
+ *     directly into the page content stream. There is no AcroForm field
+ *     behind it; the visual is non-interactive. Under PDFUA each else-
+ *     branch brackets its drawing in `/Artifact BMC ... EMC` per ISO
+ *     32000-1 §14.8.2.2 so the chrome is classified as an artifact and
+ *     ISO 14289-1 §7.1 / Matterhorn 01-006 (no untagged real content) is
+ *     satisfied. The bracket is gated on
+ *     `MarkedContentHelper::getDepth() === 0` because Matterhorn 01-001
+ *     and 01-002 forbid nesting Artifact inside tagged content; when the
+ *     widget is rendered inside an open `<p>`/list-item BDC the chrome
+ *     simply flows as part of the enclosing tag's content, which is itself
+ *     a conformant disposition.
+ *
+ * See .claude/plans/2026-04-30-ua1-legacy-form-artifact-tagging.md for the
+ * full rationale of the legacy-mode artifact wrap.
+ */
 class Form
 {
 
