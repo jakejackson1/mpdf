@@ -703,6 +703,21 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	{
 		$html = $this->loadExampleFixture('example64_protected_document');
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		// Re-enable FlateDecode compression for this single test. PdfUaTestCase
+		// disables compression so other tests can grep operators in the raw
+		// content stream. This test does not inspect the stream — it just hands
+		// the bytes to veraPDF — and combining RC4 encryption with an
+		// uncompressed multi-line content stream triggers a veraPDF parsing
+		// quirk where /Length-bounded bytes after RC4 are mis-segmented and
+		// every additional line of tagged text is reported as untagged real
+		// content (§7.1 test 3). The same source PDF passes when compressed,
+		// pdftotext extracts the text correctly, and the decrypted bytes are
+		// byte-identical to the unencrypted stream — so the validation failure
+		// is not an mPDF tagging defect. Re-enabling compression here matches
+		// real-world usage (production PDFs are virtually always compressed)
+		// while preserving the test's intent: verifying that SetProtection()
+		// keeps bit 10 set and leaves the XMP stream unencrypted.
+		$mpdf->compress = true;
 		// Replicate the setProtection() call from example64_protected_document.php.
 		// mPDF must automatically keep bit 10 (extract for accessibility) set when
 		// PDFUA=true regardless of the requested permission list (Matterhorn 07-001).
