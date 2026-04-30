@@ -424,9 +424,20 @@ class Td extends Tag
 			$tdAttrs = [];
 			if (!empty($attr['HEADERS'])) {
 				// Build /Headers array: space-separated HTML id values → name objects.
+				// Each token is normalised via StructureElement::sanitiseIdForPdf()
+				// so it is byte-identical to the /ID value Th.php writes on the
+				// matching TH struct element. Without this normalisation, an HTML
+				// id containing a paren, slash, %, or whitespace would produce a
+				// malformed PDF name in the /Headers array AND break the
+				// resolution path back to the TH (assistive technology cannot
+				// cross-reference differing byte sequences).
 				$ids = preg_split('/\s+/', trim($attr['HEADERS']), -1, PREG_SPLIT_NO_EMPTY);
 				if (!empty($ids)) {
-					$tdAttrs['Headers'] = $ids;
+					$sanitised = [];
+					foreach ($ids as $rawId) {
+						$sanitised[] = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($rawId);
+					}
+					$tdAttrs['Headers'] = $sanitised;
 				}
 			}
 			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the

@@ -67,12 +67,27 @@ class Th extends Td
 			// Assign a unique /ID to this TH struct element so that TD cells can
 			// reference it via /Headers (Matterhorn 09-004/005).
 			// Use the HTML id attribute when present; otherwise synthesise one.
+			//
+			// Two requirements drive the handling here:
+			//   (1) The bytes emitted as /ID on this TH must equal the bytes
+			//       emitted as a name in any matching TD's /Headers array. The
+			//       HTML id attribute may legally contain characters that are
+			//       illegal in PDF names (parens, brackets, %, /, whitespace, …)
+			//       so we normalise via StructureElement::sanitiseIdForPdf()
+			//       before storing. Td.php applies the identical normalisation
+			//       to each token in headers="...".
+			//   (2) The synthesised fallback must be unique across the whole
+			//       document. The (tableLevel,row,col) triple alone collides
+			//       between two tables at the same nesting level on the same
+			//       page — AriaIdResolver::nextSyntheticThCounter() guarantees
+			//       monotonic uniqueness instead.
 			$thElem = $this->ua->getStructureTree()->getCurrent();
 			if (!empty($attr['ID'])) {
-				$thId = $attr['ID'];
+				$thId = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($attr['ID']);
 			} else {
-				// Synthesise a unique ID from the HTML tag counter.
-				$thId = 'th-' . $this->mpdf->tableLevel . '-' . $this->mpdf->row . '-' . $this->mpdf->col;
+				$counter = $this->ua->getAriaIdResolver()->nextSyntheticThCounter();
+				$thId = 'th-' . $this->mpdf->tableLevel . '-' . $this->mpdf->row
+					. '-' . $this->mpdf->col . '-' . $counter;
 			}
 			$thElem->setId($thId);
 

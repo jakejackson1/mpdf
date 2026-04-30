@@ -8,9 +8,11 @@ use Mpdf\Ua\StructureTree;
 use Mpdf\Ua\StructType;
 use setasign\Fpdi\PdfParser\Type\PdfArray;
 use setasign\Fpdi\PdfParser\Type\PdfDictionary;
+use setasign\Fpdi\PdfParser\Type\PdfHexString;
 use setasign\Fpdi\PdfParser\Type\PdfName;
 use setasign\Fpdi\PdfParser\Type\PdfNull;
 use setasign\Fpdi\PdfParser\Type\PdfNumeric;
+use setasign\Fpdi\PdfParser\Type\PdfString;
 use setasign\Fpdi\PdfParser\Type\PdfType;
 
 /**
@@ -575,13 +577,26 @@ class FpdiStructMerger
 		$hostParent->addChild($hostElem);
 
 		// Pull /Alt, /ActualText, /Lang attributes if present.
+		//
+		// These are stored on PdfString or PdfHexString nodes in the source PDF
+		// and are emitted as PDF "text strings" per ISO 32000-1 §7.9.2.2 — that
+		// is, either UTF-16BE prefixed by a U+FEFF BOM, UTF-8 prefixed by a
+		// three-byte EF BB BF BOM, or PDFDocEncoding when no BOM is present.
+		// The host StructureWriter re-encodes whatever bytes we hand it via
+		// utf16BigEndianTextString(), which assumes UTF-8 input. Passing the raw
+		// source bytes through unchanged would produce a double-encoded result
+		// (BOM-on-BOM + UTF-8-treated-as-UTF-16 garbage), corrupting Alt and
+		// ActualText for screen readers on every imported tagged page with
+		// non-ASCII content. Decode to UTF-8 here so the host writer's
+		// downstream encoding produces the correct bytes.
 		foreach (['Alt', 'ActualText', 'Lang'] as $attrKey) {
 			try {
 				$attrRef = PdfDictionary::get($resolved, $attrKey);
 				if (!($attrRef instanceof PdfNull)) {
 					$attrVal = PdfType::resolve($attrRef, $parser);
-					if (method_exists($attrVal, 'value') || property_exists($attrVal, 'value')) {
-						$hostElem->setAttribute($attrKey, $attrVal->value);
+					$decoded = $this->decodeImportedTextString($attrVal);
+					if ($decoded !== null) {
+						$hostElem->setAttribute($attrKey, $decoded);
 					}
 				}
 			} catch (\Exception $e) {
@@ -686,5 +701,78 @@ class FpdiStructMerger
 		if (method_exists($this->tree, 'registerImportedMcr')) {
 			$this->tree->registerImportedMcr($structParents, $mcid, $elem);
 		}
+	}
+
+	/**
+	 * Decode a PDF text-string node from an imported source into UTF-8.
+	 *
+	 * Per ISO 32000-1 §7.9.2.2 "Text string type", a PDF text string is one of:
+	 *   - UTF-16BE prefixed by a U+FEFF BOM (`\xFE\xFF`)
+	 *   - UTF-8 prefixed by an EF BB BF BOM
+	 *   - PDFDocEncoding when no BOM is present
+	 *
+	 * Source PDFs commonly use the UTF-16BE form for /Alt and /ActualText.
+	 * The host StructureWriter::writeStructElement() runs the value back through
+	 * BaseWriter::utf16BigEndianTextString(), which assumes UTF-8 input — so we
+	 * MUST decode here to avoid double-encoding the bytes (which results in
+	 * unreadable garbage in the output PDF).
+	 *
+	 * Returns null when the node is not a string type (defensive — keeps the
+	 * caller from setting an attribute to something the writer cannot encode).
+	 *
+	 * @param  PdfType|mixed $node  resolved attribute value from the FPDI parser
+	 * @return string|null          UTF-8 decoded value, or null if undecodable
+	 */
+	private function decodeImportedTextString($node)
+	{
+		if ($node instanceof PdfHexString) {
+			// Hex literal: pairs of hex digits → raw bytes. Whitespace is legal
+			// between digits per ISO 32000-1 §7.3.4.3 and must be stripped.
+			$hex = preg_replace('/\s+/', '', (string) $node->value);
+			if ($hex === '' || strlen($hex) % 2 !== 0) {
+				if (strlen($hex) % 2 === 1) {
+					// Odd-length hex string is implicitly padded with 0.
+					$hex .= '0';
+				} else {
+					return '';
+				}
+			}
+			$raw = @pack('H*', $hex);
+			if ($raw === false) {
+				return null;
+			}
+		} elseif ($node instanceof PdfString) {
+			// Literal string with parser-level escape sequences left in place.
+			$raw = PdfString::unescape((string) $node->value);
+		} else {
+			return null;
+		}
+
+		// BOM detection.
+		if (strlen($raw) >= 2 && substr($raw, 0, 2) === "\xFE\xFF") {
+			// UTF-16BE.
+			$utf16 = substr($raw, 2);
+			$utf8  = @mb_convert_encoding($utf16, 'UTF-8', 'UTF-16BE');
+			return $utf8 === false ? null : $utf8;
+		}
+		if (strlen($raw) >= 2 && substr($raw, 0, 2) === "\xFF\xFE") {
+			// UTF-16LE — uncommon but legal in older producers.
+			$utf16 = substr($raw, 2);
+			$utf8  = @mb_convert_encoding($utf16, 'UTF-8', 'UTF-16LE');
+			return $utf8 === false ? null : $utf8;
+		}
+		if (strlen($raw) >= 3 && substr($raw, 0, 3) === "\xEF\xBB\xBF") {
+			// UTF-8 BOM.
+			return substr($raw, 3);
+		}
+
+		// No BOM → PDFDocEncoding. The codepoints in PDFDocEncoding 0x00-0x7F
+		// match ASCII, so for the common case (BCP-47 lang tags, ASCII Alt
+		// strings) passthrough is correct. The 0x80-0xFF range diverges from
+		// Latin-1 — full PDFDocEncoding mapping is out of scope; if the source
+		// encodes non-ASCII without a BOM, characters in the 0x80-0xFF range
+		// will be misencoded. Producers that care about non-ASCII almost always
+		// use the UTF-16BE form, so this lossy fallback is acceptable.
+		return $raw;
 	}
 }

@@ -66,6 +66,15 @@ class AriaIdResolver
 	private $unresolvedWarnings = [];
 
 	/**
+	 * @var int  Monotonic counter for synthesised TH /ID values.
+	 *           Two tables at the same nesting level on the same page would
+	 *           otherwise collide on `th-{tableLevel}-{row}-{col}` — the
+	 *           counter guarantees document-wide uniqueness so that TD
+	 *           /Headers references resolve to the intended TH.
+	 */
+	private $syntheticThCounter = 0;
+
+	/**
 	 * Construct with the structure tree that holds the /ID-tagged elements.
 	 *
 	 * Called once by ServiceFactory before UaState is constructed.
@@ -100,6 +109,21 @@ class AriaIdResolver
 		if ($id !== '' && !isset($this->idMap[$id])) {
 			$this->idMap[$id] = $elem;
 		}
+	}
+
+	/**
+	 * Return the next synthetic TH /ID counter value.
+	 *
+	 * Used by Th.php when an HTML <th> has no explicit id="...". The counter
+	 * increases monotonically across the entire document so two tables at the
+	 * same nesting level on the same page cannot produce identical synthesised
+	 * IDs (which would silently break TD /Headers cross-references).
+	 *
+	 * @return int next counter value (1-based)
+	 */
+	public function nextSyntheticThCounter()
+	{
+		return ++$this->syntheticThCounter;
 	}
 
 	/**

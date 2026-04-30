@@ -957,7 +957,12 @@ abstract class BlockTag extends Tag
 						'paragraph'      => 'P',
 						'term'           => 'Span',
 						'definition'     => 'Span',
-						'doc-title'      => 'Title',
+						// 'doc-title' is the document's primary heading (DPUB-ARIA).
+						// Map to H1 — the standard PDF struct type for a top-level
+						// heading — rather than the literal 'Title' which is NOT in
+						// ISO 32000-1 §14.8 Tables 333–335 and would throw via
+						// StructType::isValid() at StructureTree::open().
+						'doc-title'      => 'H1',
 					];
 					if (isset($ariaRoleMap[$role])) {
 						$structType = $ariaRoleMap[$role];

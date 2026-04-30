@@ -169,6 +169,55 @@ class StructureElement
 	}
 
 	/**
+	 * Normalise an HTML id (or synthesised id) into a byte sequence that is
+	 * legal in BOTH a PDF name object (`/foo`) and a PDF byte string (`(foo)`).
+	 *
+	 * The /ID entry on a TH StructElem (ISO 32000-1 Table 322) is a byte string,
+	 * whereas the matching reference in a TD's /Headers array (ISO 32000-1
+	 * Table 349) is a PDF name. Readers and assistive technology resolve the
+	 * cross-reference by comparing the underlying bytes — so the bytes must
+	 * match in both serialisations.
+	 *
+	 * Two normalisations are applied:
+	 *   1. ASCII letters are lowercased. mPDF's HTML parser uppercases the value
+	 *      of `id="..."` but leaves `headers="..."` (and aria-* references) at
+	 *      their source case, so without this fold the TH /ID and TD /Headers
+	 *      tokens land on different bytes and the cross-reference breaks even
+	 *      when the source HTML is internally consistent.
+	 *   2. Bytes outside `[a-z0-9_.-]` are #-escaped as `#xx`. The kept
+	 *      characters are all members of the PDF name unrestricted-character
+	 *      set (ISO 32000-1 §7.3.5), so the byte sequence is identical between
+	 *      the byte-string and name-object serialisations.
+	 *
+	 * @param  string $id  raw HTML id (any byte sequence)
+	 * @return string      sanitised id, byte-identical between name and string forms
+	 */
+	public static function sanitiseIdForPdf($id)
+	{
+		$id = (string) $id;
+		$out = '';
+		$len = strlen($id);
+		for ($i = 0; $i < $len; $i++) {
+			$ord = ord($id[$i]);
+			if ($ord >= 0x41 && $ord <= 0x5A) {
+				// A-Z → a-z so TH (uppercased by mPDF parser) and TD headers
+				// (left at source case) normalise to the same byte sequence.
+				$out .= chr($ord + 0x20);
+			} elseif (($ord >= 0x30 && $ord <= 0x39) // 0-9
+				|| ($ord >= 0x61 && $ord <= 0x7A) // a-z
+				|| $ord === 0x5F // _
+				|| $ord === 0x2D // -
+				|| $ord === 0x2E // .
+			) {
+				$out .= $id[$i];
+			} else {
+				$out .= sprintf('#%02X', $ord);
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Record the PDF object number assigned to this element at serialisation time.
 	 *
 	 * Called by StructureWriter after $mpdf->writer->object() reserves a number

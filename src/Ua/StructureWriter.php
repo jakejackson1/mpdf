@@ -243,9 +243,16 @@ class StructureWriter
 			$this->writer->write('/P ' . $this->rootObjNum . ' 0 R');
 		}
 
-		// /ID — direct key (ISO 32000-1 Table 322).
+		// /ID — direct key (ISO 32000-1 Table 322). MUST be a byte string (NOT a
+		// UTF-16BE text string) because the matching reference in a TD's /Headers
+		// array (Table 349) is a PDF name, and assistive technology resolves the
+		// cross-reference by comparing the raw bytes between the two
+		// serialisations. Caller (Th.php / Note creation) guarantees the value is
+		// already passed through StructureElement::sanitiseIdForPdf(), so the byte
+		// sequence is restricted to PDF-name-safe chars and survives both
+		// (...) byte-string and /... name-object emission identically.
 		if ($elem->getId() !== null) {
-			$this->writer->write('/ID ' . $this->writer->utf16BigEndianTextString($elem->getId()));
+			$this->writer->write('/ID (' . $elem->getId() . ')');
 		}
 
 		// ---- Direct dict keys (Appendix A1) ----
