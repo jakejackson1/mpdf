@@ -122,6 +122,111 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
+	/**
+	 * Inline lang= on a <span> mid-paragraph produces a Span struct element
+	 * carrying /Lang. Audit 2026-05-01 H1 — Matterhorn 11-001/11-002 require
+	 * every text fragment whose language differs from the document default to
+	 * carry a /Lang entry.
+	 */
+	public function testInlineSpanLangAttributeProducesLangOnStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p>Plain English. <span lang="fr">bonjour</span> tail.</p>'
+		);
+		// The Span around "bonjour" must carry /Lang.
+		$this->assertStringContainsString('/S /Span', $output);
+		$utf16BeFr = "\xfe\xff\x00f\x00r"; // UTF-16BE for "fr"
+		$this->assertStringContainsString($utf16BeFr, $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * Inline aria-label= on a <span> emits /Alt on a Span struct element.
+	 * ISO 32000-1 Table 322 — /Alt provides alternative description for screen
+	 * readers when visible glyphs convey meaning that's not in the text stream.
+	 */
+	public function testInlineSpanAriaLabelProducesAltOnStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p>Status: <span aria-label="warning sign">!</span> see below.</p>'
+		);
+		$this->assertStringContainsString('/S /Span', $output);
+		$this->assertStringContainsString('/Alt', $output);
+		// /Alt value is encoded as UTF-16BE PDF string.
+		$utf16BeAlt = "\xfe\xff\x00w\x00a\x00r\x00n\x00i\x00n\x00g";
+		$this->assertStringContainsString($utf16BeAlt, $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <fieldset> emits /S /Sect — audit 2026-05-01 H2 — closes the
+	 * "untagged real content" hole for HTML form-grouping elements.
+	 */
+	public function testFieldsetProducesSectStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<fieldset><p>Body content inside fieldset.</p></fieldset>'
+		);
+		$this->assertStringContainsString('/S /Sect', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <form> emits /S /Div as a logical container — the inline 'Form' struct
+	 * type is reserved for individual widgets emitted by Mpdf\Form per-widget.
+	 */
+	public function testFormContainerProducesDivStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<form><p>Form body content.</p></form>'
+		);
+		$this->assertStringContainsString('/S /Div', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <th scope="rowgroup"> maps to /Scope=Row, not /Scope=Both — audit
+	 * 2026-05-01 M1. ISO 32000-1 Table 349 only permits Row|Column|Both;
+	 * HTML rowgroup's axis is rows, so PDF /Scope=Row is the spec-correct
+	 * mapping.
+	 */
+	public function testThScopeRowgroupMapsToScopeRow()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<table>'
+			. '<tr><th scope="rowgroup">Group A</th><th scope="col">C1</th></tr>'
+			. '<tr><td>data</td><td>data</td></tr>'
+			. '</table>'
+		);
+		$this->assertStringContainsString('/S /TH', $output);
+		$this->assertStringContainsString('/Scope /Row', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <th scope="colgroup"> maps to /Scope=Column (the default for TH cells)
+	 * rather than /Scope=Both. Same audit (M1) — colgroup's axis is columns.
+	 */
+	public function testThScopeColgroupMapsToScopeColumn()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<table>'
+			. '<tr><th scope="colgroup">G</th><th scope="col">C1</th></tr>'
+			. '<tr><td>data</td><td>data</td></tr>'
+			. '</table>'
+		);
+		$this->assertStringContainsString('/Scope /Column', $output);
+		// /Scope /Both must NOT appear from the colgroup TH (HTML5 has no scope=both).
+		$this->assertStringNotContainsString('/Scope /Both', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
 	// ========================= ARIA role overrides =========================
 
 	/**

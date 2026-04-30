@@ -31,38 +31,21 @@ class Abbr extends InlineTag
 		parent::open($attr, $ahtml, $ihtml);
 
 		// PDF/UA-1 — push a Span struct element with /E expansion text from title attr.
-		if ($this->mpdf->PDFUA) {
-			$structAttrs = [];
-			if (!empty($attr['TITLE'])) {
-				$structAttrs['E'] = $attr['TITLE'];
-			}
-			if (isset($attr['LANG'])) {
-				$structAttrs['Lang'] = $attr['LANG'];
-			}
-			$this->ua->getStructureTree()->open('Span', $structAttrs);
-
-			// ARIA: register HTML id and queue aria-* cross-references.
-			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
-			$spanElem = $this->ua->getStructureTree()->getCurrent();
-			if (!empty($attr['ID'])) {
-				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $spanElem);
-			}
-			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
-				if (!empty($attr[$ariaKey])) {
-					$this->ua->getAriaIdResolver()->queue($spanElem, strtolower($ariaKey), $attr[$ariaKey]);
-				}
-			}
+		// /Lang and /Alt (from aria-label), id registration, and aria-* cross-refs
+		// are propagated by parent::open() via the InlineTag inline-Span machinery.
+		// We only add the abbreviation-specific /E entry here, and notify the
+		// per-tag InlineUaStruct stack so close() pops both struct elements.
+		if ($this->mpdf->PDFUA && !empty($attr['TITLE'])) {
+			$this->ua->getStructureTree()->open('Span', ['E' => $attr['TITLE']]);
+			$this->pushInlineUaStructDepth(1);
 		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
-		// PDF/UA-1 — pop the Span struct element.
-		if ($this->mpdf->PDFUA) {
-			$this->ua->getStructureTree()->close();
-		}
-
+		// Parent (InlineTag::close) pops every Span on the InlineUaStruct frame for
+		// this tag — covering both the inline /Lang|/Alt Span (if any) and the /E
+		// Span pushed by open(). No additional close() call here.
 		parent::close($ahtml, $ihtml);
 	}
 }

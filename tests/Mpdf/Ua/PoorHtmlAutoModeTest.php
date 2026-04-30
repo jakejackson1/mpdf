@@ -156,6 +156,44 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 		$this->generateAndCheck($html, '<div role="doc-title">');
 	}
 
+	public function testInlineLangSpanPasses()
+	{
+		// Audit 2026-05-01 H1 — mid-paragraph foreign-language run must propagate
+		// /Lang to a Span struct elem (Matterhorn 11-001/11-002).
+		$html = '<p>The French word <span lang="fr">bonjour</span> means hello.</p>';
+		$this->generateAndCheck($html, 'inline <span lang> mid-paragraph');
+	}
+
+	public function testInlineAriaLabelSpanPasses()
+	{
+		$html = '<p>An icon <span aria-label="warning sign">!</span> after text.</p>';
+		$this->generateAndCheck($html, 'inline <span aria-label>');
+	}
+
+	public function testFieldsetLegendPasses()
+	{
+		// Audit 2026-05-01 H2 — fieldset/legend/form must not produce untagged
+		// real content (rule 7.1#3).
+		$html = '<fieldset><legend>Personal info</legend><p>Name: paragraph text.</p></fieldset>';
+		$this->generateAndCheck($html, '<fieldset><legend>');
+	}
+
+	public function testFormContainerPasses()
+	{
+		$html = '<form><p>Email: paragraph text inside form.</p></form>';
+		$this->generateAndCheck($html, '<form> as block container');
+	}
+
+	public function testThScopeRowGroupPasses()
+	{
+		// Audit 2026-05-01 M1 — scope=rowgroup must map to /Scope=Row, not Both.
+		$html = '<table>'
+			. '<tr><th scope="rowgroup">Group A</th><th scope="col">Col 1</th></tr>'
+			. '<tr><td>data</td><td>data</td></tr>'
+			. '</table>';
+		$this->generateAndCheck($html, '<th scope="rowgroup">');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================

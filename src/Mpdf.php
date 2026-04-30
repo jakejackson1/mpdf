@@ -403,6 +403,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $InlineAnnots;
 	var $InlineBDF; // mPDF 6 Bidirectional formatting
 	var $InlineBDFctr; // mPDF 6
+	// PDF/UA-1: per-tag stack of bool — did InlineTag::open() push a Span struct
+	// element onto the StructureTree (because lang= or aria-label= was present)?
+	// Pushed in InlineTag::open(), consumed in InlineTag::close() so it knows
+	// whether to call StructureTree::close() to balance the bracket.
+	var $InlineUaStruct;
 
 	var $ktAnnots;
 	var $tbrot_Annots;
@@ -1260,6 +1265,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->InlineAnnots = [];
 		$this->InlineBDF = []; // mPDF 6
 		$this->InlineBDFctr = 0; // mPDF 6
+		$this->InlineUaStruct = []; // PDF/UA-1 inline Span(/Lang|/Alt) bracket stack
 		$this->tbrot_Annots = [];
 		$this->kwt_Annots = [];
 		$this->columnAnnots = [];

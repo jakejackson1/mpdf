@@ -101,6 +101,22 @@ class StructTypeTest extends TestCase
 		$this->assertSame('Link', StructType::fromHtmlTag('A'));
 	}
 
+	/**
+	 * <fieldset> / <legend> / <form> map to standard PDF struct types so that
+	 * BlockTag-based emission produces tagged real content rather than
+	 * untagged-content rule 7.1#3 violations (audit 2026-05-01 H2).
+	 *
+	 * - FIELDSET → Sect : closest grouping element for related form controls.
+	 * - LEGEND   → Caption : Tagged PDF Best Practice — caption of a fieldset.
+	 * - FORM     → Div : reserves the 'Form' struct type for individual widgets.
+	 */
+	public function testFromHtmlTagFormGrouping()
+	{
+		$this->assertSame('Sect', StructType::fromHtmlTag('FIELDSET'));
+		$this->assertSame('Caption', StructType::fromHtmlTag('LEGEND'));
+		$this->assertSame('Div', StructType::fromHtmlTag('FORM'));
+	}
+
 	// ================== fromCssClass ==================
 
 	/**

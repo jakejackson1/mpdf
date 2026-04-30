@@ -41,12 +41,19 @@ class Th extends Td
 
 			// Determine scope from HTML scope attribute (default: Column).
 			// ISO 32000-1 Table 349 — /Scope values: Column, Row, Both.
+			// HTML5 scope values map to PDF /Scope by axis:
+			//   col, colgroup → Column (axis = column)
+			//   row, rowgroup → Row    (axis = row)
+			// HTML5 has no "both" value, but we accept it for forward compatibility
+			// with explicit author intent on TH cells that label both axes.
 			$scope = 'Column';
 			if (!empty($attr['SCOPE'])) {
 				$s = strtolower($attr['SCOPE']);
-				if ($s === 'row') {
+				if ($s === 'row' || $s === 'rowgroup') {
 					$scope = 'Row';
-				} elseif ($s === 'colgroup' || $s === 'rowgroup' || $s === 'both') {
+				} elseif ($s === 'col' || $s === 'colgroup') {
+					$scope = 'Column';
+				} elseif ($s === 'both') {
 					$scope = 'Both';
 				}
 			}

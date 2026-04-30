@@ -62,6 +62,20 @@ class StructType
 		'HEADER'     => 'Div',
 		'FOOTER'     => 'Div',
 		'ADDRESS'    => 'P',
+		// <fieldset> groups related form controls — Sect is the closest grouping
+		// element (ISO 32000-1 Table 333). <form> wraps an interactive form
+		// region; the 'Form' struct type (Table 335) is reserved for an individual
+		// form-widget marked-content sequence (used by Mpdf\Form per-widget
+		// tagging), so mapping the HTML <form> container to 'Div' avoids
+		// double-association at the widget level.
+		'FIELDSET'   => 'Sect',
+		'FORM'       => 'Div',
+		// LEGEND maps to Caption per Tagged PDF Best Practice. Note that the
+		// LEGEND tag handler (Tag/Legend.php) does not currently open a struct
+		// element — the legend text is hoisted onto the parent fieldset's border
+		// chrome. Adding the entry here keeps the type map authoritative for any
+		// future Legend.php update that does push a Caption onto the struct tree.
+		'LEGEND'     => 'Caption',
 		'PRE'        => 'Code',
 		'CODE'       => 'Code',
 		'Q'          => 'Quote',
