@@ -17496,7 +17496,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->spanborder = false;
 			$this->spanborddet = [];
 			$this->HREF = '';
-		$this->pdfuaLinkStructElem = null;
+			$this->pdfuaLinkStructElem = null;
 			$this->textparam = [];
 			$this->SetTextOutline();
 
