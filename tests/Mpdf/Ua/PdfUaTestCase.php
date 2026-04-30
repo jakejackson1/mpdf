@@ -37,16 +37,7 @@ abstract class PdfUaTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		// 'mode' => 'en-GB' sets currentLang and default_lang so the /Lang catalog
 		// entry is populated — required by ISO 14289-1:2014 §7.2 / Matterhorn 04-001.
 		// Tests that specifically check lang-missing behaviour construct Mpdf directly.
-		// 'useActiveForms' => true is mandated by PDF/UA-1 §7.1 — the constructor
-		// throws if PDFUA is on without it (so form widgets emit as tagged
-		// annotations rather than untagged drawn chrome). Tests that specifically
-		// exercise that guard construct Mpdf directly.
-		$defaults = [
-			'PDFUA' => true,
-			'title' => 'Test Document',
-			'mode' => 'en-GB',
-			'useActiveForms' => true,
-		];
+		$defaults = ['PDFUA' => true, 'title' => 'Test Document', 'mode' => 'en-GB'];
 		$mpdf = new \Mpdf\Mpdf(array_merge($defaults, $config));
 		// Disable FlateDecode compression so content-stream assertions work against
 		// plain text bytes (XMP assertions are unaffected — XMP is never compressed).
