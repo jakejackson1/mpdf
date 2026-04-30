@@ -15,6 +15,7 @@ namespace Mpdf\Ua;
  *
  * Spec references appear inline next to each test method.
  *
+ * @group pdfua
  * @see PdfUaTestCase  base class supplying makeMpdf() and getOutput()
  */
 class ValidationTest extends PdfUaTestCase
@@ -281,5 +282,70 @@ class ValidationTest extends PdfUaTestCase
 		$this->expectException(\Mpdf\MpdfException::class);
 		$this->expectExceptionMessageMatches('/extract/i');
 		$mpdf->SetProtection(['copy', 'print']);
+	}
+
+	// ========================= Smoke tests =========================
+
+	/**
+	 * Render every PDF/UA-1 example fixture in PDFUAauto mode and assert that
+	 * none of them throw a PHP exception during generation.
+	 *
+	 * This is a PHP-level smoke test only: PDFUAauto converts conformance
+	 * violations to warnings, so the test passes even when an example would
+	 * fail veraPDF — that gate is covered separately by VeraPdfConformanceTest.
+	 *
+	 * @return void
+	 */
+	public function testAllExamplesRenderWithoutExceptions()
+	{
+		$fixtureDir = __DIR__ . '/../../data/html/pdfua-examples';
+		$fixtures = glob($fixtureDir . '/example*.html');
+		$this->assertNotEmpty($fixtures, 'Fixture directory must contain example HTML files');
+
+		foreach ($fixtures as $fixture) {
+			$name = basename($fixture, '.html');
+			try {
+				// Each example gets its own Mpdf instance — state from one
+				// example must not leak into the next.
+				$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+				$mpdf->WriteHTML(file_get_contents($fixture));
+				$bytes = $mpdf->Output(null, 'S');
+				$this->assertNotEmpty($bytes, $name . ' produced empty output');
+			} catch (\Throwable $e) {
+				$this->fail('Example "' . $name . '" threw ' . get_class($e) . ': ' . $e->getMessage());
+			}
+		}
+	}
+
+	/**
+	 * Multiple violations in one document: each violation records its own
+	 * warning entry, and the document still renders to non-empty output in
+	 * PDFUAauto mode. This guards against warning-system state leaks between
+	 * violation types (regression smoke for UaState::addWarning / getWarnings).
+	 *
+	 * @return void
+	 */
+	public function testMultipleViolationsAccumulateWarnings()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		// Heading-level skip (H1 → H3) + image without alt + JS embed —
+		// three independent violations chosen to exercise three distinct
+		// addWarning() call sites.
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$mpdf->SetJS('app.alert("hi");');
+		$bytes = $this->getOutput(
+			$mpdf,
+			'<h1>One</h1><h3>Three</h3>'
+			. '<p>Image: <img src="' . $png . '" width="20" height="20"></p>'
+		);
+
+		$this->assertNotEmpty($bytes);
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$this->assertGreaterThanOrEqual(
+			3,
+			count($warnings),
+			'Each of the three violations should add at least one warning; got: ' . print_r($warnings, true)
+		);
 	}
 }
