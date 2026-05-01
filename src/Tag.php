@@ -141,6 +141,7 @@ class Tag
 	public static function getTagClassName($tag)
 	{
 		static $map = [
+			'AREA' => 'Area',
 			'BARCODE' => 'BarCode',
 			'BLOCKQUOTE' => 'BlockQuote',
 			'COLUMN_BREAK' => 'ColumnBreak',
@@ -152,6 +153,7 @@ class Tag
 			'HGROUP' => 'HGroup',
 			'INDEXENTRY' => 'IndexEntry',
 			'INDEXINSERT' => 'IndexInsert',
+			'MAP' => 'Map',
 			'NEWCOLUMN' => 'NewColumn',
 			'NEWPAGE' => 'NewPage',
 			'PAGEFOOTER' => 'PageFooter',

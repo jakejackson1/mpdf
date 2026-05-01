@@ -250,6 +250,34 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 		$this->generateAndCheck($html, '<rtc> grouping multiple <rt>');
 	}
 
+	public function testImageMapPasses()
+	{
+		// Audit 2026-05-01 M3 — <img usemap> + <map> + <area> path. The map
+		// appears AFTER the host image in source order (HTML5 §4.8.13) which
+		// is the harder of the two source-order cases for the deferred-emit
+		// path. With one rect, one circle, and one poly area we exercise all
+		// three shape-conversion branches in imageMapShapeToRect().
+		$png = $this->onePixelPng();
+		$html = '<p><img src="' . $png . '" alt="Floor plan" usemap="#rooms" width="200" height="200"></p>'
+			. '<map name="rooms">'
+			. '<area shape="rect"   coords="10,10,100,100"     href="https://example.com/lobby"  alt="Lobby">'
+			. '<area shape="circle" coords="150,150,30"        href="https://example.com/atrium" alt="Atrium">'
+			. '<area shape="poly"   coords="50,50,150,50,100,150" href="https://example.com/garden" alt="Garden">'
+			. '</map>';
+		$this->generateAndCheck($html, '<img usemap> + <map> + <area> with rect, circle, and poly');
+	}
+
+	public function testImageMapMissingAltSynthesisesPasses()
+	{
+		// Audit 2026-05-01 M3 — auto mode must synthesise alt from href when
+		// <area alt> is absent. The probe asserts that the auto-corrected
+		// path doesn't throw and the resulting PDF is veraPDF-compliant.
+		$png = $this->onePixelPng();
+		$html = '<p><img src="' . $png . '" alt="Plan" usemap="#m" width="100" height="100"></p>'
+			. '<map name="m"><area shape="rect" coords="0,0,50,50" href="https://example.com/x"></map>';
+		$this->generateAndCheck($html, '<area> missing alt (auto-synthesised)');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================

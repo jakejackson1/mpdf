@@ -1,0 +1,24 @@
+<!--
+  PDF/UA-1 M3 fixture — HTML image map (<img usemap> + <map> + <area>).
+
+  Source order intentionally has the <map> AFTER the host <img> (HTML5
+  §4.8.13 permits both orders; the after-case exercises the deferred-emit
+  path on Mpdf::pdfUaDeferredImageMaps). One area for each shape — rect,
+  circle, poly — to drive every branch of imageMapShapeToRect().
+
+  The image is a 1x1 red-pixel PNG data URI so the fixture has no external
+  asset dependency.
+-->
+<h1>Image map fixture</h1>
+<p>
+	<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
+	     alt="Floor plan with three labelled rooms"
+	     usemap="#rooms"
+	     width="200" height="200">
+</p>
+<map name="rooms">
+	<area shape="rect"   coords="10,10,100,100"        href="https://example.com/lobby"  alt="Lobby">
+	<area shape="circle" coords="150,150,30"           href="https://example.com/atrium" alt="Atrium">
+	<area shape="poly"   coords="50,50,150,50,100,150" href="https://example.com/garden" alt="Garden">
+</map>
+<p>Tail paragraph follows the image map.</p>

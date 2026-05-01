@@ -419,6 +419,16 @@ class Img extends Tag
 			// printobjectbuffer() can emit the correct BDC/BMC wrap around the Do operator.
 			$objattr['pdfua_alt'] = $alt;
 
+			// PDF/UA-1 M3 — capture <img usemap="#name"> so printobjectbuffer()
+			// can resolve the corresponding <map> entry on $mpdf->pdfUaImageMaps
+			// and emit one Link annotation + Link struct element per <area>.
+			// HTML5 §4.8.13 — usemap value is "#" + map name; the leading "#"
+			// is optional in some browsers but always allowed.
+			if (isset($attr['USEMAP']) && $attr['USEMAP'] !== '') {
+				$um = ltrim($attr['USEMAP'], '#');
+				$objattr['pdfua_image_map_name'] = strtolower($um);
+			}
+
 			// PDF/UA-1 ARIA — carry the HTML id and aria-* attributes through to the
 			// render-time struct-element creation in printobjectbuffer(), where
 			// AriaIdResolver::registerId() and ::queue() are called against the
