@@ -91,4 +91,124 @@ class SvgTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->svg->ImageSVG($data);
 	}
 
+	// =====================================================================
+	// PDF/UA-1 M5 — accessible metadata extraction.
+	//
+	// extractAccessibleMetadata() is exercised directly so the tests stay
+	// focused on the SimpleXML extractor and avoid the rest of the SVG path
+	// walker (which the existing ImageSVG-based tests already cover with
+	// richer fixtures).
+	// =====================================================================
+
+	public function testAccessibleMetadataExtractsTopLevelTitle()
+	{
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title>Hello</title>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertSame('Hello', $meta['title']);
+		$this->assertNull($meta['desc']);
+	}
+
+	public function testAccessibleMetadataExtractsTopLevelDesc()
+	{
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<desc>Long description body.</desc>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertNull($meta['title']);
+		$this->assertSame('Long description body.', $meta['desc']);
+	}
+
+	public function testAccessibleMetadataExtractsBoth()
+	{
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title>Logo</title>'
+			 . '<desc>Blue circle.</desc>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertSame('Logo', $meta['title']);
+		$this->assertSame('Blue circle.', $meta['desc']);
+	}
+
+	public function testAccessibleMetadataIgnoresNestedTitle()
+	{
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<g><title>NestedLabel</title>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</g>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertNull($meta['title']);
+		$this->assertNull($meta['desc']);
+	}
+
+	public function testAccessibleMetadataMalformedSvgReturnsNulls()
+	{
+		// Unclosed <title> — SimpleXML must fail and the extractor must
+		// return [null, null] without raising warnings or throwing.
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title>Unclosed'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertNull($meta['title']);
+		$this->assertNull($meta['desc']);
+	}
+
+	public function testAccessibleMetadataDecodesEntitiesAndCdata()
+	{
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title><![CDATA[A & B]]></title>'
+			 . '<desc>Caf&#233;</desc>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertSame('A & B', $meta['title']);
+		$this->assertSame("Caf\xC3\xA9", $meta['desc']);
+	}
+
+	public function testAccessibleMetadataEmptyTitleTreatedAsNull()
+	{
+		// <title></title> with empty body — author signal is "no metadata".
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title></title>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertNull($meta['title']);
+		$this->assertNull($meta['desc']);
+	}
+
+	public function testAccessibleMetadataTitleWhitespaceCollapsed()
+	{
+		// Multi-line title from pretty-printed SVG: whitespace runs collapse to
+		// a single space; outer whitespace trimmed.
+		$svg = "<svg width=\"20\" height=\"20\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+			 . "  <title>\n    Pretty\n    Printed\n  </title>\n"
+			 . "  <circle cx=\"10\" cy=\"10\" r=\"8\" fill=\"blue\"/>\n"
+			 . "</svg>";
+		$meta = $this->svg->extractAccessibleMetadata($svg);
+
+		$this->assertSame('Pretty Printed', $meta['title']);
+	}
+
+	public function testAccessibleMetadataNoSvgRootReturnsNulls()
+	{
+		// Empty / non-SVG input is a no-op — must not throw.
+		$meta = $this->svg->extractAccessibleMetadata('not an svg');
+		$this->assertNull($meta['title']);
+		$this->assertNull($meta['desc']);
+	}
+
 }
