@@ -559,6 +559,24 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @var \Mpdf\Ua\StructureElement|null
 	 */
 	var $pdfuaLinkStructElem;
+
+	/**
+	 * PDF/UA-1 — stack of per-anchor strip records pushed by Tag\A::open()
+	 * when a `javascript:` / `vbscript:` href is auto-stripped, popped by
+	 * Tag\A::close() to balance any Span struct element opened in place of
+	 * the Link. Each entry is a 2-element array `[bool $stripped, int $spanDepth]`
+	 * where $spanDepth is the number of Span struct elements pushed for ARIA /
+	 * lang preservation (0 or 1 in the current implementation).
+	 *
+	 * Empty when no <a> elements are currently open or none have been stripped.
+	 * Read by Tag\A::close() to decide whether to pop a Link, a Span, or do
+	 * nothing.
+	 *
+	 * @see /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
+	 *
+	 * @var array
+	 */
+	var $pdfuaStrippedAnchorStack;
 	var $pgwidth;
 	var $fontlist;
 	var $oldx;
@@ -1266,6 +1284,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->InlineBDF = []; // mPDF 6
 		$this->InlineBDFctr = 0; // mPDF 6
 		$this->InlineUaStruct = []; // PDF/UA-1 inline Span(/Lang|/Alt) bracket stack
+		$this->pdfuaStrippedAnchorStack = []; // PDF/UA-1 javascript:/vbscript: anchor strip stack (Tag\A)
 		$this->tbrot_Annots = [];
 		$this->kwt_Annots = [];
 		$this->columnAnnots = [];

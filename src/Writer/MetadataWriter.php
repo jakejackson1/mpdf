@@ -659,7 +659,24 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 						} elseif (is_string($pl[4])) {
 
-							$annot .= ' /A <</S /URI /URI ' . $this->writer->string($pl[4]) . '>> >>';
+							// PDF/UA-1 audit L2 — defence in depth. Tag\A::open()
+							// is the documented entry point for user-supplied
+							// hrefs and clears javascript:/vbscript: URIs in
+							// auto mode (or throws in strict). A third party
+							// pushing into PageLinks directly (or an FPDI-imported
+							// Link with such a URI) could still reach this branch.
+							// Drop the /A action so the annotation is a degenerate
+							// but well-formed Link rect with no executable URL.
+							// Plan: /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
+							if ($this->mpdf->PDFUA && \Mpdf\Ua\UaPolicy::isPolicyBlockedHref($pl[4])) {
+								$this->ua->addWarning(
+									'PDF/UA-1: stripped /URI action with policy-blocked scheme: '
+									. \Mpdf\Ua\UaPolicy::formatHrefForMessage($pl[4])
+								);
+								$annot .= ' >>';
+							} else {
+								$annot .= ' /A <</S /URI /URI ' . $this->writer->string($pl[4]) . '>> >>';
+							}
 
 						} else {
 

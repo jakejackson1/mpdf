@@ -194,6 +194,14 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 		$this->generateAndCheck($html, '<th scope="rowgroup">');
 	}
 
+	public function testJavascriptHrefStrippedInAutoMode()
+	{
+		// Audit 2026-05-01 L2 — javascript:/vbscript: hrefs are stripped in
+		// auto mode. Visible text "here" still renders; the URI is gone.
+		$html = '<p>Click <a href="javascript:alert(1)">here</a> to fail.</p>';
+		$this->generateAndCheck($html, '<a href="javascript:..."> in auto mode');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================
