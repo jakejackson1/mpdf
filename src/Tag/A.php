@@ -31,7 +31,36 @@ class A extends Tag
 				$this->mpdf->_saveTextBuffer($e, '', $attr['NAME']); //an internal link (adds a space for recognition)
 			} // *TABLES*
 		}
-		if (isset($attr['HREF'])) {
+
+		// PDF/UA-1 — distinguish hyperlink anchors from destination anchors.
+		//
+		// HTML5 §4.5.1: an <a> with no `href` (or with an empty/whitespace-only
+		// `href`) is not a hyperlink — it is plain inline text and, if `name`
+		// or `id` is present, a destination anchor only.
+		//
+		// PDF representation:
+		//   - Hyperlink → Link struct element with OBJR to a link annotation
+		//     (ISO 32000-1 §14.8.2.4 Table 335; ISO 14289-1 §7.18.5 / Matterhorn 02-003).
+		//   - Destination anchor → no struct element at all; the surrounding
+		//     block tags the inner text. The /Dests catalog registration is
+		//     handled by the NAME/_saveTextBuffer path above and is independent
+		//     of struct element creation.
+		//
+		// An empty/whitespace `href` is treated as "not a hyperlink". This
+		// closes the M2 audit gap where <a name="x" href="">…</a> opened a
+		// Link struct element with an empty `_href`, which then either got
+		// pruned in PDFUAauto mode or threw in strict mode — both surprising
+		// for what is plausibly just a templating artefact around a destination
+		// anchor.
+		//
+		// pruneEmptyLinks() / findFirstEmptyLinkHref() (StructureTree) remain
+		// in place as defence-in-depth for the residual case of authored
+		// hyperlinks with non-empty `href` but empty bodies — which still
+		// produce empty Link elements and still must throw / be pruned.
+		$rawHref = isset($attr['HREF']) ? $attr['HREF'] : null;
+		$isHyperlink = $rawHref !== null && trim($rawHref) !== '';
+
+		if ($isHyperlink) {
 			$this->mpdf->InlineProperties['A'] = $this->mpdf->saveInlineProperties();
 			$properties = $this->cssManager->MergeCSS('INLINE', 'A', $attr);
 			if (!empty($properties)) {
@@ -81,15 +110,48 @@ class A extends Tag
 				// annotation is reachable from the structure tree (ISO 14289-1
 				// §7.18.5 / Matterhorn 02-003).
 				$this->mpdf->pdfuaLinkStructElem = $elem;
+				$this->mpdf->pdfuaAnchorStructType = 'Link';
+			}
+		} elseif ($this->mpdf->PDFUA) {
+			// Non-hyperlink <a> (destination anchor or empty/whitespace href).
+			// Emit a Span struct element only when the tag carries inline
+			// accessibility metadata (Lang, aria-label) that needs a host
+			// element to attach to. Otherwise emit nothing — the surrounding
+			// block tags the inner text, and the /Dests catalog (populated via
+			// the NAME path above) owns the destination registration.
+			$structAttrs = [];
+			if (isset($attr['LANG']) && $attr['LANG'] !== '') {
+				$structAttrs['Lang'] = $attr['LANG'];
+			}
+			if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+				$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+			}
+			if (!empty($structAttrs)) {
+				$this->ua->getStructureTree()->open('Span', $structAttrs);
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				if (!empty($attr['ID'])) {
+					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+				}
+				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+						  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+					if (!empty($attr[$k])) {
+						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
+					}
+				}
+				$this->mpdf->pdfuaAnchorStructType = 'Span';
 			}
 		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
-		// PDF/UA-1 — close the Link struct element (only if one was opened for HREF links).
-		if ($this->mpdf->PDFUA && $this->mpdf->HREF !== '') {
+		// PDF/UA-1 — close whichever struct element open() pushed (Link for
+		// hyperlinks, Span for non-hyperlinks with Lang/aria-label, none for
+		// bare destination anchors). The flag lives on Mpdf because the Tag
+		// dispatcher creates a fresh Tag\A instance per open/close call.
+		if ($this->mpdf->PDFUA && $this->mpdf->pdfuaAnchorStructType !== null) {
 			$this->ua->getStructureTree()->close();
+			$this->mpdf->pdfuaAnchorStructType = null;
 		}
 
 		// PDF/UA-1 — clear the captured Link struct element ref. Any subsequent

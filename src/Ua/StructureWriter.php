@@ -100,9 +100,15 @@ class StructureWriter
 		//
 		// Matterhorn 02-003 (ISO 14289-1 §7.18.5) — Link elements with no
 		// kids, no MCRs, and no OBJR refs are invalid. Two ways an empty
-		// Link survives to here: (1) <a href="x"></a> with no inner content
-		// and no rendered annotation; (2) <a href="x"><img alt=""></a> where
-		// the inner <img> is decorative AND no clickable rect is produced.
+		// Link survives to here: (1) <a href="x"></a> with non-empty href but
+		// no inner content and no rendered annotation; (2) <a href="x"><img
+		// alt=""></a> where the inner <img> is decorative AND no clickable
+		// rect is produced.
+		//
+		// Note that <a name="x">…</a> destination anchors and <a href="">…</a>
+		// (empty/whitespace href) anchors do NOT reach this path. Tag\A::open()
+		// recognises them as non-hyperlinks and never opens a Link struct
+		// element in the first place — see the M2 audit fix in src/Tag/A.php.
 		//
 		// Strict mode throws so the author can fix the source HTML.
 		// PDFUAauto silently prunes the offenders — Tag\A::open() already
