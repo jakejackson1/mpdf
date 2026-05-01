@@ -1016,6 +1016,24 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * PDF/UA-1 M5 — SVG <title>/<desc> are promoted into Figure /Alt when the
+	 * host <img> has no alt attribute. The fixture mixes inline SVGs (title-
+	 * only, desc-only, both) with a decorative external SVG (alt=""), all of
+	 * which must pass veraPDF's ua1 profile.
+	 *
+	 * Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §5.
+	 *
+	 * @return void
+	 */
+	public function testDocumentWithSvgAccessibleMetadataPassesUa1()
+	{
+		$html = $this->loadExampleFixture('svg-accessible');
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'svg-accessible.html');
+	}
+
+	/**
 	 * Legacy form chrome with `useActiveForms=false` must pass veraPDF's
 	 * UA-1 profile end-to-end. The fixture exercises every print_ob_*
 	 * code path; Phase 2 of the legacy-form artifact-tagging plan wraps

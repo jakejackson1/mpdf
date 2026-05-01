@@ -194,6 +194,19 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 		$this->generateAndCheck($html, '<th scope="rowgroup">');
 	}
 
+	public function testInlineSvgWithTitleAndDescPasses()
+	{
+		// PDF/UA-1 M5 — inline SVG with <title>/<desc> must be tagged as a Figure
+		// with /Alt populated from the SVG's own accessibility metadata, satisfying
+		// Matterhorn 13-004 even though the synthesised <img> has no alt attribute.
+		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
+			 . '<title>Company logo</title>'
+			 . '<desc>A blue circle with the company initial in the centre.</desc>'
+			 . '<circle cx="10" cy="10" r="8" fill="blue"/>'
+			 . '</svg>';
+		$this->generateAndCheck('<p>' . $svg . '</p>', 'inline SVG with title and desc');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================

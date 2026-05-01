@@ -55,6 +55,7 @@ example, with the following adaptations applied consistently:
 | `example36_annotations_and_attached_files.html` | `example36_annotations_and_attached_files.php` | HTML `<annotation>` tags; span title2annots feature |
 | `example39_PDFA_compliance.html` | `example39_PDFA_compliance.php` | PDFA+PDFUA coexistence (config flags set in test method) |
 | `example64_protected_document.html` | `example64_protected_document.php` | Encrypted document (SetProtection() called in test method); stripped mode='c' |
+| `svg-accessible.html` | _hand-authored (PDF/UA-1 M5)_ | SVG `<title>`/`<desc>` promotion into Figure /Alt — see plan `.claude/plans/2026-05-01-ua1-svg-title-desc-alt.md` |
 
 ## Upstream examples intentionally not covered
 

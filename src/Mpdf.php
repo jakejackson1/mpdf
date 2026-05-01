@@ -7868,6 +7868,31 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$pdfuaImageClosedBlockBdc = false;
 				if ($this->PDFUA) {
 					$pdfuaImageAlt = isset($objattr['pdfua_alt']) ? $objattr['pdfua_alt'] : null;
+
+					// PDF/UA-1 M5 — SVG accessible-metadata fallback for /Alt.
+					// When the host <img> has no alt attribute at all (null),
+					// promote the SVG's own top-level <title>/<desc> into /Alt
+					// so assistive tech still has a name for the figure. An
+					// explicit alt="" (decorative) or non-empty alt (override)
+					// wins over the SVG-internal metadata. ISO 14289-1:2014 §7.3
+					// / Matterhorn 13-004; W3C SVG 1.1 §5.4.
+					// Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §3b.
+					if ($pdfuaImageAlt === null
+						&& isset($objattr['itype']) && $objattr['itype'] === 'svg'
+						&& isset($objattr['file'])
+						&& isset($this->formobjects[$objattr['file']])) {
+						$svgInfo  = $this->formobjects[$objattr['file']];
+						$svgTitle = isset($svgInfo['accessible_title']) ? $svgInfo['accessible_title'] : null;
+						$svgDesc  = isset($svgInfo['accessible_desc'])  ? $svgInfo['accessible_desc']  : null;
+						if ($svgTitle !== null && $svgDesc !== null) {
+							$pdfuaImageAlt = $svgTitle . "\n\n" . $svgDesc;
+						} elseif ($svgTitle !== null) {
+							$pdfuaImageAlt = $svgTitle;
+						} elseif ($svgDesc !== null) {
+							$pdfuaImageAlt = $svgDesc;
+						}
+					}
+
 					if ($pdfuaImageAlt === '' || $pdfuaImageAlt === null) {
 						// Decorative image (empty or missing alt). The /Artifact BMC
 						// emitted below MUST NOT live inside a real-content BDC —
@@ -7895,7 +7920,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						if (empty($this->PDFUAauto)) {
 							throw new \Mpdf\MpdfException(
 								'PDF/UA-1: <img> is missing the alt attribute. Provide alt="" '
-								. 'for a purely decorative image or alt="description" for content. '
+								. 'for a purely decorative image, alt="description" for content, '
+								. 'or (for SVG) include <title>/<desc> inside the SVG. '
 								. 'Enable PDFUAauto to auto-correct (treats missing alt as decorative).'
 							);
 						}
@@ -9798,6 +9824,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($this->PDFUA && !$watermark) {
 				$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
 				if (!$inArtifactScope) {
+					// PDF/UA-1 M5 — SVG accessible-metadata fallback for /Alt.
+					// Mirror of the printobjectbuffer() insert: when the caller
+					// passed $alt = null AND the source is an SVG, promote the
+					// SVG's <title>/<desc> into the alt text rather than
+					// throwing/warning. $alt = '' (decorative) and a non-empty
+					// $alt both still win over the SVG metadata.
+					// Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §3b.
+					if ($alt === null && isset($info['type']) && $info['type'] === 'svg') {
+						$svgTitle = isset($info['accessible_title']) ? $info['accessible_title'] : null;
+						$svgDesc  = isset($info['accessible_desc'])  ? $info['accessible_desc']  : null;
+						if ($svgTitle !== null && $svgDesc !== null) {
+							$alt = $svgTitle . "\n\n" . $svgDesc;
+						} elseif ($svgTitle !== null) {
+							$alt = $svgTitle;
+						} elseif ($svgDesc !== null) {
+							$alt = $svgDesc;
+						}
+					}
+
 					if ($alt === '') {
 						// Explicitly decorative
 						$this->writer->write('/Artifact BMC');
@@ -9825,7 +9870,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						if (empty($this->PDFUAauto)) {
 							throw new \Mpdf\MpdfException(
 								'PDF/UA-1: Image() called without $alt parameter for "' . $file . '". '
-								. 'Pass $alt="" for a decorative image or $alt="description" for content. '
+								. 'Pass $alt="" for a decorative image, $alt="description" for content, '
+								. 'or (for SVG) include <title>/<desc> inside the SVG. '
 								. 'Enable PDFUAauto to auto-correct (treats missing alt as decorative).'
 							);
 						}
