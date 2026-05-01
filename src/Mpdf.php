@@ -115,6 +115,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $simpleTables;
 	var $enableImports;
 
+	// PDF/UA-1 forward-compat opt-out for FpdiStructMerger::verifyAndPrepareMerge().
+	// See Config\ConfigVariables for the full description.
+	var $fpdiSkipEncryptedStringSanityCheck;
+
 	var $debug;
 
 	var $setAutoTopMargin;
