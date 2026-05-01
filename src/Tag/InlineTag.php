@@ -175,16 +175,16 @@ abstract class InlineTag extends Tag
 			$this->mpdf->biDirectional = true;
 		}
 
-		// PDF/UA-1 — propagate inline lang= and aria-label= as a Span struct
-		// element with /Lang and /Alt attributes. ISO 14289-1:2014 §7.2 / Matterhorn
-		// 11-001/11-002 — every text fragment whose natural language differs from
-		// the document default must carry a /Lang entry.
-		// The InlineStructStack stores the *number* of struct elements that
-		// open() pushed, so close() pops the same number. Subclasses (e.g. Abbr
-		// for /E expansion text) call self::pushInlineUaStructDepth() after
-		// parent::open() to layer additional struct elements onto the same frame.
-		// $ua may be null when Tag instances are constructed directly in unit
-		// tests outside the UA pipeline; skip the bracket bookkeeping in that case.
+		// Propagate inline lang= and aria-label= as a Span struct element with
+		// /Lang and /Alt attributes — every text fragment whose natural language
+		// differs from the document default must carry a /Lang entry
+		// (ISO 14289-1:2014 §7.2, Matterhorn 11-001/11-002).
+		// The InlineStructStack records how many struct elements open() pushed,
+		// so close() pops the same number. Subclasses (e.g. Abbr for /E expansion
+		// text) call self::pushInlineUaStructDepth() after parent::open() to layer
+		// additional struct elements onto the same frame.
+		// $ua is null when Tag instances are constructed directly in unit tests
+		// outside the UA pipeline; skip the bracket bookkeeping in that case.
 		if ($this->ua !== null) {
 			$this->ua->getInlineStructStack()->pushFrame($tag, $this->openInlineUaStruct($attr) ? 1 : 0);
 		}
@@ -295,12 +295,12 @@ abstract class InlineTag extends Tag
 			}
 		}
 
-		// PDF/UA-1 — pop the Span struct bracket(s) that open() pushed when this
-		// tag had a lang= or aria-label= attribute (and any subclass-pushed
-		// extras such as Abbr's /E Span). Stack is per-tag because HTML allows
-		// nested same-name tags (<span><span lang=fr>…</span></span>).
-		// $ua may be null when Tag instances are constructed directly in unit
-		// tests outside the UA pipeline; nothing to pop in that case.
+		// Pop the Span struct bracket(s) that open() pushed for lang= / aria-label=
+		// (plus any subclass-pushed extras such as Abbr's /E Span). The stack is
+		// per-tag because HTML allows nested same-name tags
+		// (<span><span lang=fr>…</span></span>).
+		// $ua is null when Tag instances are constructed directly in unit tests
+		// outside the UA pipeline; nothing to pop in that case.
 		if ($this->ua !== null) {
 			$depth = $this->ua->getInlineStructStack()->popFrame($tag);
 			for ($i = 0; $i < $depth; $i++) {

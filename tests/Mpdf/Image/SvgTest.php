@@ -91,15 +91,12 @@ class SvgTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->svg->ImageSVG($data);
 	}
 
-	// =====================================================================
-	// PDF/UA-1 M5 — accessible metadata extraction.
-	//
-	// extractAccessibleMetadata() is exercised directly so the tests stay
-	// focused on the SimpleXML extractor and avoid the rest of the SVG path
-	// walker (which the existing ImageSVG-based tests already cover with
-	// richer fixtures).
-	// =====================================================================
-
+	/**
+	 * extractAccessibleMetadata() is exercised directly so the tests stay
+	 * focused on the SimpleXML extractor and avoid the rest of the SVG path
+	 * walker (which the existing ImageSVG-based tests already cover with
+	 * richer fixtures).
+	 */
 	public function testAccessibleMetadataExtractsTopLevelTitle()
 	{
 		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'

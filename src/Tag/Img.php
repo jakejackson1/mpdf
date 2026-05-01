@@ -11,11 +11,9 @@ class Img extends Tag
 	{
 		$this->mpdf->ignorefollowingspaces = false;
 
-		// PDF/UA-1 §3c — Capture the alt attribute early so it can be stored on
-		// $objattr and carried through to printobjectbuffer() where the Do operator
-		// is emitted. null means the attribute is entirely absent (unknown intent);
-		// '' (empty string) means the author declared the image decorative (W3C convention).
-		// ISO 32000-1 §14.7.2 Table 322 — /Alt is a StructElem key, not a BDC prop-dict entry.
+		// null = attribute absent (unknown intent); '' = author-declared decorative.
+		// Routed to printobjectbuffer() as /Alt on the Figure StructElem
+		// (ISO 32000-1:2008 §14.7.2 Table 322).
 		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
 
 		$objattr = [];
@@ -415,24 +413,19 @@ class Img extends Tag
 				$objattr['transform'] = $properties['TRANSFORM'];
 			}
 
-			// PDF/UA-1 §3c — Carry the alt value through serialization so
-			// printobjectbuffer() can emit the correct BDC/BMC wrap around the Do operator.
 			$objattr['pdfua_alt'] = $alt;
 
-			// PDF/UA-1 M3 — capture <img usemap="#name"> so printobjectbuffer()
-			// can resolve the corresponding <map> entry from the ImageMapRegistry
-			// and emit one Link annotation + Link struct element per <area>.
 			// HTML5 §4.8.13 — usemap value is "#" + map name; the leading "#"
-			// is optional in some browsers but always allowed.
+			// is optional. Resolved against the ImageMapRegistry at render time
+			// to emit one Link annotation + Link struct element per <area>.
 			if (isset($attr['USEMAP']) && $attr['USEMAP'] !== '') {
 				$um = ltrim($attr['USEMAP'], '#');
 				$objattr['pdfua_image_map_name'] = strtolower($um);
 			}
 
-			// PDF/UA-1 ARIA — carry the HTML id and aria-* attributes through to the
-			// render-time struct-element creation in printobjectbuffer(), where
-			// AriaIdResolver::registerId() and ::queue() are called against the
-			// freshly-created Figure struct element.
+			// Carry id/aria-* through serialised $objattr because the Figure
+			// struct element is created at render time (printobjectbuffer),
+			// not at parse time.
 			$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
 			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
 				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {

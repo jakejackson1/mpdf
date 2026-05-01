@@ -30,8 +30,6 @@ class StructureTreeTest extends TestCase
 		$this->tree = new StructureTree();
 	}
 
-	// ================== construction / root ==================
-
 	/**
 	 * After construction the root element has type Document and is the current top.
 	 */
@@ -40,8 +38,6 @@ class StructureTreeTest extends TestCase
 		$this->assertSame('Document', $this->tree->getRoot()->getType());
 		$this->assertSame($this->tree->getRoot(), $this->tree->getCurrent());
 	}
-
-	// ================== open / close ==================
 
 	/**
 	 * open() adds a child element under the current top and makes it current.
@@ -74,8 +70,6 @@ class StructureTreeTest extends TestCase
 		$this->tree->close();
 		$this->assertSame($this->tree->getRoot(), $this->tree->getCurrent());
 	}
-
-	// ================== addContent ==================
 
 	/**
 	 * addContent() returns a non-negative MCID integer.
@@ -153,8 +147,6 @@ class StructureTreeTest extends TestCase
 		$this->assertSame($mcid, $mcids[0]['mcid']);
 	}
 
-	// ================== artifact scope ==================
-
 	/**
 	 * openArtifact() suppresses struct element creation — open() becomes a no-op.
 	 */
@@ -228,8 +220,6 @@ class StructureTreeTest extends TestCase
 		$this->assertCount(0, $elem->getMcids());
 	}
 
-	// ================== role mappings ==================
-
 	/**
 	 * First addRoleMapping() call wins; a second call with a different type
 	 * is silently ignored (prevents conflicting RoleMap entries in veraPDF).
@@ -241,8 +231,6 @@ class StructureTreeTest extends TestCase
 		$mappings = $this->tree->getRoleMappings();
 		$this->assertSame('Div', $mappings['CustomBox']);
 	}
-
-	// ================== isInArtifact ==================
 
 	/**
 	 * isInArtifact() tracks the depth counter correctly across nested scopes.

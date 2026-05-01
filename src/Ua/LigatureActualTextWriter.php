@@ -42,7 +42,7 @@ class LigatureActualTextWriter
 	 *
 	 * Called once by ServiceFactory before UaState is constructed. Neither
 	 * $writer nor $mch is UaState — this avoids a construction-time cycle
-	 * between UaState and its six collaborators (§2d wiring note).
+	 * between UaState and its six collaborators.
 	 *
 	 * @param BaseWriter          $writer
 	 * @param MarkedContentHelper $mch

@@ -85,7 +85,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $PDFUAauto; // bool — auto-fix mode: warn instead of throwing on violations (same pattern as $PDFAauto)
 
 	// UaState facade: holds all runtime PDF/UA-1 state (warnings, struct-parents counter,
-	// StructTreeRoot obj num, implicit-LI flag) plus collaborator references (Phase 2+).
+	// StructTreeRoot obj num, implicit-LI flag) plus collaborator references.
 	// Private so consumers always receive it via constructor DI from ServiceFactory.
 	// @var \Mpdf\Ua\UaState
 	private $ua;
@@ -1124,8 +1124,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// the combination PDFUA=true + useActiveForms=false is conformant
 		// without any constructor-side intervention. ISO 32000-1 §14.8.2.2
 		// classifies the chrome as artifact content, outside logical
-		// structure. See .claude/plans/2026-04-30-ua1-legacy-form-artifact-
-		// tagging.md for the full rationale.
+		// structure.
 
 		$this->time0 = microtime(true);
 
@@ -4999,7 +4998,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$charspacing = $this->charspacing; // Character Spacing
 			$this->ResetSpacing();
 
-			// PDF/UA-1 §A14 — Defensive close-fence for the Cell() auto-page-break.
+			// PDF/UA-1 — Defensive close-fence for the Cell() auto-page-break.
 			// If a per-block BDC happens to be open at the moment Cell() decides to
 			// page-break (rare in practice — most block-level paths fence in
 			// finishFlowingBlock/WriteFlowingBlock first), close it before AddPage
@@ -5674,7 +5673,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$charspacing = ($this->charspacing * 1000 / $this->FontSizePt);
 		$wordspacing = ($this->ws * 1000 / $this->FontSizePt);
 
-		// PDF/UA-1 §A6 — ligature ActualText wrapper helper (Matterhorn 24-001).
+		// PDF/UA-1 — ligature ActualText wrapper helper (Matterhorn 24-001).
 		// Reached only when PDFUA mode is active; the helper is always wired by
 		// ServiceFactory but the wrapping cost (string comparisons per glyph) is
 		// only paid when $this->PDFUA is truthy.
@@ -5699,7 +5698,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$groupBreak = false;
 			$kashida = 0;
 
-			// PDF/UA-1 §A6 — detect ligature substitution for this glyph position.
+			// PDF/UA-1 — detect ligature substitution for this glyph position.
 			// $isLigHere is true when the glyph at $i is the result of an OTL
 			// LookupType 4 substitution AND PDFUA wrapping is needed.
 			$isLigHere = false;
@@ -5876,7 +5875,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$tj .= sprintf('%.3F Ts ', $YPlacement);
 				}
 
-				// PDF/UA-1 §A6 — emit /Span /ActualText BDC immediately after the
+				// PDF/UA-1 — emit /Span /ActualText BDC immediately after the
 				// TJ close and before the next TJ open. BDC is a page-description
 				// operator that may appear between TJ calls inside a BT…ET block
 				// (ISO 32000-1 §14.6). The wrapper closes (EMC) after $tx is added.
@@ -5892,7 +5891,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			// Output the code for the txt character
 			$tj .= $tx;
 
-			// PDF/UA-1 §A6 — close the ActualText BDC wrapper after the ligature
+			// PDF/UA-1 — close the ActualText BDC wrapper after the ligature
 			// glyph byte(s). Opens a fresh TJ segment for the glyphs that follow
 			// so the EMC operator falls between the ligature TJ and the next TJ.
 			if ($isLigHere) {
@@ -6753,11 +6752,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->otl->lastBidiStrongType = '';
 		} // *OTL*
 
-		// PDF/UA-1 §3b — Block content tagging infrastructure.
+		// PDF/UA-1 — Block content tagging infrastructure.
 		// pdfua_struct_open: true when a struct element has been pushed onto the
-		//   StructureTree stack for this block (set by tag handlers in Phase 4).
+		//   StructureTree stack for this block (set by tag handlers).
 		// pdfua_type: the PDF struct type string used for the BDC operator; defaults
-		//   to 'P' (paragraph) until Phase 4 tag handlers supply the correct type.
+		//   to 'P' (paragraph) until tag handlers supply the correct type.
 		// pdfua_artifact_open: true when this block is an Artifact (role=none/presentation,
 		//   aria-hidden=true, float without ARIA etc.). finishFlowingBlock() emits
 		//   /Artifact BMC instead of a property-dict BDC when this flag is set.
@@ -6765,8 +6764,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// because multi-page blocks need one MCID per page, all referencing the same
 		// struct element. ISO 32000-1 §14.7.4.4 — ParentTree MCID array per page.
 		//
-		// PDF/UA-1 §A14 — close any open BDC before resetting the per-line tracker.
-		// When printbuffer() processes a <BR> inside a block, it calls
+		// Close any open BDC before resetting the per-line tracker. When
+		// printbuffer() processes a <BR> inside a block, it calls
 		// finishFlowingBlock(false) (non-endofblock, so no close-fence fires) and
 		// then calls newFlowingBlock() for the next line. Without this close here,
 		// the BDC opened for the first line is abandoned: pdfua_bdc_active is set
@@ -6779,11 +6778,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->flowingBlockAttr['pdfua_struct_open'] = false;
 		$this->flowingBlockAttr['pdfua_type'] = 'P';
 		$this->flowingBlockAttr['pdfua_artifact_open'] = false;
-		// PDF/UA-1 §A14 — per-page lazy-open tracker. True iff a BDC for this
-		// block has been emitted on the current page and an EMC is owed before
-		// AddPage / endofblock. Independent of MarkedContentHelper::getDepth()
-		// (which is global across nested inline marks). Cleared by AddPage
-		// close-fences and by the EMC at endofblock.
+		// Per-page lazy-open tracker. True iff a BDC for this block has been
+		// emitted on the current page and an EMC is owed before AddPage /
+		// endofblock. Independent of MarkedContentHelper::getDepth() (which is
+		// global across nested inline marks). Cleared by AddPage close-fences
+		// and by the EMC at endofblock.
 		$this->flowingBlockAttr['pdfua_bdc_active']  = false;
 		// Reference to the block's struct element, captured by BlockTag::open()
 		// onto $blk[$blklvl]['pdfua_struct_elem'] and restored here so
@@ -6794,7 +6793,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
-	 * PDF/UA-1 §A14 — Lazy per-page BDC opener for block-level content.
+	 * PDF/UA-1 — Lazy per-page BDC opener for block-level content.
 	 *
 	 * Allocates one MCID per page (per /StructParents key) and emits BDC the
 	 * first time content is about to be written on a given page. Subsequent
@@ -6841,7 +6840,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
-	 * PDF/UA-1 §A14 — Close the open per-page BDC for a block, if any. Idempotent.
+	 * PDF/UA-1 — Close the open per-page BDC for a block, if any. Idempotent.
 	 *
 	 * ISO 32000-1 §14.6 — BDC and matching EMC must occupy the same content stream.
 	 *
@@ -6860,7 +6859,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
-	 * PDF/UA-1 §A14 — Restore the per-block pdfua state onto $flowingBlockAttr.
+	 * PDF/UA-1 — Restore the per-block pdfua state onto $flowingBlockAttr.
 	 *
 	 * newFlowingBlock() unconditionally resets pdfua_struct_open / pdfua_type /
 	 * pdfua_artifact_open / pdfua_struct_elem to their "no struct yet" defaults.
@@ -7103,9 +7102,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$charspacing = $this->charspacing; // Character Spacing
 			$this->ResetSpacing();
 
-			// PDF/UA-1 §A14 — Close per-page BDC BEFORE AddPage so the EMC
-			// lands in the current page's content stream (PDF §14.6 — BDC
-			// and EMC must be in the same /Contents stream). The next
+			// PDF/UA-1 — Close per-page BDC BEFORE AddPage so the EMC
+			// lands in the current page's content stream (ISO 32000-1 §14.6 —
+			// BDC and EMC must be in the same /Contents stream). The next
 			// ensureBlockBdcOpen() call (above this PAGEBREAK code on the
 			// next finishFlowingBlock entry, or in WriteFlowingBlock per-line)
 			// will reopen on the new page with a fresh MCID.
@@ -7206,7 +7205,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		/* -- END CSS-IMAGE-FLOAT -- */
 
 
-		// PDF/UA-1 §3b/§A14 — Emit BDC/BMC lazily before content output begins.
+		// PDF/UA-1 — Emit BDC/BMC lazily before content output begins.
 		// Routed through ensureBlockBdcOpen() so cross-page blocks reopen on each
 		// new page (one MCID per page → /K MCR dicts via StructureWriter rather
 		// than a bare integer collapsed by the singleSimpleMcid rule). The lazy
@@ -7510,8 +7509,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->ResetSpacing();
 		} // END IF CONTENT
 
-		// PDF/UA-1 §3b/§A14 — Close the per-page BDC opened by ensureBlockBdcOpen()
-		// at endofblock. AddPage close-fences (in finishFlowingBlock and
+		// PDF/UA-1 — Close the per-page BDC opened by ensureBlockBdcOpen() at
+		// endofblock. AddPage close-fences (in finishFlowingBlock and
 		// WriteFlowingBlock) close mid-block when a page break happens — between
 		// fences, the same BDC stays open for all content emitted on that page.
 		// closeBlockBdcIfOpen() is idempotent so calling it on blocks that never
@@ -7871,7 +7870,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$outstring = sprintf("q " . $tr . $tr2 . "%.3F 0 0 %.3F %.3F %.3F cm " . $gradmask . "/I%d Do Q", $obiw * Mpdf::SCALE, $obih * Mpdf::SCALE, $objattr['INNER-X'] * Mpdf::SCALE, ($this->h - ($objattr['INNER-Y'] + $obih )) * Mpdf::SCALE, $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
 					}
 				}
-				// PDF/UA-1 §3c — Wrap the Do operator with the appropriate BDC/BMC.
+				// PDF/UA-1 — Wrap the Do operator with the appropriate BDC/BMC.
 				// - alt="" (empty): decorative; W3C convention → /Artifact BMC ... EMC.
 				// - alt absent (null): unknown intent; treat as decorative and warn.
 				// - alt="text": real Figure; open StructElem with /Alt, allocate MCID,
@@ -7883,14 +7882,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($this->PDFUA) {
 					$pdfuaImageAlt = isset($objattr['pdfua_alt']) ? $objattr['pdfua_alt'] : null;
 
-					// PDF/UA-1 M5 — SVG accessible-metadata fallback for /Alt.
+					// PDF/UA-1 — SVG accessible-metadata fallback for /Alt.
 					// When the host <img> has no alt attribute at all (null),
 					// promote the SVG's own top-level <title>/<desc> into /Alt
 					// so assistive tech still has a name for the figure. An
 					// explicit alt="" (decorative) or non-empty alt (override)
 					// wins over the SVG-internal metadata. ISO 14289-1:2014 §7.3
 					// / Matterhorn 13-004; W3C SVG 1.1 §5.4.
-					// Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §3b.
 					if ($pdfuaImageAlt === null
 						&& isset($objattr['itype']) && $objattr['itype'] === 'svg'
 						&& isset($objattr['file'])
@@ -8006,7 +8004,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->Link($objattr['INNER-X'], $objattr['INNER-Y'], $objattr['INNER-WIDTH'], $objattr['INNER-HEIGHT'], $objattr['link']);
 				}
 
-				// PDF/UA-1 M3 — HTML image map (<img usemap="#name">).
+				// PDF/UA-1 — HTML image map (<img usemap="#name">).
 				// Defer Link emission until WriteHTML() finishes — HTML5 §4.8.13
 				// permits the <map> to appear AFTER the host <img>, but the
 				// image's printobjectbuffer() runs as soon as its containing
@@ -8027,7 +8025,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// implies meaningful content). Warn-and-skip eagerly.
 				//
 				// Rotated/transformed case: warn-and-skip (geometry math out of
-				// scope for v1; see plan §3d).
+				// scope for v1).
 				if ($this->PDFUA
 					&& !empty($objattr['pdfua_image_map_name'])
 					&& $objattr['type'] == 'image'
@@ -9271,7 +9269,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$charspacing = $this->charspacing; // Character Spacing
 						$this->ResetSpacing();
 
-						// PDF/UA-1 §A14 — Close per-page BDC BEFORE AddPage so the
+						// PDF/UA-1 — Close per-page BDC BEFORE AddPage so the
 						// EMC lands in the current page's content stream. The next
 						// per-line ensureBlockBdcOpen() call (just before the
 						// foreach $chunkorder Cell loop further down) will reopen
@@ -9359,7 +9357,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->x += $ti;
 					}
 
-					// PDF/UA-1 §A14 — Lazy-open the per-page BDC just before the
+					// PDF/UA-1 — Lazy-open the per-page BDC just before the
 					// first Cell() emission of this completed line. Fixes the prior
 					// bug where only the FINAL line of a multi-line paragraph (the
 					// one reaching finishFlowingBlock(true)) was tagged; non-final
@@ -9899,13 +9897,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($this->PDFUA && !$watermark) {
 				$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
 				if (!$inArtifactScope) {
-					// PDF/UA-1 M5 — SVG accessible-metadata fallback for /Alt.
+					// PDF/UA-1 — SVG accessible-metadata fallback for /Alt.
 					// Mirror of the printobjectbuffer() insert: when the caller
 					// passed $alt = null AND the source is an SVG, promote the
 					// SVG's <title>/<desc> into the alt text rather than
 					// throwing/warning. $alt = '' (decorative) and a non-empty
 					// $alt both still win over the SVG metadata.
-					// Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §3b.
+					// ISO 14289-1:2014 §7.3 / Matterhorn 13-004; W3C SVG 1.1 §5.4.
 					if ($alt === null && isset($info['type']) && $info['type'] === 'svg') {
 						$svgTitle = isset($info['accessible_title']) ? $info['accessible_title'] : null;
 						$svgDesc  = isset($info['accessible_desc'])  ? $info['accessible_desc']  : null;
@@ -10671,7 +10669,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->HTMLheaderPageForms = [];
 				$this->pageBackgrounds = [];
 
-				// PDF/UA-1 §3d — suppress struct element creation during header rendering.
+				// PDF/UA-1 — suppress struct element creation during header rendering.
 				// All HTML inside headers/footers is pagination artifact, not document
 				// content. openArtifact() causes StructureTree::open() / addContent() to
 				// be no-ops for the duration. ISO 32000-1 §14.8.2.2.
@@ -10690,7 +10688,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$s = $this->PrintPageBackgrounds();
 				$this->headerbuffer = $s . $this->headerbuffer;
 
-				// PDF/UA-1 §3d — wrap the accumulated headerbuffer in a Pagination
+				// PDF/UA-1 — wrap the accumulated headerbuffer in a Pagination
 				// artifact BDC/EMC pair. The splice happens here (after WriteHTML and
 				// PrintPageBackgrounds) so that both the header HTML content and its
 				// background are inside the artifact. The markers are written directly
@@ -10784,7 +10782,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->HTMLheaderPageForms = [];
 				$this->pageBackgrounds = [];
 
-				// PDF/UA-1 §3d — suppress struct element creation during footer rendering.
+				// PDF/UA-1 — suppress struct element creation during footer rendering.
 				// Footer content is pagination artifact, not document content.
 				// openArtifact() prevents StructureTree::open() / addContent() from
 				// creating spurious struct elements. ISO 32000-1 §14.8.2.2.
@@ -10808,7 +10806,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->headerbuffer = $s . $this->headerbuffer;
 				$this->writingHTMLfooter = false; // mPDF 5.7.3  (moved after PrintPageBackgrounds so can adjust position of images in footer)
 
-				// PDF/UA-1 §3d — wrap the accumulated footer headerbuffer in a Pagination
+				// PDF/UA-1 — wrap the accumulated footer headerbuffer in a Pagination
 				// artifact BDC/EMC pair (same string-splice approach as the header block
 				// above; see comment there for the routing rationale).
 				// ISO 32000-1 §14.8.2.2 — /Type /Pagination /Subtype /Footer.
@@ -11286,7 +11284,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->pageDim[$this->page]['w'] = $this->w;
 		$this->pageDim[$this->page]['h'] = $this->h;
 
-		// PDF/UA-1 §A14 — pre-allocate the page's /StructParents integer at page
+		// PDF/UA-1 — pre-allocate the page's /StructParents integer at page
 		// creation time (rather than at PageWriter::writePages output finalization).
 		// This makes the value available to addContentForElement() during HTML
 		// rendering, so cross-page blocks accumulate one MCR per page with the
@@ -11610,8 +11608,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// PDF/UA-1 — text watermarks are decorative; tag as Background Artifact
 		// per ISO 32000-1 §14.8.2.2 Table 329 (Background is one of four valid
-		// /Type values for decorative repeating overlays). See plan §"Why /Type
-		// /Background".
+		// /Type values for decorative repeating overlays).
 		if ($this->PDFUA) {
 			$this->pages[$this->page] .= '/Artifact <</Type /Background>> BDC' . "\n";
 		}
@@ -11641,7 +11638,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// PDF/UA-1 — image watermarks are decorative; tag as Background Artifact
 		// per ISO 32000-1 §14.8.2.2 Table 329 (Background /Type for decorative
-		// overlays). See plan §"Why /Type /Background".
+		// overlays).
 		// When watermarkImgBehind=false, wrap the Image() call directly.
 		// When watermarkImgBehind=true, the image content goes into pages[] via preg_replace
 		// at print time — the Image() call with $watermark=true handles that separately
@@ -14881,7 +14878,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->textbuffer = [];
 			}
 
-			// PDF/UA-1 M3 — drain deferred image-map link emissions. <map>
+			// PDF/UA-1 — drain deferred image-map link emissions. <map>
 			// elements may appear AFTER the host <img> in source order
 			// (HTML5 §4.8.13), so the registry isn't necessarily complete at
 			// printobjectbuffer() time. By now the entire HTML has been
@@ -24075,7 +24072,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// TEXT (and nested tables)
 
 					$this->divwidth = $w;
-					// PDF/UA-1 Phase 4 — emit BDC for the TD/TH struct element that was pushed
+					// PDF/UA-1 — emit BDC for the TD/TH struct element that was pushed
 					// during HTML parse and stored on $cell['pdfua_struct_elem']. We use
 					// addContentForElement() rather than addContent() because the struct element
 					// is no longer on the parse-time stack; it was already popped when </td>
@@ -24086,7 +24083,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// page is different, so the MCR dict correctly records the new page ref.
 					//
 					// ISO 32000-1:2008 §14.7.4.4 — addContentForElement builds an MCR dict
-					// with the correct /Pg reference for multi-page tables (§A14).
+					// with the correct /Pg reference for multi-page tables.
 					$pdfuaCellElem = (isset($cell['pdfua_struct_elem']) && $this->PDFUA)
 						? $cell['pdfua_struct_elem']
 						: null;
@@ -24270,7 +24267,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						}
 						$this->y = $opy;
 					}
-					// PDF/UA-1 Phase 4 — close the TD/TH BDC opened above.
+					// PDF/UA-1 — close the TD/TH BDC opened above.
 					if ($pdfuaCellElem !== null && !empty($cell['textbuffer'])) {
 						$this->ua->getMarkedContentHelper()->end();
 						// Pop the cell's struct element off the stack — it was

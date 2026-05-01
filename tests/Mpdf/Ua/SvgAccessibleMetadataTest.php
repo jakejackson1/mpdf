@@ -3,9 +3,9 @@
 namespace Mpdf\Ua;
 
 /**
- * PDF/UA-1 M5 — SVG <title>/<desc> are promoted to the Figure /Alt key
- * when the host <img> has no alt attribute. See plan
- * .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md.
+ * SVG <title>/<desc> are promoted to the Figure /Alt key when the host
+ * <img> has no alt attribute (W3C SVG 1.1 §5.4 names; PDF/UA-1 §7.3
+ * Figure structure element with /Alt).
  *
  * Each test feeds an inline-<svg> or external-.svg HTML fragment through
  * Mpdf with PDFUA enabled, then asserts the resulting PDF carries the
@@ -16,10 +16,6 @@ namespace Mpdf\Ua;
  */
 class SvgAccessibleMetadataTest extends PdfUaTestCase
 {
-
-	// =====================================================================
-	// Auto-mode promotion
-	// =====================================================================
 
 	/**
 	 * SVG with only <title> → /Figure /Alt = svgTitle.
@@ -87,10 +83,6 @@ class SvgAccessibleMetadataTest extends PdfUaTestCase
 		$this->getOutput($mpdf, '<p>' . $svg . '</p>');
 	}
 
-	// =====================================================================
-	// HTML alt precedence
-	// =====================================================================
-
 	/**
 	 * Explicit non-empty alt on <img> wins over SVG <title>/<desc>.
 	 *
@@ -130,10 +122,6 @@ class SvgAccessibleMetadataTest extends PdfUaTestCase
 		$this->assertNotContainsUtf16BeSubstring($pdf, 'Decorative-but-nonempty-title');
 	}
 
-	// =====================================================================
-	// Inline-SVG path (preg-rewrite at WriteHTML())
-	// =====================================================================
-
 	/**
 	 * Inline <svg> with no surrounding <img alt> uses the SVG's own <title>.
 	 *
@@ -149,10 +137,6 @@ class SvgAccessibleMetadataTest extends PdfUaTestCase
 		$this->assertStringContainsString('/S /Figure', $pdf);
 		$this->assertContainsUtf16BeAlt($pdf, 'InlineLogo');
 	}
-
-	// =====================================================================
-	// SVG parse / extraction edge cases
-	// =====================================================================
 
 	/**
 	 * A nested <title> inside a child <g> must NOT be hoisted as the
@@ -218,10 +202,6 @@ class SvgAccessibleMetadataTest extends PdfUaTestCase
 		$this->assertContainsUtf16BeAlt($pdf, "Caf\xC3\xA9");
 	}
 
-	// =====================================================================
-	// Strict-mode behaviour with SVG metadata
-	// =====================================================================
-
 	/**
 	 * Strict mode must NOT throw when the SVG carries <title> (the SVG
 	 * supplies the accessible name even though the host <img> lacks alt).
@@ -248,10 +228,6 @@ class SvgAccessibleMetadataTest extends PdfUaTestCase
 		$this->expectExceptionMessageMatches('/missing the alt attribute/');
 		$this->getOutput($mpdf, '<p>' . $svg . '</p>');
 	}
-
-	// =====================================================================
-	// Helpers
-	// =====================================================================
 
 	/**
 	 * Build a minimal inline-SVG string with optional <title>/<desc>.

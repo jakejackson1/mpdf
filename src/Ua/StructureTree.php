@@ -114,8 +114,6 @@ class StructureTree
 		$this->uaState = $uaState;
 	}
 
-	// ================== Getters ==================
-
 	/** @return StructureElement permanent Document root. */
 	public function getRoot()
 	{
@@ -177,8 +175,6 @@ class StructureTree
 	{
 		return $this->artifactDepth > 0;
 	}
-
-	// ================== open / close ==================
 
 	/**
 	 * Push a new struct element onto the stack as a child of the current top.
@@ -284,8 +280,6 @@ class StructureTree
 		}
 	}
 
-	// ================== content / artifact ==================
-
 	/**
 	 * Allocate an MCID for a content item on the CURRENT struct element.
 	 *
@@ -385,8 +379,6 @@ class StructureTree
 		}
 	}
 
-	// ================== role map ==================
-
 	/**
 	 * Register a RoleMap entry for a custom ARIA / HTML role.
 	 *
@@ -406,8 +398,6 @@ class StructureTree
 			$this->roleMappings[$role] = $standardType;
 		}
 	}
-
-	// ================== annotation struct parent ==================
 
 	/**
 	 * Allocate the next annotation /StructParent integer and associate it with
@@ -468,8 +458,6 @@ class StructureTree
 	{
 		$this->annotParentTree[$idx] = $elem;
 	}
-
-	// ================== post-parse pruning ==================
 
 	/**
 	 * Remove Link struct elements that ended up with no kids, no MCRs, and no
@@ -586,8 +574,6 @@ class StructureTree
 		return null;
 	}
 
-	// ================== FPDI tagged-import registration ==================
-
 	/**
 	 * Register a struct element for a specific MCR key that was cloned from an
 	 * imported tagged PDF (Tier 2 FPDI merge).
@@ -612,8 +598,6 @@ class StructureTree
 	{
 		$this->parentTree[$structParents][$mcid] = $elem;
 	}
-
-	// ================== internals ==================
 
 	/**
 	 * Allocate the next MCID for a given /StructParents key.

@@ -259,7 +259,7 @@ class StructureElement
 	 *
 	 * Overwrites any previous value for the key. StructureWriter reads all
 	 * attributes at emit time and splits them into direct dict keys vs /A
-	 * attribute objects (see class docblock / Appendix A1).
+	 * attribute objects (see class docblock).
 	 *
 	 * @param  string $key    attribute name (PDF convention, not HTML)
 	 * @param  mixed  $value  attribute value

@@ -243,11 +243,9 @@ class BarCode extends Tag
 			$objattr['barcode_height'] = $h;
 			$objattr['barcode_width'] = $w;
 
-			// PDF/UA-1 Phase 4 — capture HTML id and aria-* attributes into $objattr so
-			// the render-time code in Mpdf.php can wire registerId() and queue() on the
-			// Figure struct element that wraps the barcode content stream operators.
-			// Barcodes open their struct element at render time (not parse time), so
-			// ARIA data must travel through the serialised $objattr payload.
+			// Carry id/aria-* through serialised $objattr because the Figure
+			// struct element wrapping the barcode is created at render time
+			// (printobjectbuffer), not at parse time.
 			if ($this->mpdf->PDFUA) {
 				$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
 				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',

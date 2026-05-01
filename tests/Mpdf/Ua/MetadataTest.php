@@ -3,11 +3,11 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 1 PDF/UA-1 metadata and catalog tests.
+ * PDF/UA-1 metadata and catalog tests.
  *
- * Verifies that the document-level requirements of ISO 14289-1:2014 are met by
- * the Phase 1 implementation: XMP identifier, MarkInfo, /Lang, ViewerPreferences,
- * /StructParents, /Tabs /S, font embedding enforcement, and PDF version header.
+ * Verifies that the document-level requirements of ISO 14289-1:2014 are met:
+ * XMP identifier, MarkInfo, /Lang, ViewerPreferences, /StructParents, /Tabs /S,
+ * font embedding enforcement, and PDF version header.
  *
  * All test methods that use PDFUA mode construct Mpdf with embedded TrueType
  * fonts (no mode='c'). See PdfUaTestCase::makeMpdf() for rationale.
@@ -232,8 +232,6 @@ class MetadataTest extends PdfUaTestCase
 		$this->assertStringContainsString('<pdfaid:part>', $output);
 	}
 
-	// ================== Encryption + XMP tests ==================
-
 	/**
 	 * An encrypted PDF/UA-1 document must keep its XMP metadata stream unencrypted.
 	 *
@@ -242,9 +240,6 @@ class MetadataTest extends PdfUaTestCase
 	 * /Filter [/Crypt] /DecodeParms <</Type /CryptFilterDecodeParms /Name /Identity>>
 	 * on the metadata stream dict tells conforming readers to pass the bytes through
 	 * without applying the document encryption.
-	 *
-	 * Plan §A5 (encryption audit) and §A9 (priority test list):
-	 * testEncryptedOutputHasXmpNotEncrypted.
 	 *
 	 * Both invariants must hold simultaneously:
 	 *   1. The metadata stream dict carries the Identity crypt filter declaration.
@@ -282,14 +277,12 @@ class MetadataTest extends PdfUaTestCase
 		);
 	}
 
-	// ================== Phase 2 tests ==================
-
 	/**
 	 * ISO 32000-1:2008 §14.7.2 Table 322 — the document catalog must reference
 	 * the StructTreeRoot object via /StructTreeRoot N 0 R when PDFUA is active.
 	 *
-	 * Phase 2 wires StructureWriter::writeStructTree() via ResourceWriter;
-	 * the returned object number is stored on UaState and emitted in the catalog.
+	 * StructureWriter::writeStructTree() is wired via ResourceWriter; the
+	 * returned object number is stored on UaState and emitted in the catalog.
 	 */
 	public function testStructTreeRootInCatalog()
 	{
@@ -302,8 +295,8 @@ class MetadataTest extends PdfUaTestCase
 	 * ISO 32000-1:2008 §14.7.2 Table 322 — a /Type /StructTreeRoot object must
 	 * exist in the PDF output when PDFUA is active.
 	 *
-	 * Phase 2 StructureWriter emits the StructTreeRoot dict; this test confirms
-	 * the object is present in the output byte stream.
+	 * StructureWriter emits the StructTreeRoot dict; this test confirms the
+	 * object is present in the output byte stream.
 	 */
 	public function testStructTreeRootObjectExists()
 	{

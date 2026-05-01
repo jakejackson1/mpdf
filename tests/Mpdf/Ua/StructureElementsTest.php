@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 4 PDF/UA-1 structure-element tagging tests.
+ * PDF/UA-1 structure-element tagging tests.
  *
  * Tests that block-level HTML tags produce the correct PDF struct element types
  * in the output, and that BDC/EMC operators are balanced. These tests render
@@ -21,8 +21,6 @@ namespace Mpdf\Ua;
  */
 class StructureElementsTest extends PdfUaTestCase
 {
-
-	// ========================= Headings and paragraphs =========================
 
 	/**
 	 * <h1> produces /S /H1 struct element in the PDF output.
@@ -57,7 +55,7 @@ class StructureElementsTest extends PdfUaTestCase
 	/**
 	 * <p> produces /P BDC in the page content stream.
 	 *
-	 * Phase 4 — BlockTag::open() pushes struct element and sets pdfua_struct_open,
+	 * BlockTag::open() pushes a struct element and sets pdfua_struct_open,
 	 * which causes finishFlowingBlock() to emit the BDC operator.
 	 */
 	public function testParagraphProducesPBdc()
@@ -94,8 +92,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringContainsString($utf16BeFr, $output);
 	}
 
-	// ========================= Lists =========================
-
 	/**
 	 * <ul><li> produces /S /L and /S /LI struct elements.
 	 */
@@ -124,9 +120,8 @@ class StructureElementsTest extends PdfUaTestCase
 
 	/**
 	 * Inline lang= on a <span> mid-paragraph produces a Span struct element
-	 * carrying /Lang. Audit 2026-05-01 H1 — Matterhorn 11-001/11-002 require
-	 * every text fragment whose language differs from the document default to
-	 * carry a /Lang entry.
+	 * carrying /Lang. Matterhorn 11-001/11-002 require every text fragment
+	 * whose language differs from the document default to carry a /Lang entry.
 	 */
 	public function testInlineSpanLangAttributeProducesLangOnStructElement()
 	{
@@ -161,8 +156,8 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <fieldset> emits /S /Sect — audit 2026-05-01 H2 — closes the
-	 * "untagged real content" hole for HTML form-grouping elements.
+	 * <fieldset> emits /S /Sect — closes the "untagged real content" hole
+	 * for HTML form-grouping elements.
 	 */
 	public function testFieldsetProducesSectStructElement()
 	{
@@ -189,10 +184,9 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <th scope="rowgroup"> maps to /Scope=Row, not /Scope=Both — audit
-	 * 2026-05-01 M1. ISO 32000-1 Table 349 only permits Row|Column|Both;
-	 * HTML rowgroup's axis is rows, so PDF /Scope=Row is the spec-correct
-	 * mapping.
+	 * <th scope="rowgroup"> maps to /Scope=Row, not /Scope=Both.
+	 * ISO 32000-1 Table 349 only permits Row|Column|Both; HTML rowgroup's
+	 * axis is rows, so PDF /Scope=Row is the spec-correct mapping.
 	 */
 	public function testThScopeRowgroupMapsToScopeRow()
 	{
@@ -210,7 +204,7 @@ class StructureElementsTest extends PdfUaTestCase
 
 	/**
 	 * <th scope="colgroup"> maps to /Scope=Column (the default for TH cells)
-	 * rather than /Scope=Both. Same audit (M1) — colgroup's axis is columns.
+	 * rather than /Scope=Both — colgroup's axis is columns.
 	 */
 	public function testThScopeColgroupMapsToScopeColumn()
 	{
@@ -226,8 +220,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringNotContainsString('/Scope /Both', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= ARIA role overrides =========================
 
 	/**
 	 * role="heading" aria-level="2" on a div produces /S /H2 struct element.
@@ -272,8 +264,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Links =========================
-
 	/**
 	 * <a href> produces /S /Link struct element.
 	 */
@@ -287,8 +277,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= OverWrite guard =========================
-
 	/**
 	 * OverWrite() throws MpdfException in PDF/UA mode.
 	 */
@@ -298,8 +286,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->expectException(\Mpdf\MpdfException::class);
 		$mpdf->OverWrite('/tmp/non-existent.pdf', 'foo', 'bar');
 	}
-
-	// ========================= SetProtection =========================
 
 	/**
 	 * SetProtection() with no permissions force-adds 'extract' in PDFUAauto mode.
@@ -334,8 +320,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringContainsString('pdfuaid:part', $output);
 	}
 
-	// ========================= BDC/EMC balance with layers =========================
-
 	/**
 	 * BDC+BMC count equals EMC count when a paragraph is inside a layer.
 	 */
@@ -350,8 +334,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringContainsString('/S /P', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Image() direct method =========================
 
 	/**
 	 * Image() called with non-empty $alt produces Figure struct element and BDC in stream.
@@ -408,8 +390,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= AutosizeText =========================
-
 	/**
 	 * AutosizeText() produces Span struct element and BDC/EMC in page stream.
 	 */
@@ -423,8 +403,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Span <</MCID', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Abbr/Acronym =========================
 
 	/**
 	 * <abbr title=""> produces Span struct element with /E expansion text.
@@ -441,17 +419,11 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Ruby annotations =========================
-
 	/**
 	 * <ruby><rb>kanji</rb><rt>furigana</rt></ruby> emits Span struct elements
-	 * for each part. Plan 2026-05-01 §4a — Span fallback for ruby annotations
-	 * (audit L4). v2 (proper Ruby/RB/RT/RP standard struct types per ISO
-	 * 32000-1 §14.8.5.6) is deferred pending layout-engine work.
-	 *
-	 * The Ruby and Rt handlers unconditionally push Span struct elements so
-	 * AT and tagged-PDF consumers see dedicated annotation handles rather
-	 * than ruby parts dissolving into the parent block's struct element.
+	 * for each part. The Ruby and Rt handlers unconditionally push Span struct
+	 * elements so AT and tagged-PDF consumers see dedicated annotation handles
+	 * rather than ruby parts dissolving into the parent block's struct element.
 	 */
 	public function testRubyAnnotationProducesSpanStructElements()
 	{
@@ -463,11 +435,9 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Watermarks =========================
-
 	/**
 	 * Text watermark produces Background Artifact BDC/EMC in the page content
-	 * stream (ISO 32000-1 §14.8.2.2 Table 329; plan §"Why /Type /Background").
+	 * stream (ISO 32000-1 §14.8.2.2 Table 329).
 	 */
 	public function testWatermarkTextIsArtifact()
 	{
@@ -479,8 +449,6 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Artifact <</Type /Background>> BDC', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Helper =========================
 
 	/**
 	 * Assert that the number of BDC + BMC operators equals the number of EMC operators

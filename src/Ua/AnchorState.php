@@ -52,8 +52,6 @@ class AnchorState
 	 */
 	protected $anchorStructType = null;
 
-	// ================== Link struct element ==================
-
 	/**
 	 * Set the current Link struct element. Called by Tag\A::open() when an
 	 * <a href> opens a Link, and by Mpdf::Cell() / printbuffer() when
@@ -88,8 +86,6 @@ class AnchorState
 		$this->linkStructElem = null;
 	}
 
-	// ================== Strip stack ==================
-
 	/**
 	 * Push a new entry on the strip stack.
 	 *
@@ -122,8 +118,6 @@ class AnchorState
 	{
 		return !empty($this->strippedAnchorStack);
 	}
-
-	// ================== Anchor struct type ==================
 
 	/**
 	 * Record the struct type just pushed by Tag\A: 'Link', 'Span', or null.

@@ -18,8 +18,6 @@ namespace Mpdf\Ua;
 class HeadingSequenceTest extends PdfUaTestCase
 {
 
-	// ========================= Auto-clamp (PDFUAauto=true) =========================
-
 	/**
 	 * When the first heading in the document is <h2>, auto-clamp promotes it to H1.
 	 *
@@ -127,8 +125,6 @@ class HeadingSequenceTest extends PdfUaTestCase
 		$warnings = $mpdf->getPdfUaWarnings();
 		$this->assertCount(0, $warnings);
 	}
-
-	// ========================= Strict mode (PDFUAauto=false) =========================
 
 	/**
 	 * Strict mode throws MpdfException when the first heading is not H1.

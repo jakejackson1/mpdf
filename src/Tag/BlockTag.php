@@ -901,8 +901,8 @@ abstract class BlockTag extends Tag
 
 		$this->mpdf->x = $this->mpdf->lMargin + $currblk['outer_left_margin'];
 
-		// PDF/UA-1 Phase 4 — push a struct element for this block onto the struct tree.
-		// The struct type is determined from the HTML tag and optional ROLE attribute.
+		// Push a struct element for this block onto the struct tree. The struct
+		// type is determined from the HTML tag and optional ROLE attribute.
 		// Float blocks default to Artifact (no accessible reading order); role or
 		// aria-label overrides this to produce a real struct element.
 		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
@@ -1049,10 +1049,10 @@ abstract class BlockTag extends Tag
 
 				// ARIA ID registration and deferred-reference queuing
 				$elem = $this->ua->getStructureTree()->getCurrent();
-				// PDF/UA-1 §A14 — capture the struct element reference so the
-				// per-page lazy opener (Mpdf::ensureBlockBdcOpen) can call
-				// addContentForElement() against THIS block element each time
-				// content emits on a new page. Mirrors Tag/Td.php:434.
+				// Capture the struct element reference so the per-page lazy opener
+				// (Mpdf::ensureBlockBdcOpen) can call addContentForElement() against
+				// THIS block element each time content emits on a new page. Mirrors
+				// Tag/Td.php:434.
 				$currblk['pdfua_struct_elem'] = $elem;
 				if (!empty($attr['ID'])) {
 					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
@@ -1439,8 +1439,8 @@ abstract class BlockTag extends Tag
 				if (!empty($blk['pdfua_type']) && empty($blk['pdfua_artifact'])) {
 					$this->mpdf->flowingBlockAttr['pdfua_struct_open'] = true;
 					$this->mpdf->flowingBlockAttr['pdfua_type']        = $blk['pdfua_type'];
-					// PDF/UA-1 §A14 — restore the captured struct element ref so
-					// ensureBlockBdcOpen() can attach MCIDs per page.
+					// Restore the captured struct element ref so ensureBlockBdcOpen()
+					// can attach MCIDs per page.
 					$this->mpdf->flowingBlockAttr['pdfua_struct_elem'] = isset($blk['pdfua_struct_elem'])
 						? $blk['pdfua_struct_elem']
 						: null;
@@ -1613,9 +1613,9 @@ abstract class BlockTag extends Tag
 			return;
 		}
 
-		// PDF/UA-1 Phase 4 — pop the struct element from the tree.
-		// Must happen after the block content is flushed (printbuffer/finishFlowingBlock
-		// above) but before blklvl is decremented so pdfua_type is still accessible.
+		// Pop the struct element from the tree. Must happen after the block content
+		// is flushed (printbuffer/finishFlowingBlock above) but before blklvl is
+		// decremented so pdfua_type is still accessible.
 		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
 			$blk = isset($this->mpdf->blk[$this->mpdf->blklvl]) ? $this->mpdf->blk[$this->mpdf->blklvl] : [];
 			if (!empty($blk['pdfua_artifact'])) {

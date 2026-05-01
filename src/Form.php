@@ -27,9 +27,6 @@ use Mpdf\Writer\FormWriter;
  *     widget is rendered inside an open `<p>`/list-item BDC the chrome
  *     simply flows as part of the enclosing tag's content, which is itself
  *     a conformant disposition.
- *
- * See .claude/plans/2026-04-30-ua1-legacy-form-artifact-tagging.md for the
- * full rationale of the legacy-mode artifact wrap.
  */
 class Form
 {

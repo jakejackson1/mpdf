@@ -90,14 +90,12 @@ class StructType
 		'INS'        => 'Span', 'S'   => 'Span',
 		'SMALL'      => 'Span',
 		// Ruby annotation (W3C Ruby Annotation §1, ISO 32000-1 §14.8.5.6).
-		// v1 (audit 2026-05-01 L4) — Span fallback. ISO 14289-1:2014 §7.1's
-		// umbrella tagging requirement is satisfied by Span; the proper
-		// Ruby/RB/RT/RP standard struct types (§14.8.5.6 Tables 339, 340)
-		// require a layout-engine pass that stacks the rt above the rb and
-		// is deferred to v2 (plan 2026-05-01 §4b). mPDF still flows the rt
-		// linearly today — the visual gap predates this mapping; the Span
-		// fallback only affects the tagged-tree, ensuring every ruby part
-		// has its own struct element rather than leaning on the parent.
+		// Span fallback — ISO 14289-1:2014 §7.1's umbrella tagging requirement
+		// is satisfied by Span. The proper Ruby/RB/RT/RP standard struct types
+		// (ISO 32000-1 §14.8.5.6 Tables 339, 340) require a layout-engine pass
+		// that stacks the rt above the rb; mPDF still flows the rt linearly,
+		// so the Span fallback only affects the tagged-tree and ensures every
+		// ruby part has its own struct element rather than leaning on the parent.
 		'RUBY'       => 'Span', 'RB' => 'Span', 'RT' => 'Span',
 		'RP'         => 'Span', 'RTC' => 'Span',
 	];

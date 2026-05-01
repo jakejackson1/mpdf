@@ -3,7 +3,7 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 Phase 4 — LI tag handler.
+ * LI tag handler.
  *
  * BlockTag::open() already calls structureTree->open('LI') via
  * StructType::fromHtmlTag() and sets $currblk['pdfua_type'] = 'LI'.
@@ -22,11 +22,6 @@ namespace Mpdf\Tag;
  * addContentForElement() was designed for.
  *
  * The struct hierarchy produced is: LI → [Lbl, LBody].
- *
- * Limitation: position:inside markers, list-style-type:none, and CSS image
- * markers do not produce a Lbl element. These cases are known gaps in the
- * Matterhorn 21-001 implementation; only the position:outside text/symbol
- * path is covered here.
  *
  * On close, LBody is popped here, then BlockTag::close() pops LI.
  * BlockTag::close() reads pdfua_type from the blk dict; since we set it

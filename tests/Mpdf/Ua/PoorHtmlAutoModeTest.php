@@ -9,11 +9,6 @@ namespace Mpdf\Ua;
  * generates without throwing, then runs the result through veraPDF (when
  * VERAPDF_BIN is available) to confirm ua1 isCompliant=true.
  *
- * The cases mirror the real-world poor-HTML probes from the 2026-04-30
- * expert audit. They exist precisely so the auto-mode regression surface
- * is monitored, not just hand-curated fixtures — a regression in one of
- * these cases would silently re-introduce shipping non-conformant PDFs.
- *
  * Skip behaviour:
  *   - Each test always asserts that the PDF generation does not throw.
  *   - veraPDF assertions are skipped silently when VERAPDF_BIN is unset
@@ -51,10 +46,6 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 			$this->veraPdfBin = $bin;
 		}
 	}
-
-	// =====================================================================
-	// Auto-mode probes
-	// =====================================================================
 
 	public function testTableWithoutThPasses()
 	{
@@ -158,8 +149,8 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testInlineLangSpanPasses()
 	{
-		// Audit 2026-05-01 H1 — mid-paragraph foreign-language run must propagate
-		// /Lang to a Span struct elem (Matterhorn 11-001/11-002).
+		// Mid-paragraph foreign-language run must propagate /Lang to a Span
+		// struct elem (Matterhorn 11-001/11-002).
 		$html = '<p>The French word <span lang="fr">bonjour</span> means hello.</p>';
 		$this->generateAndCheck($html, 'inline <span lang> mid-paragraph');
 	}
@@ -172,8 +163,8 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testFieldsetLegendPasses()
 	{
-		// Audit 2026-05-01 H2 — fieldset/legend/form must not produce untagged
-		// real content (rule 7.1#3).
+		// fieldset/legend/form must not produce untagged real content
+		// (ISO 14289-1 §7.1).
 		$html = '<fieldset><legend>Personal info</legend><p>Name: paragraph text.</p></fieldset>';
 		$this->generateAndCheck($html, '<fieldset><legend>');
 	}
@@ -186,7 +177,7 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testThScopeRowGroupPasses()
 	{
-		// Audit 2026-05-01 M1 — scope=rowgroup must map to /Scope=Row, not Both.
+		// scope=rowgroup must map to /Scope=Row, not Both.
 		$html = '<table>'
 			. '<tr><th scope="rowgroup">Group A</th><th scope="col">Col 1</th></tr>'
 			. '<tr><td>data</td><td>data</td></tr>'
@@ -196,19 +187,19 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testJavascriptHrefStrippedInAutoMode()
 	{
-		// Audit 2026-05-01 L2 — javascript:/vbscript: hrefs are stripped in
-		// auto mode. Visible text "here" still renders; the URI is gone.
+		// javascript:/vbscript: hrefs are stripped in auto mode. Visible text
+		// "here" still renders; the URI is gone.
 		$html = '<p>Click <a href="javascript:alert(1)">here</a> to fail.</p>';
 		$this->generateAndCheck($html, '<a href="javascript:..."> in auto mode');
 	}
 
 	public function testImageMapPasses()
 	{
-		// Audit 2026-05-01 M3 — <img usemap> + <map> + <area> path. The map
-		// appears AFTER the host image in source order (HTML5 §4.8.13) which
-		// is the harder of the two source-order cases for the deferred-emit
-		// path. With one rect, one circle, and one poly area we exercise all
-		// three shape-conversion branches in imageMapShapeToRect().
+		// <img usemap> + <map> + <area> path. The map appears AFTER the host
+		// image in source order (HTML5 §4.8.13) which is the harder of the
+		// two source-order cases for the deferred-emit path. With one rect,
+		// one circle, and one poly area we exercise all three shape-conversion
+		// branches in imageMapShapeToRect().
 		$png = $this->onePixelPng();
 		$html = '<p><img src="' . $png . '" alt="Floor plan" usemap="#rooms" width="200" height="200"></p>'
 			. '<map name="rooms">'
@@ -221,9 +212,9 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testImageMapMissingAltSynthesisesPasses()
 	{
-		// Audit 2026-05-01 M3 — auto mode must synthesise alt from href when
-		// <area alt> is absent. The probe asserts that the auto-corrected
-		// path doesn't throw and the resulting PDF is veraPDF-compliant.
+		// Auto mode must synthesise alt from href when <area alt> is absent.
+		// The probe asserts that the auto-corrected path doesn't throw and
+		// the resulting PDF is veraPDF-compliant.
 		$png = $this->onePixelPng();
 		$html = '<p><img src="' . $png . '" alt="Plan" usemap="#m" width="100" height="100"></p>'
 			. '<map name="m"><area shape="rect" coords="0,0,50,50" href="https://example.com/x"></map>';
@@ -232,9 +223,8 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testRubyAnnotationPasses()
 	{
-		// Audit 2026-05-01 L4 — ruby tags previously had no handlers; verify
-		// they do not crash and produce conformant tagging via Span fallback
-		// (plan 2026-05-01 §4a). v2 proper Ruby/RB/RT/RP layout deferred.
+		// ruby/rb/rt/rp tags must not crash and must produce conformant
+		// tagging via the Span fallback (HTML5 §4.5.21).
 		$html = '<p>Word <ruby><rb>kanji</rb><rp>(</rp><rt>furigana</rt><rp>)</rp></ruby> in context.</p>';
 		$this->generateAndCheck($html, '<ruby><rt> with <rp> fallbacks');
 	}
@@ -275,8 +265,8 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 
 	public function testInlineSvgWithTitleAndDescPasses()
 	{
-		// PDF/UA-1 M5 — inline SVG with <title>/<desc> must be tagged as a Figure
-		// with /Alt populated from the SVG's own accessibility metadata, satisfying
+		// Inline SVG with <title>/<desc> must be tagged as a Figure with /Alt
+		// populated from the SVG's own accessibility metadata, satisfying
 		// Matterhorn 13-004 even though the synthesised <img> has no alt attribute.
 		$svg = '<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">'
 			 . '<title>Company logo</title>'
@@ -285,10 +275,6 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 			 . '</svg>';
 		$this->generateAndCheck('<p>' . $svg . '</p>', 'inline SVG with title and desc');
 	}
-
-	// =====================================================================
-	// Helpers
-	// =====================================================================
 
 	/**
 	 * Common probe: feed HTML through PDFUAauto, assert no throw, then run

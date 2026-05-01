@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Tests for Phase 5 ligature ActualText wrapping (Matterhorn 24-001).
+ * Tests for ligature ActualText wrapping (Matterhorn 24-001).
  *
  * Matterhorn 24-001 fires when a glyph produced by an OTL LookupType 4
  * (ligature) substitution has no 1:1 Unicode entry in the font's ToUnicode
@@ -272,7 +272,6 @@ class LigatureActualTextTest extends PdfUaTestCase
 	 * "ruffled", which is already covered by testFflLigatureProducesActualText().
 	 * This test asserts the actual OTL output for the exemplar sentence.
 	 *
-	 * Plan §A6 (ligature ActualText completion gate).
 	 * Matterhorn Protocol 1.1 condition 24-001 — ligature glyph without ActualText.
 	 * ISO 32000-1:2008 §14.7.2 Table 322 — /ActualText attribute.
 	 *

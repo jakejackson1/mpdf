@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 5 hard-violation tests.
+ * PDF/UA-1 hard-violation tests.
  *
  * Each violation has two paths governed by $PDFUAauto:
  *   - PDFUAauto=true   → mPDF auto-corrects and records a warning via
@@ -20,8 +20,6 @@ namespace Mpdf\Ua;
  */
 class ValidationTest extends PdfUaTestCase
 {
-
-	// ========================= <img> alt attribute =========================
 
 	/**
 	 * ISO 14289-1:2014 §7.3 / Matterhorn 13-004 — every non-decorative image
@@ -87,8 +85,6 @@ class ValidationTest extends PdfUaTestCase
 		}
 	}
 
-	// ========================= SetJS / <script> =========================
-
 	/**
 	 * ISO 14289-1:2014 §7.17 / Matterhorn 17-001 — document-level JavaScript
 	 * is not permitted. PDFUAauto=true records a warning and silently drops
@@ -128,8 +124,6 @@ class ValidationTest extends PdfUaTestCase
 		$mpdf->SetJS('app.alert("hi");');
 	}
 
-	// ========================= OverWrite() =========================
-
 	/**
 	 * OverWrite() does binary string replacement on a finished PDF. The
 	 * structure tree references object numbers and byte offsets that the
@@ -150,8 +144,6 @@ class ValidationTest extends PdfUaTestCase
 		// any I/O happens (see Mpdf::OverWrite).
 		$mpdf->OverWrite('/tmp/does_not_matter.pdf', 'foo', 'bar', 'S', 'out');
 	}
-
-	// ========================= Heading sequence =========================
 
 	/**
 	 * ISO 14289-1:2014 §7.4.2 / Matterhorn 14-003 — heading sequence must
@@ -188,8 +180,6 @@ class ValidationTest extends PdfUaTestCase
 		$this->expectExceptionMessageMatches('/heading sequence/');
 		$this->getOutput($mpdf, '<h1>A</h1><h3>B</h3>');
 	}
-
-	// ========================= /Lang catalog =========================
 
 	/**
 	 * ISO 14289-1:2014 §7.2 / Matterhorn 04-001 — /Lang must appear on the
@@ -236,8 +226,6 @@ class ValidationTest extends PdfUaTestCase
 		$this->assertTrue($found, 'A /Lang fallback warning must be recorded');
 	}
 
-	// ========================= Encryption permission bit 10 =========================
-
 	/**
 	 * ISO 14289-1:2014 §7.6 / Matterhorn 07-001 — when encryption is
 	 * applied, bit 10 ("extract text and graphics for accessibility") must
@@ -283,8 +271,6 @@ class ValidationTest extends PdfUaTestCase
 		$this->expectExceptionMessageMatches('/extract/i');
 		$mpdf->SetProtection(['copy', 'print']);
 	}
-
-	// ========================= Smoke tests =========================
 
 	/**
 	 * Render every PDF/UA-1 example fixture in PDFUAauto mode and assert that

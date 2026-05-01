@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * PDF/UA-1 audit L2 — javascript:/vbscript: URL handling in <a href>.
+ * PDF/UA-1 javascript:/vbscript: URL handling in <a href>.
  *
  * Strict mode (PDFUAauto=false): rejects the document with MpdfException
  * citing Matterhorn 17-001 / 28-002.
@@ -16,8 +16,6 @@ namespace Mpdf\Ua;
  * Defence in depth: MetadataWriter::writeAnnotations() also drops a /URI
  * action whose URI matches the policy regex, in case a third-party caller
  * (or FPDI-imported Link) reaches that branch with such a URI.
- *
- * Plan: /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
  *
  * Spec references:
  *   - ISO 14289-1:2014 §7.18 — interactive elements need accessible alternatives.
@@ -32,10 +30,6 @@ namespace Mpdf\Ua;
  */
 class JavascriptUrlHandlingTest extends PdfUaTestCase
 {
-
-	// =================================================================
-	// Strict-mode throws
-	// =================================================================
 
 	public function testJavascriptUrlThrowsInStrictMode()
 	{
@@ -138,10 +132,6 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 		}
 	}
 
-	// =================================================================
-	// Auto-mode strips, preserves visible text
-	// =================================================================
-
 	public function testJavascriptUrlStrippedInAutoMode()
 	{
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
@@ -242,10 +232,6 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 		$this->assertStringNotContainsString('/S /Link', $output);
 	}
 
-	// =================================================================
-	// ARIA / lang preservation on stripped anchor
-	// =================================================================
-
 	public function testStrippedAnchorPreservesAriaLabel()
 	{
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
@@ -292,10 +278,6 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 		// anchor has neither, so no Span struct is emitted.
 		$this->assertStringNotContainsString('/S /Span', $output);
 	}
-
-	// =================================================================
-	// Boundary tests — schemes that MUST still work
-	// =================================================================
 
 	public function testMailtoUrlNotBlocked()
 	{
@@ -344,14 +326,14 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 
 	public function testDataUriNotBlocked()
 	{
-		// data: URIs are explicitly out of scope per the L2 plan §3e — they
-		// must NOT trigger the strict-mode throw or the auto-mode strip.
-		// Document generation must succeed and no PDF/UA warning must be
-		// recorded for the data: URL.
+		// data: URIs are explicitly out of scope of the policy — they must NOT
+		// trigger the strict-mode throw or the auto-mode strip. Document
+		// generation must succeed and no PDF/UA warning must be recorded for
+		// the data: URL.
 		//
 		// (mPDF's pre-existing href dispatch at Mpdf.php:17147 may route this
 		// href through the internal-link path because the literal contains
-		// no `.`; the routing decision is unrelated to the L2 policy.)
+		// no `.`; the routing decision is unrelated to the policy.)
 		$mpdf = $this->makeMpdf();
 		$output = $this->getOutput(
 			$mpdf,
@@ -390,16 +372,12 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 		$this->assertStringNotContainsString('/S /Link', $output);
 	}
 
-	// =================================================================
-	// Defence in depth — MetadataWriter::writeAnnotations() guard
-	// =================================================================
-
 	public function testThirdPartyJavascriptUriCaughtByAnnotationGuard()
 	{
 		// Simulate a third-party caller (or imported PDF) injecting a Link
 		// directly into Mpdf::Link() with a javascript: URI. Tag\A::open()
-		// is bypassed so the strict-throw / auto-strip in §3b does NOT run.
-		// The MetadataWriter guard (§3d) must catch it.
+		// is bypassed so the strict-throw / auto-strip does NOT run. The
+		// MetadataWriter guard must catch it.
 		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		// Render normal content first so a page exists.
 		$mpdf->WriteHTML('<p>preface</p>');
@@ -421,10 +399,6 @@ class JavascriptUrlHandlingTest extends PdfUaTestCase
 		}
 		$this->assertTrue($found, 'MetadataWriter guard must record a warning for direct Link() injection.');
 	}
-
-	// =================================================================
-	// !PDFUA — legacy behaviour preserved
-	// =================================================================
 
 	public function testJavascriptUrlUnchangedWhenPdfuaOff()
 	{

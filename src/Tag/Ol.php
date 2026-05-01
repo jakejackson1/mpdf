@@ -3,7 +3,7 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 Phase 4 — OL tag handler.
+ * OL tag handler.
  *
  * Inherits all block-level layout and struct-tree handling from BlockTag.
  * StructType::fromHtmlTag('OL') maps to 'L', so BlockTag's PDFUA hook

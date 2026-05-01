@@ -151,10 +151,10 @@ class ServiceFactory
 			$logger
 		);
 
-		// Build the UA collaborators first, in dependency order.
-		// None of them take UaState — each receives only the specific pieces
-		// it needs (StructureTree, MarkedContentHelper, $writer, $mpdf), which
-		// is why there is no construction-time cycle (§2d).
+		// Build the UA collaborators first; none of them take UaState — each
+		// receives only the specific pieces it needs (StructureTree,
+		// MarkedContentHelper, $writer, $mpdf) so there is no construction-time
+		// cycle when UaState is built below.
 		$structureTree            = new StructureTree();
 		$markedContentHelper      = new MarkedContentHelper($writer);
 		$structureWriter          = new StructureWriter($mpdf, $writer, $structureTree);
@@ -166,7 +166,7 @@ class ServiceFactory
 		$imageMapRegistry         = new ImageMapRegistry($mpdf, $structureTree, $anchorState);
 
 		// Build the facade last — fully populated in a single constructor call,
-		// no setter-based wiring phase (§2a0 encapsulation rationale).
+		// with no setter-based wiring needed afterwards.
 		$uaState = new UaState(
 			$structureTree,
 			$markedContentHelper,

@@ -3,7 +3,7 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 Phase 4 — DT (definition term) tag handler.
+ * DT (definition term) tag handler.
  *
  * StructType::fromHtmlTag('DT') maps to 'Lbl'. BlockTag's PDFUA hook would
  * open 'Lbl' directly onto the struct stack. However, the spec requires that

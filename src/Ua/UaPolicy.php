@@ -9,11 +9,9 @@ namespace Mpdf\Ua;
  * helper with no state, so it can be referenced from tag handlers, writers,
  * and tests without dragging in the wider service container.
  *
- * Currently scoped to URL scheme policy (audit item L2 — javascript:/vbscript:
- * hrefs in <a> elements). Expand cautiously — anything more stateful belongs
- * on UaState, not here.
- *
- * @see /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
+ * Currently scoped to URL scheme policy (javascript:/vbscript: hrefs in <a>
+ * elements). Expand cautiously — anything more stateful belongs on UaState,
+ * not here.
  */
 class UaPolicy
 {

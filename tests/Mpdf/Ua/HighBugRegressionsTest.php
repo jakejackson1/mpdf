@@ -3,29 +3,23 @@
 namespace Mpdf\Ua;
 
 /**
- * Regression tests for the four HIGH-severity bugs found in the
- * 2026-04-30 expert audit of the PDF/UA-1 ua1-feature branch.
+ * Regression tests for HIGH-severity PDF/UA-1 bugs.
  *
- *   HIGH-1 — TH /ID was emitted as UTF-16BE text string while TD /Headers
- *            references were emitted as PDF names; readers could not resolve
- *            the cross-reference.
- *   HIGH-2 — `role="doc-title"` mapped to the invalid struct type "Title"
- *            and crashed StructureTree::open() with MpdfException.
- *   HIGH-3 — FpdiStructMerger stored imported /Alt /ActualText /Lang values
- *            verbatim; StructureWriter then double-encoded them, producing
- *            unreadable garbage on every imported tagged page with non-ASCII.
- *   HIGH-4 — Th.php used the HTML id verbatim (potentially containing
- *            PDF-name-illegal bytes) and synthesised a (tableLevel,row,col)
- *            id that collided between two tables on the same page.
+ *   - TH /ID was emitted as UTF-16BE text string while TD /Headers references
+ *     were emitted as PDF names; readers could not resolve the cross-reference.
+ *   - `role="doc-title"` mapped to the invalid struct type "Title" and crashed
+ *     StructureTree::open() with MpdfException.
+ *   - FpdiStructMerger stored imported /Alt /ActualText /Lang values verbatim;
+ *     StructureWriter then double-encoded them, producing unreadable garbage
+ *     on every imported tagged page with non-ASCII.
+ *   - Th.php used the HTML id verbatim (potentially containing PDF-name-illegal
+ *     bytes) and synthesised a (tableLevel,row,col) id that collided between
+ *     two tables on the same page.
  *
  * @group pdfua
  */
 class HighBugRegressionsTest extends PdfUaTestCase
 {
-
-	// =================================================================
-	// HIGH-1 — /ID and /Headers reference must share byte content
-	// =================================================================
 
 	/**
 	 * The /ID written on a TH StructElem must be byte-equivalent to the
@@ -58,10 +52,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		// The pre-fix UTF-16BE form must NOT appear.
 		$this->assertStringNotContainsString("\xFE\xFFr\x00a\x00t\x00e", $output);
 	}
-
-	// =================================================================
-	// HIGH-4 — TH /ID sanitisation + multi-table uniqueness
-	// =================================================================
 
 	/**
 	 * An HTML id containing characters illegal in PDF names (ISO 32000-1
@@ -111,10 +101,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		);
 	}
 
-	// =================================================================
-	// HIGH-2 — role="doc-title" must not crash
-	// =================================================================
-
 	/**
 	 * `<div role="doc-title">…</div>` must produce a PDF struct element and
 	 * not throw. Pre-fix it mapped to the literal struct type "Title" which
@@ -134,10 +120,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		// And the literal invalid type must not have leaked through.
 		$this->assertStringNotContainsString('/S /Title', $output);
 	}
-
-	// =================================================================
-	// HIGH-3 — FpdiStructMerger must decode imported text strings
-	// =================================================================
 
 	/**
 	 * UTF-16BE-with-BOM source values must round-trip to UTF-8 so that
@@ -181,10 +163,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->assertSame('AB', $decoded);
 	}
 
-	// =================================================================
-	// MEDIUM-A — empty <a href> must not produce orphan Link struct element
-	// =================================================================
-
 	/**
 	 * `<a href="x"></a>` produces no rendered annotation and no inner
 	 * content. The Link struct element opened in Tag\A::open() ends up with
@@ -201,9 +179,9 @@ class HighBugRegressionsTest extends PdfUaTestCase
 
 	/**
 	 * Same condition in strict mode (PDFUAauto=false) must throw with
-	 * guidance pointing at the offending href. (M2 audit: this fires only
-	 * for non-empty hrefs whose body produces no content / no annotation —
-	 * empty hrefs are no longer treated as hyperlinks.)
+	 * guidance pointing at the offending href. (This fires only for non-empty
+	 * hrefs whose body produces no content / no annotation — empty hrefs are
+	 * no longer treated as hyperlinks.)
 	 */
 	public function testEmptyAnchorThrowsInStrictMode()
 	{
@@ -212,10 +190,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->expectExceptionMessageMatches('/no accessible content/');
 		$this->getOutput($mpdf, '<p>Before <a href="https://example.com"></a> after.</p>');
 	}
-
-	// =================================================================
-	// M2 — destination anchors and empty/whitespace href must NOT open Link
-	// =================================================================
 
 	/**
 	 * `<a name="x">Section</a>` (HTML5 destination anchor — no `href`) must
@@ -232,10 +206,9 @@ class HighBugRegressionsTest extends PdfUaTestCase
 	}
 
 	/**
-	 * Same input in strict mode (PDFUAauto=false). Pre-M2 this never reached
-	 * the throw (the `isset($attr['HREF'])` guard already excluded NAME-only
-	 * anchors), but the regression is asserted here to lock in current
-	 * behaviour.
+	 * Same input in strict mode (PDFUAauto=false). The throw was never
+	 * reached previously (the `isset($attr['HREF'])` guard already excluded
+	 * NAME-only anchors); this regression locks in that behaviour.
 	 */
 	public function testNamedAnchorWithoutHrefDoesNotThrowInStrict()
 	{
@@ -248,10 +221,10 @@ class HighBugRegressionsTest extends PdfUaTestCase
 
 	/**
 	 * `<a name="x" href="">Section</a>` — destination anchor with empty
-	 * `href` (common templating artefact). Pre-M2 this opened a Link struct
-	 * element, got pruned in auto mode, and threw in strict mode quoting
-	 * `<a href="">` — a confusing message for what is a legitimate
-	 * destination anchor. Post-M2: no Link struct element, no throw.
+	 * `href` (common templating artefact). Previously this opened a Link
+	 * struct element, got pruned in auto mode, and threw in strict mode
+	 * quoting `<a href="">` — a confusing message for what is a legitimate
+	 * destination anchor. Now: no Link struct element, no throw.
 	 */
 	public function testNamedAnchorWithEmptyHrefDoesNotThrowInStrict()
 	{
@@ -295,20 +268,14 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->assertStringContainsString("/Lang (\xFE\xFF\x00f\x00r)", $output);
 	}
 
-	// =================================================================
-	// M2 phase 3 — pruneEmptyLinks defence-in-depth still fires for the
-	// residual case (authored hyperlink with empty body, no annotation)
-	// =================================================================
-
 	/**
-	 * Locked-in regression for the residual MEDIUM-A throw path: a non-empty
-	 * `href` whose body produces no MCRs and no OBJR refs is still a
-	 * Matterhorn 02-003 violation and must throw in strict mode.
+	 * Locked-in regression for the residual empty-link throw path: a
+	 * non-empty `href` whose body produces no MCRs and no OBJR refs is still
+	 * a Matterhorn 02-003 violation and must throw in strict mode.
 	 *
-	 * Identical input shape to {@see testEmptyAnchorThrowsInStrictMode};
-	 * kept as a separate test under the M2 heading so future audit replays
-	 * confirm the defence-in-depth pruning path remains live after the
-	 * Tag\A rewrite.
+	 * Identical input shape to {@see testEmptyAnchorThrowsInStrictMode}; kept
+	 * as a separate test so future audit replays confirm the defence-in-depth
+	 * pruning path remains live after the Tag\A rewrite.
 	 */
 	public function testEmptyHyperlinkBodyThrowsInStrictMode()
 	{
@@ -329,10 +296,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 
 		$this->assertStringNotContainsString('/S /Link', $output);
 	}
-
-	// =================================================================
-	// MEDIUM-B — image-only link must synthesise /Alt or throw
-	// =================================================================
 
 	/**
 	 * `<a href="x"><img alt=""></a>` — decorative image inside a link.
@@ -400,10 +363,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->assertNotEmpty($output);
 	}
 
-	// =================================================================
-	// MEDIUM-C — FpdiStructMerger must decode PDFDocEncoding correctly
-	// =================================================================
-
 	/**
 	 * PDFDocEncoding 0xB7 is U+00B7 (middle dot) per ISO 32000-1 Annex D
 	 * Table D.2. The previous lossy fallback passed it through verbatim,
@@ -436,10 +395,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->assertSame("\xEF\xBF\xBD", $decoded, 'undefined PDFDocEncoding byte → U+FFFD');
 	}
 
-	// =================================================================
-	// LOW-A — sanitiseIdForPdf must enforce PDF name 127-byte limit
-	// =================================================================
-
 	/**
 	 * ISO 32000-1 §7.3.5 — PDF names are limited to 127 bytes after the
 	 * leading '/'. A 50-char UTF-8 input made entirely of multibyte chars
@@ -460,8 +415,6 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->assertLessThanOrEqual(127, strlen($sb), 'sanitised id must be ≤ 127 bytes');
 		$this->assertNotSame($sa, $sb, 'distinct long inputs must produce distinct sanitised ids');
 	}
-
-	// ----------------------------- helpers -----------------------------
 
 	/**
 	 * Build a PdfHexString whose ->value is the hex encoding of the supplied

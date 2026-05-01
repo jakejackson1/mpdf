@@ -406,31 +406,21 @@ class Td extends Tag
 		unset($c);
 		$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['s'] = 0;
 
-		// PDF/UA-1 Phase 4 — push a TD struct element and store a reference on the
-		// cell dict so that _tableWrite() can attach an MCID to it at render time.
-		//
-		// The struct element is pushed here (parse time) as a child of the current
-		// TR on the struct stack. At render time (_tableWrite()), the struct tree
-		// stack no longer has this element; addContentForElement() attaches the MCID
-		// directly to the stored reference.
-		//
-		// /Headers attribute: if the HTML headers="" attribute is present, attach it
-		// as a /Table attribute object on the TD struct element so AT can resolve
-		// complex header associations (Matterhorn 09-004/09-005).
+		// Push the TD struct element here (parse time) as a child of the current
+		// TR. _tableWrite() runs after the parse-time stack has unwound, so we
+		// stash a reference on the cell dict; addContentForElement() then attaches
+		// the MCID directly to the stored reference at render time.
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
 		// ISO 14289-1:2014 §7.5 — table header associations (Matterhorn 09-004/005).
 		if ($this->mpdf->PDFUA) {
 			$tdAttrs = [];
 			if (!empty($attr['HEADERS'])) {
-				// Build /Headers array: space-separated HTML id values → name objects.
-				// Each token is normalised via StructureElement::sanitiseIdForPdf()
-				// so it is byte-identical to the /ID value Th.php writes on the
-				// matching TH struct element. Without this normalisation, an HTML
-				// id containing a paren, slash, %, or whitespace would produce a
-				// malformed PDF name in the /Headers array AND break the
-				// resolution path back to the TH (assistive technology cannot
-				// cross-reference differing byte sequences).
+				// Each token in /Headers must be byte-identical to the /ID value
+				// Th.php writes on the matching TH; HTML id values may contain
+				// characters illegal in PDF names (parens, slash, %, whitespace …)
+				// so we normalise via the same helper Th.php uses, otherwise AT
+				// cannot cross-reference TD-to-TH.
 				$ids = preg_split('/\s+/', trim($attr['HEADERS']), -1, PREG_SPLIT_NO_EMPTY);
 				if (!empty($ids)) {
 					$sanitised = [];
@@ -440,14 +430,11 @@ class Td extends Tag
 					$tdAttrs['Headers'] = $sanitised;
 				}
 			}
-			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the
-			// same number of columns once colspan and rowspan are taken into
-			// account. veraPDF computes that count by reading /ColSpan and
-			// /RowSpan attributes off TD/TH struct elements; missing keys mean
-			// "1" by default. Without /ColSpan and /RowSpan, a row that uses
-			// colspan="3" is reported as 1-column wide and the row-equality
-			// check fails (§7.2 test 43). Read the HTML attrs (mirroring the
-			// validation a few lines below) and forward them to StructureTree.
+			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the same
+			// number of columns once colspan and rowspan are taken into account.
+			// veraPDF reads /ColSpan and /RowSpan off TD/TH (defaulting to 1); a
+			// row using colspan="3" without /ColSpan is reported as 1-column wide
+			// and the row-equality check fails (§7.2 test 43).
 			if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
 				$tdAttrs['ColSpan'] = (int) $attr['COLSPAN'];
 			}
@@ -458,7 +445,6 @@ class Td extends Tag
 			$tdElem = $this->ua->getStructureTree()->getCurrent();
 			$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem'] = $tdElem;
 
-			// ARIA: register HTML id and queue aria-* cross-references.
 			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
 			if (!empty($attr['ID'])) {
 				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $tdElem);
@@ -502,10 +488,8 @@ class Td extends Tag
 
 	public function close(&$ahtml, &$ihtml)
 	{
-		// PDF/UA-1 Phase 4 — pop the TD struct element from the struct tree.
-		// The element was pushed in open(). This keeps the parse-time struct stack
-		// balanced; at render time, _tableWrite() uses the stored pdfua_struct_elem
-		// reference to emit the BDC/EMC pair via addContentForElement().
+		// Pop the TD pushed in open() to keep the parse-time struct stack balanced;
+		// _tableWrite() emits BDC/EMC against the stored pdfua_struct_elem reference.
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
 		if ($this->mpdf->PDFUA) {

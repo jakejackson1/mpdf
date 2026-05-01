@@ -2668,16 +2668,12 @@ class Otl
 
 			$newOTLdata[0]['is_ligature'] = true;
 
-			// PDF/UA-1 §A6 — capture source Unicode codepoints before the splice
-			// removes the component positions from $this->OTLdata.  The resulting
-			// array is stored in GPOSinfo so it survives sliceOTLdata() reindexing
-			// and is available in applyGPOSpdf() alongside existing GPOS fields.
-			//
-			// $GlyphPos layout: [0] == $pos (first component, same slot as the
-			// ligature result), [1..n] == subsequent component positions removed
-			// by the splice loop below ($i > 0).  Capture all component unicodes
-			// starting from position $pos (not $GlyphPos[0] which is the same slot)
-			// then from $GlyphPos[1..n] for the subsequent components.
+			// PDF/UA-1: capture source Unicode codepoints before the splice
+			// removes the component positions from $this->OTLdata. Stored in
+			// GPOSinfo so it survives sliceOTLdata() reindexing and is
+			// available in applyGPOSpdf() alongside existing GPOS fields.
+			// $GlyphPos[0] == $pos (first component); [1..n] are the
+			// subsequent component positions removed by the splice below.
 			$ligSrc = [$this->OTLdata[$pos]['uni']];
 			for ($ligi = 1; $ligi < count($GlyphPos); $ligi++) {
 				if (isset($this->OTLdata[$GlyphPos[$ligi]]['uni'])) {

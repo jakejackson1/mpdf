@@ -85,8 +85,8 @@ class StructureWriter
 	 * setStructTreeRootObjNum(). StructureWriter holds no back-reference to
 	 * UaState — breaking what used to be a construction-time cycle between the two.
 	 *
-	 * $parentTreeNextKey is the /ParentTreeNextKey value (ISO 32000-1 Table 322 /
-	 * Appendix A13) — an integer greater than any key in the parent tree.
+	 * $parentTreeNextKey is the /ParentTreeNextKey value (ISO 32000-1 Table 322)
+	 * — an integer greater than any key in the parent tree.
 	 * ResourceWriter passes UaState::getStructParentsCounter() here, which equals
 	 * one more than the highest /StructParents integer assigned (since
 	 * nextStructParents() pre-increments).
@@ -96,7 +96,7 @@ class StructureWriter
 	 */
 	public function writeStructTree($parentTreeNextKey = 0)
 	{
-		// ---- 0a. Validate / prune empty Link struct elements ----
+		// Validate / prune empty Link struct elements.
 		//
 		// Matterhorn 02-003 (ISO 14289-1 §7.18.5) — Link elements with no
 		// kids, no MCRs, and no OBJR refs are invalid. Two ways an empty
@@ -108,7 +108,7 @@ class StructureWriter
 		// Note that <a name="x">…</a> destination anchors and <a href="">…</a>
 		// (empty/whitespace href) anchors do NOT reach this path. Tag\A::open()
 		// recognises them as non-hyperlinks and never opens a Link struct
-		// element in the first place — see the M2 audit fix in src/Tag/A.php.
+		// element in the first place — see the named-anchor handling in src/Tag/A.php.
 		//
 		// Strict mode throws so the author can fix the source HTML.
 		// PDFUAauto silently prunes the offenders — Tag\A::open() already
@@ -135,7 +135,7 @@ class StructureWriter
 		}
 		$this->tree->pruneEmptyLinks();
 
-		// ---- 0. Pre-reserve the StructTreeRoot object number ----
+		// Pre-reserve the StructTreeRoot object number.
 		//
 		// ISO 32000-1 §14.7.2 Table 322 requires /P (parent ref) on EVERY struct
 		// element except the StructTreeRoot itself. The Document root element's
@@ -146,7 +146,7 @@ class StructureWriter
 		$this->writer->object(false, true);
 		$this->rootObjNum = $this->mpdf->n;
 
-		// ---- 1. Pre-allocate object numbers for all struct elements ----
+		// Pre-allocate object numbers for all struct elements.
 		//
 		// BaseWriter::object($id, $onlynewobj = true) increments $mpdf->n and stores
 		// the number but does NOT emit a "N 0 obj" header and does NOT record the
@@ -154,7 +154,7 @@ class StructureWriter
 		// are all valid before any dict body is written.
 		$this->reserveObjectNumbers($this->tree->getRoot());
 
-		// ---- 2. Emit struct element dicts (depth-first, children before parents) ----
+		// Emit struct element dicts (depth-first, children before parents).
 		//
 		// ISO 32000-1 §14.7.2 Table 323 — StructElem dict entries.
 		// Each writeElement() call opens its pre-reserved slot with
@@ -162,16 +162,16 @@ class StructureWriter
 		// buffer position and emits the "N 0 obj" header exactly once.
 		$this->writeElement($this->tree->getRoot());
 
-		// ---- 3. ParentTree NumTree object ----
+		// ParentTree NumTree object.
 		//
 		// ISO 32000-1 §7.9.7 + §14.7.4.4 — a NumTree keyed by the
-		// /StructParents integers emitted on page dicts (PageWriter §1h) and
+		// /StructParents integers emitted on page dicts (PageWriter) and
 		// Form XObject dicts (FormWriter for SVG/FPDI). For each key the value
 		// is either a dense array of struct elem obj refs indexed by MCID, or
 		// a single struct elem ref (singular /StructParent annotation entry).
 		$parentTreeObjNum = $this->writeParentTree();
 
-		// ---- 4. RoleMap dict (only if non-empty) ----
+		// RoleMap dict (only if non-empty).
 		//
 		// ISO 32000-1 §14.7.3 — /RoleMap <<custom => standard …>>.
 		// veraPDF rejects an empty /RoleMap dict in some configurations; skip when empty.
@@ -181,10 +181,10 @@ class StructureWriter
 			$roleMapObjNum = $this->writeRoleMap($roleMappings);
 		}
 
-		// ---- 5. StructTreeRoot dict (last — references everything above) ----
+		// StructTreeRoot dict (last — references everything above).
 		//
 		// ISO 32000-1 §14.7.2 Table 322 — StructTreeRoot dict entries.
-		// Open the slot reserved at step 0 so the offset is recorded at the
+		// Open the previously reserved slot so the offset is recorded at the
 		// current write position and the "N 0 obj" header is emitted exactly once.
 		$this->writer->object($this->rootObjNum, false);
 		$rootObjNum = $this->rootObjNum;
@@ -192,11 +192,9 @@ class StructureWriter
 		$rootElem = $this->tree->getRoot();
 
 		$this->writer->write('<</Type /StructTreeRoot');
-		// /K — the Document root struct element
 		$this->writer->write('/K [' . $rootElem->getObjNum() . ' 0 R]');
-		// /ParentTree reference
 		$this->writer->write('/ParentTree ' . $parentTreeObjNum . ' 0 R');
-		// ISO 32000-1 Table 322 / Appendix A13 — /ParentTreeNextKey is required:
+		// ISO 32000-1 Table 322 — /ParentTreeNextKey is required:
 		// "An integer greater than any key in the parent tree."
 		// Passed in from ResourceWriter which reads UaState::getStructParentsCounter()
 		// after all pages have been processed — that value equals one more than the
@@ -210,8 +208,6 @@ class StructureWriter
 
 		return $rootObjNum;
 	}
-
-	// ================== internals ==================
 
 	/**
 	 * Recursively walk the element tree bottom-up and allocate a PDF object number
@@ -265,7 +261,6 @@ class StructureWriter
 		$mcids  = $elem->getMcids();
 		$objrefs = $elem->getObjrefs();
 
-		// Open the dict body.
 		$this->writer->write('<</Type /StructElem');
 		$this->writer->write('/S /' . $elem->getType());
 
@@ -294,9 +289,8 @@ class StructureWriter
 			$this->writer->write('/ID (' . $elem->getId() . ')');
 		}
 
-		// ---- Direct dict keys (Appendix A1) ----
-		// /Alt, /ActualText, /Lang, /E, /T are written directly on the StructElem
-		// dict — NOT inside /A attribute objects (ISO 32000-1 Table 322).
+		// Direct dict keys: /Alt, /ActualText, /Lang, /E, /T are written directly
+		// on the StructElem dict — NOT inside /A attribute objects (ISO 32000-1 Table 322).
 		$directKeys = ['Alt', 'ActualText', 'Lang', 'E', 'T'];
 		foreach ($directKeys as $key) {
 			if (isset($attrs[$key])) {
@@ -304,7 +298,7 @@ class StructureWriter
 			}
 		}
 
-		// ---- /A attribute objects ----
+		// /A attribute objects:
 		// /O /Table owner: Scope, ColSpan, RowSpan, Headers, Summary
 		// /O /List  owner: ListNumbering
 		// /O /Layout owner: Placement, BBox, WritingMode
@@ -352,7 +346,7 @@ class StructureWriter
 			}
 		}
 
-		// ---- /K — kids: MCIDs, MCR dicts, OBJR dicts, child struct elem refs ----
+		// /K — kids: MCIDs, MCR dicts, OBJR dicts, child struct elem refs.
 		$kParts = [];
 
 		// Child struct elements first.
@@ -360,8 +354,7 @@ class StructureWriter
 			$kParts[] = $child->getObjNum() . ' 0 R';
 		}
 
-		// MCR entries (marked content references).
-		// ISO 32000-1 §14.7.4.4 Table 324 — MCR dict.
+		// MCR entries (ISO 32000-1 §14.7.4.4 Table 324).
 		// Single-page single-MCID with no /Stm: bare integer is allowed and preferred.
 		// Multi-page, multi-MCID, or /Stm references require full MCR dicts.
 		$pageRefs = $this->buildPageRefMap();
@@ -405,8 +398,7 @@ class StructureWriter
 			}
 		}
 
-		// OBJR entries (annotation object references).
-		// ISO 32000-1 §14.7.4.4.2 Table 338 — OBJR dict.
+		// OBJR entries (ISO 32000-1 §14.7.4.4.2 Table 338).
 		foreach ($objrefs as $objref) {
 			$kParts[] = '<</Type /OBJR /Obj ' . $objref['obj'] . ' 0 R>>';
 		}

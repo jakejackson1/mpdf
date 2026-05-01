@@ -16,8 +16,6 @@ namespace Mpdf\Ua;
  * content-stream assertions can match raw operator bytes without needing to
  * decompress FlateDecode streams. XMP metadata streams are never compressed
  * and remain directly string-matchable.
- *
- * @see MetadataTest  Phase 1 metadata and catalog assertions
  */
 abstract class PdfUaTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
@@ -25,9 +23,9 @@ abstract class PdfUaTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	/**
 	 * Create a minimal PDFUA-enabled Mpdf instance with embedded TrueType fonts.
 	 *
-	 * ISO 14289-1:2014 §7.1 — a non-empty document title is required.
-	 * The 'title' config key is added by §1a of the Phase 1 plan so it flows
-	 * through the config-merge loop and populates $mpdf->title before Output() runs.
+	 * ISO 14289-1:2014 §7.1 — a non-empty document title is required. The
+	 * 'title' config key is registered in ConfigVariables so it flows through
+	 * the config-merge loop and populates $mpdf->title before Output() runs.
 	 *
 	 * @param  array $config  Additional config keys to merge over the defaults.
 	 * @return \Mpdf\Mpdf

@@ -226,11 +226,9 @@ class TextCircle extends Tag
 		$objattr['width'] = $w + $extrawidth;
 		$objattr['type'] = 'textcircle';
 
-		// PDF/UA-1 Phase 4 — capture HTML id and aria-* attributes into $objattr so
-		// the render-time code in Mpdf.php can wire registerId() and queue() on the
-		// Span struct element that wraps the textcircle rendering.
-		// TextCircle opens its struct element at render time (not parse time), so
-		// ARIA data must travel through the serialised $objattr payload.
+		// Carry id/aria-* through serialised $objattr because the Span struct
+		// element wrapping the textcircle is created at render time
+		// (printobjectbuffer), not at parse time.
 		if ($this->mpdf->PDFUA) {
 			$objattr['pdfua_id'] = isset($attr['ID']) ? $attr['ID'] : null;
 			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',

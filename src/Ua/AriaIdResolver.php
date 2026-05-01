@@ -212,7 +212,7 @@ class AriaIdResolver
 	 * For the current stub implementation the tree does not store separate
 	 * text-node children — the element's /ActualText or its text attributes
 	 * are used when present. A full text-walk would require the struct tree
-	 * to track text runs per element, which is out of scope for Phase 4.
+	 * to track text runs per element.
 	 *
 	 * @param  StructureElement $elem
 	 * @return string  concatenated descendant text (may be empty)
@@ -226,7 +226,6 @@ class AriaIdResolver
 		if (isset($attrs['Alt']) && $attrs['Alt'] !== '') {
 			return $attrs['Alt'];
 		}
-		// Recurse into children to collect text
 		$text = '';
 		foreach ($elem->getChildren() as $child) {
 			$text .= $this->collectText($child);

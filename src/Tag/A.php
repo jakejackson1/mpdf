@@ -47,10 +47,9 @@ class A extends Tag
 		//     handled by the NAME/_saveTextBuffer path above and is independent
 		//     of struct element creation.
 		//
-		// An empty/whitespace `href` is treated as "not a hyperlink". This
-		// closes the M2 audit gap where <a name="x" href="">…</a> opened a
-		// Link struct element with an empty `_href`, which then either got
-		// pruned in PDFUAauto mode or threw in strict mode — both surprising
+		// An empty/whitespace `href` is treated as "not a hyperlink" — emitting
+		// a Link struct element for <a name="x" href="">…</a> would either be
+		// pruned in PDFUAauto mode or throw in strict mode, which is surprising
 		// for what is plausibly just a templating artefact around a destination
 		// anchor.
 		//
@@ -69,7 +68,7 @@ class A extends Tag
 			}
 			$this->mpdf->HREF = $attr['HREF']; // mPDF 5.7.4 URLs
 
-			// PDF/UA-1 audit L2 — javascript:/vbscript: hrefs have no accessible
+			// PDF/UA-1 — javascript:/vbscript: hrefs have no accessible
 			// alternative (ISO 14289-1:2014 §7.18 / Matterhorn 17-001 + 28-002).
 			// Most readers refuse to execute them, AT announces them verbatim,
 			// and they are not keyboard-equivalent (WCAG 2.1 §2.1.1).
@@ -81,8 +80,6 @@ class A extends Tag
 			// Link struct element), open a Span struct element for any ARIA /
 			// lang attributes so they are preserved, and emit a single warning.
 			// The visible inner text survives as plain inline content.
-			//
-			// Plan: /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
 			if ($this->mpdf->PDFUA && UaPolicy::isPolicyBlockedHref($attr['HREF'])) {
 				if (empty($this->mpdf->PDFUAauto)) {
 					throw new \Mpdf\MpdfException(
@@ -112,7 +109,7 @@ class A extends Tag
 				return;
 			}
 
-			// PDF/UA-1 Phase 4 — push a Link struct element for hyperlinks.
+			// PDF/UA-1 — push a Link struct element for hyperlinks.
 			// Destination anchors (<a name="...">) do not produce struct elements.
 			if ($this->mpdf->PDFUA) {
 				$structAttrs = [];
@@ -130,7 +127,6 @@ class A extends Tag
 				}
 				$this->ua->getStructureTree()->open('Link', $structAttrs);
 
-				// Register ARIA ID references
 				$elem = $this->ua->getStructureTree()->getCurrent();
 				// Stash the source href on the element so StructureWriter's
 				// strict-mode empty-Link check can quote it in its exception.

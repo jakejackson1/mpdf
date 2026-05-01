@@ -3109,12 +3109,10 @@ class Svg
 
 		$this->svg_info = [];
 
-		// PDF/UA-1 M5 — harvest the SVG's top-level <title>/<desc> as the
-		// accessible name/description for downstream Figure /Alt emission.
-		// See: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md (W3C SVG 1.1
-		// §5.4, Matterhorn 13-004). Gated on PDFUA so the SimpleXML cost is
-		// skipped for non-UA renders. Mockery mocks return null for unknown
-		// properties so the !empty() probe is safe in unit tests too.
+		// PDF/UA-1: harvest the SVG's top-level <title>/<desc> as the
+		// accessible name/description for downstream Figure /Alt emission
+		// (W3C SVG 1.1 §5.4, Matterhorn 13-004). Gated on PDFUA so the
+		// SimpleXML cost is skipped for non-UA renders.
 		$accessibleMetadata = ['title' => null, 'desc' => null];
 		if (!empty($this->mpdf->PDFUA)) {
 			$accessibleMetadata = $this->extractAccessibleMetadata($data);
@@ -3333,7 +3331,7 @@ class Svg
 				'w' => $this->svg_info['w'] * $this->kp,
 				'h' => -$this->svg_info['h'] * $this->kp,
 				'data' => $this->svg_string,
-				// PDF/UA-1 M5 — propagate to ImageProcessor::processSvg() so
+				// Propagated through ImageProcessor::processSvg() so
 				// Mpdf::printobjectbuffer() can promote the values into Figure /Alt.
 				'accessible_title' => isset($this->svg_info['accessible_title'])
 					? $this->svg_info['accessible_title'] : null,
@@ -3355,7 +3353,6 @@ class Svg
 	 * Used by Mpdf::printobjectbuffer() and Mpdf::Image() to populate the
 	 * Figure StructElem /Alt key when the host <img> has no alt attribute.
 	 * Spec refs: ISO 14289-1:2014 §7.3 / Matterhorn Protocol 1.1 13-004.
-	 * Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §3a.
 	 *
 	 * Returns null (not empty string) when the element is absent OR when its
 	 * text content is empty — both cases mean "no metadata", so downstream

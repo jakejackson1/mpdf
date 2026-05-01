@@ -3,12 +3,12 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 Phase 4 — DL (definition list) tag handler.
+ * DL (definition list) tag handler.
  *
  * StructType::fromHtmlTag('DL') maps to 'L', so BlockTag's PDFUA hook
  * opens an L struct element on tag open and closes it on tag close.
- * No additional code is required here — nested DT/DD items open implicit
- * LI parents as needed (see Dt.php and Dd.php).
+ * Nested DT/DD items open implicit LI parents as needed (see Dt.php
+ * and Dd.php).
  *
  * On </dl>, if a DT or DD left an implicit LI open (tracked via
  * UaState::$openedImplicitLI), the implicit LI is closed first,

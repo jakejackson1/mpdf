@@ -3,19 +3,13 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 — HTML <map> handler.
+ * HTML <map> handler (HTML5 §4.8.13).
  *
- * <map name="…"> defines a named registry of <area> hotspots that an
- * <img usemap="#…"> may reference. The element is parser-side metadata only:
- * it produces no layout output and is NOT added to the structure tree (the
- * Link struct elements for each <area> are pushed at image-render time, under
- * the host image's Figure).
+ * Parser-side metadata only: produces no layout output and is not added to the
+ * structure tree. The Link struct elements for each <area> are pushed under the
+ * host image's Figure at image-render time. Ignored when PDFUA is off.
  *
- * Spec:
- *   - HTML5 §4.8.13 — the <map> element.
- *   - ISO 32000-1:2008 §12.5.6.5 — Link annotation.
- *
- * Ignored when PDFUA is off (no struct tree to attach to).
+ * @see ISO 32000-1:2008 §12.5.6.5 (Link annotation).
  */
 class Map extends Tag
 {
@@ -26,7 +20,7 @@ class Map extends Tag
 			return;
 		}
 		if (empty($attr['NAME'])) {
-			// HTML5 §4.8.13: name is required. Without it the map is unreferenceable.
+			// HTML5 §4.8.13: name is required.
 			if ($this->ua !== null) {
 				$this->ua->addWarning('PDF/UA-1: <map> missing name attribute; ignored.');
 			}

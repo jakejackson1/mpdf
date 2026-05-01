@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 4 PDF/UA-1 tests — direct PHP methods, ARIA attributes, and lang propagation.
+ * PDF/UA-1 tests for direct PHP methods, ARIA attributes, and lang propagation.
  *
  * Covers:
  *   - AutosizeText() Span struct element instrumentation
@@ -29,8 +29,6 @@ namespace Mpdf\Ua;
  */
 class DirectPhpAndAriaTest extends PdfUaTestCase
 {
-
-	// ========================= AutosizeText() tests =========================
 
 	/**
 	 * AutosizeText() must produce a /Span struct element in the PDF output.
@@ -63,8 +61,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Span <</MCID', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= OCG layer tests =========================
 
 	/**
 	 * A document with OCG layers must have balanced struct BDC/EMC operators.
@@ -102,8 +98,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		$this->assertStringContainsString('/S /P', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= ARIA attribute tests =========================
 
 	/**
 	 * An element with aria-hidden="true" must produce /Artifact BMC (no struct element).
@@ -179,8 +173,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		$this->assertStringContainsString('does-not-exist', $combined);
 	}
 
-	// ========================= HTML lang attribute tests =========================
-
 	/**
 	 * A block element with a lang attribute must produce a /Lang entry on its struct element.
 	 *
@@ -200,8 +192,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		$this->assertStringContainsString($utf16BeFr, $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= SetProtection() tests =========================
 
 	/**
 	 * SetProtection() without 'extract' must throw in strict mode (PDFUAauto=false).
@@ -238,8 +228,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		$this->assertNotEmpty($output);
 	}
 
-	// ========================= XMP encryption tests =========================
-
 	/**
 	 * When PDFUA and encryption are both active, the XMP stream must use the
 	 * Identity crypt filter so readers can access pdfuaid metadata without decryption.
@@ -264,8 +252,6 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 		// (it appears before any RC4 encryption, in the unencrypted XMP stream)
 		$this->assertStringContainsString('pdfuaid:part', $output);
 	}
-
-	// ========================= Private helpers =========================
 
 	/**
 	 * Assert that the struct-type BDC/BMC count equals the EMC count in the PDF output.

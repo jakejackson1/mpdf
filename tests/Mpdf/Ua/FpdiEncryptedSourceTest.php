@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Tests for the FPDI encrypted-source detection / fallback path (audit gap L1).
+ * Tests for the FPDI encrypted-source detection / fallback path.
  *
  * Verifies the three-tier classification documented on FpdiStructMerger:
  *   - Tier 0 (encrypted source) — auto mode wraps a placeholder /Artifact pair
@@ -153,8 +153,6 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 		return $tmp;
 	}
 
-	// ========================= Tier 0 — sourceIsEncrypted detection =========================
-
 	/**
 	 * sourceIsEncrypted() returns true for a PDF whose trailer carries /Encrypt.
 	 *
@@ -213,8 +211,6 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 		);
 	}
 
-	// ========================= Tier 0 — auto mode → /Artifact placeholder =========================
-
 	/**
 	 * Importing an encrypted PDF in PDFUA + PDFUAauto mode falls back to a Tier 0
 	 * Artifact placeholder. The output must contain an /Artifact <</Type /Layout>> BDC ... EMC
@@ -264,8 +260,6 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 		);
 	}
 
-	// ========================= Tier 0 — strict mode throws =========================
-
 	/**
 	 * Importing an encrypted PDF in strict PDFUA mode throws \Mpdf\MpdfException.
 	 *
@@ -289,8 +283,6 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 			$this->assertStringContainsString('7.6', $e->getMessage());
 		}
 	}
-
-	// ========================= Tier 2 — string sanity check =========================
 
 	/**
 	 * Clean tagged sources pass verifyAndPrepareMerge() and produce the existing
@@ -394,8 +386,6 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 			$this->assertStringContainsString('Matterhorn 01-007', $e->getMessage());
 		}
 	}
-
-	// ========================= Regression: non-PDFUA path is unchanged =========================
 
 	/**
 	 * Non-PDFUA callers must still receive a raw CrossReferenceException for an

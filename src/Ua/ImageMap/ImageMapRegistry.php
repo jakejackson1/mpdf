@@ -115,8 +115,6 @@ class ImageMapRegistry
 		$this->uaResolver = $resolver;
 	}
 
-	// ================== Tag\Map / Tag\Area entry points ==================
-
 	/**
 	 * Register a new map (Tag\Map::open). Idempotent — repeated open of the
 	 * same name preserves any areas already added.
@@ -142,9 +140,6 @@ class ImageMapRegistry
 		$this->currentMapName = null;
 	}
 
-	/**
-	 * @return string|null
-	 */
 	public function getCurrentMapName()
 	{
 		return $this->currentMapName;
@@ -190,8 +185,6 @@ class ImageMapRegistry
 		];
 	}
 
-	// ================== Deferred queue ==================
-
 	/**
 	 * Record one host <img usemap> placement for later emission. Called from
 	 * Mpdf::printobjectbuffer() when the image's placed rectangle is known.
@@ -204,9 +197,6 @@ class ImageMapRegistry
 		$this->deferred[] = $entry;
 	}
 
-	/**
-	 * @return bool
-	 */
 	public function hasDeferred()
 	{
 		return !empty($this->deferred);
@@ -261,12 +251,9 @@ class ImageMapRegistry
 		$this->mpdf->page = $savedPage;
 	}
 
-	// ================== Internal emission ==================
-
 	/**
 	 * Emit one PDF Link annotation + Link struct element per <area> on a host
-	 * <img usemap>. Counterpart of the legacy Mpdf::emitImageMapLinks(); see
-	 * its docblock for spec references and shape-support caveats.
+	 * <img usemap>.
 	 *
 	 * @param  array<int,array<string,mixed>> $areas
 	 * @param  float $imgX   inner-X of the placed image (user units)
@@ -335,8 +322,7 @@ class ImageMapRegistry
 
 	/**
 	 * Convert an HTML image-map shape + coords into an axis-aligned rectangle
-	 * in image-pixel space. Counterpart of the legacy
-	 * Mpdf::imageMapShapeToRect().
+	 * in image-pixel space.
 	 *
 	 * @param  string  $shape   'rect' | 'circle' | 'poly' | 'polygon' | 'default'
 	 * @param  float[] $coords

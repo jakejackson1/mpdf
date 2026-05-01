@@ -38,9 +38,7 @@ class MarkedContentHelper
 	 * Construct with the buffer-routing writer.
 	 *
 	 * Called once by ServiceFactory during bootstrap and then passed into
-	 * UaState's constructor as one of its six collaborators (UaState has no
-	 * ServiceFactory-wiring setters — every collaborator field is populated
-	 * exclusively through UaState::__construct()).
+	 * UaState's constructor.
 	 *
 	 * @param BaseWriter $writer
 	 */

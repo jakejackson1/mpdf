@@ -7,7 +7,7 @@ namespace Mpdf\Ua;
  *
  * When mPDF renders form widgets without active forms it draws inert chrome
  * (rectangles, text via Cell, ZapfDingbats glyphs) directly into the page
- * content stream. Pre-fix, that drawing produced "untagged real content"
+ * content stream. Previously that drawing produced "untagged real content"
  * which veraPDF rule 7.1#3 (ISO 14289-1:2014 §7.1) flags as a UA violation.
  *
  * The fix wraps every legacy `print_ob_*` else-branch in a /Artifact BMC ...
@@ -16,7 +16,7 @@ namespace Mpdf\Ua;
  * logical structure, conformant under PDF/UA-1.
  *
  * This file asserts both the conformance contract for the legacy path AND
- * cohabitation with the active-forms path (added in Phase 4).
+ * cohabitation with the active-forms path.
  *
  * @group pdfua
  * @see   Form.php  print_ob_text/textarea/select/checkbox/radio/button/imageinput
@@ -27,10 +27,9 @@ class LegacyFormArtifactTaggingTest extends PdfUaTestCase
 	/**
 	 * Build a PDFUA mPDF in PDFUAauto mode WITHOUT useActiveForms.
 	 *
-	 * Bypasses PdfUaTestCase::makeMpdf() because that helper carries
-	 * useActiveForms=true to satisfy the HIGH-5 guard. After Phase 3 of
-	 * the legacy-form artifact-tagging plan removes that guard, this
-	 * direct construction becomes the canonical legacy-mode setup.
+	 * Bypasses PdfUaTestCase::makeMpdf() so the legacy `useActiveForms=false`
+	 * path (which the parent helper does not exercise) becomes the canonical
+	 * setup for this file.
 	 *
 	 * @param  array $extraConfig
 	 * @return \Mpdf\Mpdf
@@ -101,10 +100,6 @@ class LegacyFormArtifactTaggingTest extends PdfUaTestCase
 			$widget . ': legacy path must not emit an Annot struct kid'
 		);
 	}
-
-	// =================================================================
-	// Phase 1 — one method per widget type, legacy mode
-	// =================================================================
 
 	public function testInputTextWrappedInArtifact()
 	{
@@ -178,10 +173,8 @@ class LegacyFormArtifactTaggingTest extends PdfUaTestCase
 
 	/**
 	 * Strict mode (PDFUAauto=false) with useActiveForms=false must NOT throw.
-	 * Once Phase 3 removes the HIGH-5 guard, the combination is a first-class
-	 * legitimate config and the rendering path tags itself correctly.
-	 *
-	 * Plan §3e, §6 risk note.
+	 * The combination is a first-class legitimate config and the rendering
+	 * path tags itself correctly.
 	 */
 	public function testStrictModeLegacyFormsDoNotThrow()
 	{
@@ -191,8 +184,8 @@ class LegacyFormArtifactTaggingTest extends PdfUaTestCase
 	}
 
 	/**
-	 * No useActiveForms warning should appear in PDFUAauto mode either —
-	 * after Phase 3, the auto-flip is gone and the legacy path is silent.
+	 * No useActiveForms warning should appear in PDFUAauto mode — there is
+	 * no auto-flip and the legacy path is silent.
 	 */
 	public function testAutoModeRecordsNoUseActiveFormsWarning()
 	{
@@ -206,10 +199,6 @@ class LegacyFormArtifactTaggingTest extends PdfUaTestCase
 			);
 		}
 	}
-
-	// =================================================================
-	// Phase 4 — cohabitation: active-form path must still tag widgets
-	// =================================================================
 
 	/**
 	 * With useActiveForms=true the existing PDFUA-aware AcroForm code paths

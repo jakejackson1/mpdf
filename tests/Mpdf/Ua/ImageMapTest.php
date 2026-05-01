@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * PDF/UA-1 M3 — HTML image-map (<img usemap> + <map> + <area>) tests.
+ * HTML image-map (<img usemap> + <map> + <area>) PDF/UA-1 tagging tests.
  *
  * Exercises:
  *   - Tag parsing for <map> and <area>, populating the registry on $mpdf.
@@ -42,8 +42,6 @@ class ImageMapTest extends PdfUaTestCase
 		return '<img src="' . $this->redPixelPng . '" alt="' . $alt . '" usemap="' . $usemap
 			. '" width="200" height="200"' . ($extra ? ' ' . $extra : '') . '>';
 	}
-
-	// ============================ Registry parsing ============================
 
 	/**
 	 * <map> / <area> populate the ImageMapRegistry even when no <img> uses
@@ -84,8 +82,6 @@ class ImageMapTest extends PdfUaTestCase
 		);
 		$this->assertArrayHasKey('rooms', $mpdf->getPdfUaImageMapRegistry()->getMaps());
 	}
-
-	// ============================ Link annotation ============================
 
 	/**
 	 * A <area shape="rect"> emits a /Subtype /Link annotation pointing at the
@@ -167,8 +163,6 @@ class ImageMapTest extends PdfUaTestCase
 		);
 	}
 
-	// ============================ Shape conversion ============================
-
 	/**
 	 * <area shape="circle" coords="cx,cy,r"> emits a Link annotation whose
 	 * /Rect is the bounding box of the disc.
@@ -222,8 +216,6 @@ class ImageMapTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Subtype /Link', $pdf);
 	}
 
-	// ============================ Href routing ============================
-
 	/**
 	 * <area href="#fragment"> produces an internal /Dest entry, not a /URI action.
 	 */
@@ -258,8 +250,6 @@ class ImageMapTest extends PdfUaTestCase
 		);
 		$this->assertStringContainsString('/A <</S /URI /URI (https://example.com/lobby)', $pdf);
 	}
-
-	// ============================ Strict vs auto policy ============================
 
 	/**
 	 * Strict mode (PDFUAauto=false): <area> missing alt with non-empty href

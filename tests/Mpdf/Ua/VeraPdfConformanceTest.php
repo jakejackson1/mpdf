@@ -70,10 +70,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$this->veraPdfBin = $bin;
 	}
 
-	// =====================================================================
-	// Test methods
-	// =====================================================================
-
 	/**
 	 * Test that a minimal document with a heading and paragraph passes ua1.
 	 *
@@ -142,7 +138,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 * with /Alt. A decorative image (empty alt) must be wrapped as /Artifact.
 	 * Matterhorn 02-004 fires when a Figure has no /Alt.
 	 *
-	 * Uses a small base64-encoded PNG to avoid filesystem dependency.
+	 * Uses a small base64-encoded PNG to avoid a filesystem dependency.
 	 *
 	 * @return void
 	 */
@@ -210,7 +206,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 *
 	 * DejaVuSerif ligates "fi", "ffi", and "ffl". Each ligature glyph cluster
 	 * must be wrapped with /Span <</ActualText <FEFF...>>> BDC...EMC so the
-	 * character sequence is recoverable (Matterhorn 24-001). See plan §A6.
+	 * character sequence is recoverable (Matterhorn 24-001).
 	 *
 	 * @return void
 	 */
@@ -234,7 +230,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 * Matterhorn 07-001 fires when bit 10 is cleared.
 	 *
 	 * PDFUAauto=true is used so mPDF auto-corrects the permission bits if needed,
-	 * matching the intent of example64_protected_document.php (plan §"Test Inputs").
+	 * matching the intent of example64_protected_document.php.
 	 *
 	 * @return void
 	 */
@@ -379,21 +375,18 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$this->assertVeraPdfCompliant($pdf, 'document with abbreviations');
 	}
 
-	// =====================================================================
-	// mpdf-examples coverage tests
-	//
-	// One test per example listed in the PDF/UA-1 plan §"Test Inputs"
-	// (plans/ua-1-support-plan.md:21-42). Each test loads the example's
-	// HTML from a fixture, generates a PDF with PDFUA=true, and asserts
-	// veraPDF ua1 conformance.
-	//
-	// Fixtures live in tests/data/html/pdfua-examples/. To regenerate
-	// from the upstream mpdf-examples repo, see the README in that directory.
-	// =====================================================================
+	/**
+	 * mpdf-examples coverage tests.
+	 *
+	 * Each test loads an mpdf-example HTML fixture from
+	 * tests/data/html/pdfua-examples/, generates a PDF with PDFUA=true, and
+	 * asserts veraPDF ua1 conformance. To regenerate fixtures from the upstream
+	 * mpdf-examples repo, see the README in that directory.
+	 */
 
 	/**
 	 * mpdf-examples: example01_basic.php — H1–H6, P, A, DIV, BLOCKQUOTE,
-	 * ADDRESS, PRE, HR, OL/UL/DL, TABLE/THEAD/TH. Plan §"Test Inputs" line 27.
+	 * ADDRESS, PRE, HR, OL/UL/DL, TABLE/THEAD/TH.
 	 *
 	 * @return void
 	 */
@@ -408,7 +401,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	/**
 	 * mpdf-examples: example04_images.php — GIF/JPG/CMYK/PNG/BMP/WMF/SVG
 	 * images (replaced with data URI placeholders); opacity; rotation; alt text.
-	 * Plan §"Test Inputs" line 28.
 	 *
 	 * External asset files (tiger.gif, tiger.jpg, etc.) are not available in
 	 * the test fixture tree. All <img src="assets/..."> references are replaced
@@ -428,7 +420,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example05_tables.php — Simple tables; THEAD/TFOOT/TH;
-	 * cell backgrounds; H3 inside table cell. Plan §"Test Inputs" line 29.
+	 * cell backgrounds; H3 inside table cell.
 	 *
 	 * @return void
 	 */
@@ -442,7 +434,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example06_tables_nested.php — Nested tables (Table-in-TD).
-	 * Plan §"Test Inputs" line 30.
 	 *
 	 * The fixture retains the CSS styles and nested table structure from the
 	 * original. The assets/bg.jpg background-image reference is omitted because
@@ -461,7 +452,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example07_tables_borders.php — Complex collapsed/separate
-	 * table borders. Plan §"Test Inputs" line 31.
+	 * table borders.
 	 *
 	 * @return void
 	 */
@@ -475,7 +466,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example08_lists.php — OL/UL with roman, decimal, alpha,
-	 * disc markers; deeply nested lists. Plan §"Test Inputs" line 32.
+	 * disc markers; deeply nested lists.
 	 *
 	 * The original example also renders an Arabic-indic ordered list using the
 	 * xbriyaz font. That list is omitted here because xbriyaz is not bundled
@@ -495,7 +486,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	/**
 	 * mpdf-examples: example10_floating_and_fixed_position_elements.php —
 	 * Float and fixed-position rendering; both default to Artifact in PDFUA mode.
-	 * Plan §"Test Inputs" line 39.
 	 *
 	 * The floating image (assets/tiger.wmf) in the original is omitted. The
 	 * fixture instead tests a text float — sufficient to exercise the Artifact
@@ -513,7 +503,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example12_paging_html.php — HTML headers and footers via
-	 * <htmlpageheader>/<setpageheader> (pagination artifacts). Plan §"Test Inputs" line 33.
+	 * <htmlpageheader>/<setpageheader> (pagination artifacts).
 	 *
 	 * The fixture includes the <htmlpageheader>, <htmlpagefooter>, and <setpageheader>
 	 * mPDF custom elements that are parsed by WriteHTML() so the header/footer
@@ -534,7 +524,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	/**
 	 * mpdf-examples: example14_page_numbers_ToC_Index_Bookmarks.php — Multi-page
 	 * documents; ToC via <tocpagebreak>; page numbers as pagination artifacts.
-	 * Plan §"Test Inputs" line 34.
 	 *
 	 * @return void
 	 */
@@ -549,12 +538,12 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example16_headers_method_2.php — Method-2 header/footer
-	 * API via SetHTMLHeader()/SetHTMLFooter(). Plan §"Test Inputs" line 35.
+	 * API via SetHTMLHeader()/SetHTMLFooter().
 	 *
-	 * mode='c' is stripped per the plan note — PdfUaTestCase::makeMpdf() already
-	 * uses embedded TrueType fonts. The purpose of this test is to verify that
-	 * Method-2 headers/footers produce correct /Artifact pagination wrapping,
-	 * NOT to re-test the core-font exception.
+	 * The original example uses mode='c' (core fonts); this test relies on the
+	 * default makeMpdf() configuration which already uses embedded TrueType
+	 * fonts. The point is to verify that Method-2 headers/footers produce
+	 * correct /Artifact pagination wrapping, not to re-test the core-font path.
 	 *
 	 * The header and footer HTML reference assets/sunset.jpg which is not
 	 * available in the test environment. Plain text headers are substituted.
@@ -595,7 +584,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example22_columns.php — Multi-column layout; headings
-	 * across page breaks. Plan §"Test Inputs" line 36.
+	 * across page breaks.
 	 *
 	 * The original uses SetColumns() between multiple WriteHTML() calls. This
 	 * test replicates that pattern: write intro HTML, switch to 3-column layout,
@@ -618,7 +607,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	/**
 	 * mpdf-examples: example26_RTL.php — RTL text (Hebrew/Arabic/Farsi);
 	 * bidirectional layout; Unicode symbol characters.
-	 * Plan §"Test Inputs" line 37.
 	 *
 	 * The original example uses the xbriyaz font for the mpdf_index_* CSS
 	 * classes and the arabic-indic list. The xbriyaz font is not bundled with
@@ -637,7 +625,7 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example34_invoice_example.php — Real-world complex table
-	 * (invoice rows, totals, colspan). Plan §"Test Inputs" line 38.
+	 * (invoice rows, totals, colspan).
 	 *
 	 * The original also calls SetProtection(['print']), SetWatermarkText('Paid'),
 	 * and showWatermarkText. Protection is omitted here (encryption conflicts with
@@ -666,7 +654,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	/**
 	 * mpdf-examples: example36_annotations_and_attached_files.php — Sticky note
 	 * annotations via <annotation> HTML tag; title2annots feature.
-	 * Plan §"Test Inputs" line 40.
 	 *
 	 * The original also attaches a file via the annotation file= attribute and
 	 * calls $mpdf->Annotation() directly with a file attachment. File attachments
@@ -689,7 +676,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example39_PDFA_compliance.php — PDF/A + PDF/UA coexistence.
-	 * Plan §"Test Inputs" line 41.
 	 *
 	 * Both PDFA=true and PDFUA=true are set. PDFAauto and PDFUAauto are also
 	 * enabled so that auto-correction runs for both standards simultaneously.
@@ -711,13 +697,13 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example64_protected_document.php — setProtection() + PDF/UA.
-	 * Plan §"Test Inputs" line 42.
 	 *
-	 * mode='c' is stripped per the plan note — PdfUaTestCase::makeMpdf() already
-	 * uses embedded TrueType fonts. PDFUAauto=true is used so mPDF auto-corrects
-	 * the permission bits (bit 10 "extract for accessibility" must remain set).
-	 * The purpose is to verify that setProtection() combined with PDFUA=true keeps
-	 * the accessibility permission bit set and leaves the XMP stream unencrypted.
+	 * The original example uses mode='c' (core fonts); this test relies on the
+	 * default makeMpdf() configuration which already uses embedded TrueType
+	 * fonts. PDFUAauto=true is used so mPDF auto-corrects the permission bits
+	 * (bit 10 "extract for accessibility" must remain set). The purpose is to
+	 * verify that setProtection() combined with PDFUA=true keeps the
+	 * accessibility permission bit set and leaves the XMP stream unencrypted.
 	 *
 	 * @return void
 	 */
@@ -966,10 +952,10 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 * SetWatermarkText() / showWatermarkText.
 	 *
 	 * Watermark text is decorative and must be wrapped as
-	 * /Artifact <</Type /Background>> BDC…EMC by mPDF in PDFUA mode (Phase 4
-	 * artifact wrapping path). The original also uses image watermarks; that
-	 * variant is omitted here because it requires assets/tiger.wmf and the
-	 * artifact wrapping logic is the same for both.
+	 * /Artifact <</Type /Background>> BDC…EMC by mPDF in PDFUA mode. The
+	 * original also uses image watermarks; that variant is omitted here because
+	 * it requires assets/tiger.wmf and the artifact wrapping logic is the same
+	 * for both.
 	 *
 	 * @return void
 	 */
@@ -989,9 +975,9 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	 * EAN-13, ISBN, UPC-A, EAN-8, RM4SCC, POSTNET, CODE 128 B, CODE 39, QR-code.
 	 *
 	 * Each <barcode> element is tagged as a Figure struct element with
-	 * Alt = "Barcode: <code>" (Phase 4 BarCode tag handler). veraPDF must accept
-	 * the Figure tagging without flagging untagged real content (Matterhorn
-	 * 02-004) or missing alt (Matterhorn 13-008).
+	 * Alt = "Barcode: <code>". veraPDF must accept the Figure tagging without
+	 * flagging untagged real content (Matterhorn 02-004) or missing alt
+	 * (Matterhorn 13-008).
 	 *
 	 * @return void
 	 */
@@ -1038,12 +1024,10 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
-	 * PDF/UA-1 M5 — SVG <title>/<desc> are promoted into Figure /Alt when the
-	 * host <img> has no alt attribute. The fixture mixes inline SVGs (title-
-	 * only, desc-only, both) with a decorative external SVG (alt=""), all of
-	 * which must pass veraPDF's ua1 profile.
-	 *
-	 * Plan: .claude/plans/2026-05-01-ua1-svg-title-desc-alt.md §5.
+	 * SVG <title>/<desc> are promoted into Figure /Alt when the host <img> has
+	 * no alt attribute. The fixture mixes inline SVGs (title-only, desc-only,
+	 * both) with a decorative external SVG (alt=""), all of which must pass
+	 * veraPDF's ua1 profile.
 	 *
 	 * @return void
 	 */
@@ -1057,12 +1041,10 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * Legacy form chrome with `useActiveForms=false` must pass veraPDF's
-	 * UA-1 profile end-to-end. The fixture exercises every print_ob_*
-	 * code path; Phase 2 of the legacy-form artifact-tagging plan wraps
-	 * each in /Artifact BMC ... EMC so rule 7.1#3 (untagged real content)
-	 * is satisfied even though no AcroForm widget annotations exist.
-	 *
-	 * Plan: .claude/plans/2026-04-30-ua1-legacy-form-artifact-tagging.md §5.
+	 * UA-1 profile end-to-end. The fixture exercises every print_ob_* code
+	 * path; each one is wrapped in /Artifact BMC ... EMC so PDF/UA-1 §7.1
+	 * (untagged real content) is satisfied even though no AcroForm widget
+	 * annotations exist.
 	 *
 	 * @return void
 	 */
@@ -1079,10 +1061,6 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 		$pdf = $this->getOutput($mpdf, $html);
 		$this->assertVeraPdfCompliant($pdf, 'legacy_forms_useactiveformsfalse.html');
 	}
-
-	// =====================================================================
-	// Helpers
-	// =====================================================================
 
 	/**
 	 * Load an mpdf-example HTML fixture from tests/data/html/pdfua-examples/.

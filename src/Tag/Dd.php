@@ -3,7 +3,7 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 Phase 4 — DD (definition description) tag handler.
+ * DD (definition description) tag handler.
  *
  * StructType::fromHtmlTag('DD') maps to 'LBody'. BlockTag's PDFUA hook would
  * open 'LBody' directly onto the struct stack. However, the spec requires that

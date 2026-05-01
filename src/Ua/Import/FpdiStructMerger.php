@@ -171,8 +171,6 @@ class FpdiStructMerger
 		$this->tree = $tree;
 	}
 
-	// ========================= Tier 1 — untagged warnings =========================
-
 	/**
 	 * Record a warning for an imported page that has been wrapped as Artifact.
 	 *
@@ -202,8 +200,6 @@ class FpdiStructMerger
 		return $w;
 	}
 
-	// ========================= Tier 2 — tagged-source detection =========================
-
 	/**
 	 * Determine whether the source PDF identified by $readerId has a struct tree.
 	 *
@@ -229,8 +225,6 @@ class FpdiStructMerger
 			return false;
 		}
 	}
-
-	// ========================= Tier 0 — encrypted-source detection =========================
 
 	/**
 	 * Determine whether the source PDF identified by $readerId declares encryption.
@@ -265,8 +259,6 @@ class FpdiStructMerger
 			return false;
 		}
 	}
-
-	// ========================= Tier 2 — struct subtree merge =========================
 
 	/**
 	 * Clone the source PDF page's struct subtree into the host StructureTree.
@@ -314,16 +306,12 @@ class FpdiStructMerger
 			$parser  = $reader->getParser();
 			$catalog = $parser->getCatalog();
 
-			// Allocate a /StructParents integer for this Form XObject.
-			// UaState is not held directly — reach it via $this->mpdf->ua (private).
-			// We call nextStructParents through the public Mpdf method.
+			// UaState is not held directly — allocate via the public Mpdf accessor.
 			$structParents = $this->mpdf->getPdfUaNextStructParents();
 			$this->pageStructParents[$pageId] = $structParents;
 
-			// Merge source /RoleMap entries (first-wins).
 			$this->mergeRoleMap($catalog, $parser);
 
-			// Walk the source StructTreeRoot /K list.
 			$structTreeRootRef = PdfDictionary::get($catalog, 'StructTreeRoot');
 			if ($structTreeRootRef instanceof PdfNull) {
 				return;
@@ -442,13 +430,16 @@ class FpdiStructMerger
 			if (!isset($mcids[$idx])) {
 				continue;
 			}
-			// Patch only if still placeholder (both zero).
+			// Both zeros is the placeholder convention written by cloneElement();
+			// any other value means addPerPageMcrKids already filled in real
+			// numbers for a reuse page and must not be overwritten.
 			if ($mcids[$idx]['pageRef'] === 0 && $mcids[$idx]['stm'] === 0) {
 				$elem->patchMcr($idx, $firstHostObjNum, $foXObjectObjNum);
 			}
 		}
 
-		// Additional host pages (reuse): add new MCR entries.
+		// SetPageTemplate reuse: each additional host page needs a new MCR with
+		// the same MCID pointing to its own page object number.
 		for ($i = 1; $i < count($hostPages); $i++) {
 			$reusePage   = $hostPages[$i];
 			$reuseObjNum = isset($this->mpdf->pageDim[$reusePage]['n'])
@@ -504,8 +495,6 @@ class FpdiStructMerger
 			$elem->addMcid($structParents, $mcids[$idx]['mcid'], $hostPageObjNum, $foXObjectObjNum);
 		}
 	}
-
-	// ========================= Tier 2 — string-decryption sanity check =========================
 
 	/**
 	 * Verify that the source PDF's struct subtree carries decodable text strings.
@@ -625,8 +614,6 @@ class FpdiStructMerger
 	{
 		return isset($this->verificationFailedPages[$pageId]);
 	}
-
-	// ========================= Private helpers =========================
 
 	/**
 	 * Merge /RoleMap entries from the source catalog into the host StructureTree.

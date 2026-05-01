@@ -3,7 +3,7 @@
 namespace Mpdf\Tag;
 
 /**
- * HTML <rb> tag handler — v1 Span fallback (audit 2026-05-01 L4).
+ * HTML <rb> tag handler — Span fallback.
  *
  * <rb> marks the ruby base (the word being annotated). This is a bare
  * InlineTag subclass — no unconditional Span push, because doing so would
@@ -16,8 +16,9 @@ namespace Mpdf\Tag;
  * openInlineUaStruct() — those still produce a Span with /Lang or /Alt
  * when present.
  *
- * v2 (deferred) — replace Span fallback with the /RB standard struct type
- * per ISO 32000-1 §14.8.5.6 Table 339; gated on layout work (plan §4b).
+ * Spec references:
+ *   - W3C Ruby Annotation §1 — HTML <rb> semantics
+ *   - ISO 32000-1:2008 §14.8.5.6 Table 339 — /RB standard struct type
  */
 class Rb extends InlineTag
 {

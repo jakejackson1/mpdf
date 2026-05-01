@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 3 PDF/UA-1 content stream BDC/EMC tagging tests.
+ * PDF/UA-1 content stream BDC/EMC tagging tests.
  *
  * Verifies that marked-content operators (BDC, BMC, EMC) are emitted correctly
  * into PDF page content streams. Tests cover:
@@ -26,8 +26,6 @@ namespace Mpdf\Ua;
  */
 class ContentStreamTest extends PdfUaTestCase
 {
-
-	// ========================= §3a Helper tests =========================
 
 	/**
 	 * Calling begin('P', 5) must write "/P <</MCID 5>> BDC" to the page content stream.
@@ -143,8 +141,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Header artifact tests =========================
-
 	/**
 	 * A document with an HTML header must produce a Pagination/Header artifact BDC
 	 * in the page stream (not BMC — a property dict is required for /Type /Pagination).
@@ -216,8 +212,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertNotFalse($emcPos, 'Footer EMC must appear after BDC');
 	}
 
-	// ========================= Image tagging tests =========================
-
 	/**
 	 * An image with alt="" (explicitly empty) must produce /Artifact BMC (no dict)
 	 * — it is decorative. W3C convention: alt="" declares a decorative image.
@@ -251,8 +245,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertStringContainsString('alt', $combined);
 	}
 
-	// ========================= Balance tests =========================
-
 	/**
 	 * BDC+BMC count must equal EMC count in a simple paragraph document.
 	 *
@@ -283,8 +275,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$output = $this->getOutput($mpdf, '<p>Body paragraph</p>');
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Depth balance check tests =========================
 
 	/**
 	 * Unbalanced BDC/EMC depth > 0 at _enddoc() time with PDFUAauto=false must throw.
@@ -322,8 +312,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$combined = implode(' ', $warnings);
 		$this->assertStringContainsString('Unbalanced', $combined);
 	}
-
-	// ========================= List struct tests =========================
 
 	/**
 	 * <ul> produces /S /L struct element in the PDF output.
@@ -398,8 +386,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertStringContainsString('/S /LBody', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Table struct tests =========================
 
 	/**
 	 * <table> produces /S /Table struct element in the PDF output.
@@ -483,13 +469,12 @@ class ContentStreamTest extends PdfUaTestCase
 	 * A table whose rows span a page break produces TD struct elements and balanced
 	 * BDC/EMC pairs across multiple pages.
 	 *
-	 * Per §A14: multi-page MCR handling is managed by StructureTree::addContent()
-	 * which records the /StructParents integer on each MCR. This test verifies the
+	 * Multi-page MCR handling is managed by StructureTree::addContent() which
+	 * records the /StructParents integer on each MCR. This test verifies the
 	 * document renders without exception and BDC/EMC operators are balanced even
 	 * when a table's cells appear on multiple pages.
 	 *
 	 * ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict: /Type /MCR /Pg N 0 R /MCID n.
-	 * ISO 14289-1 Appendix A14 — multi-page struct element /K arrays use MCR dicts.
 	 */
 	public function testTableRowAcrossPageBreakMcrDicts()
 	{
@@ -509,8 +494,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertGreaterThan(1, $mpdf->page, 'Table must span more than one page');
 	}
 
-	// ========================= Cross-page MCR dict tests =========================
-
 	/**
 	 * A paragraph spanning a page break must produce MCR dicts (not bare integers)
 	 * in the struct element's /K array.
@@ -521,14 +504,9 @@ class ContentStreamTest extends PdfUaTestCase
 	 * page portion). Bare integer /K values are only valid for single-page content
 	 * (ISO 32000-1:2008 §14.7.4.4).
 	 *
-	 * FAILS: The current implementation emits a bare integer /K for cross-page
-	 * paragraphs because finishFlowingBlock() calls addContent() once (on the
-	 * first page) and the StructureWriter singleSimpleMcid path collapses it
-	 * to a bare MCID integer. Multi-page paragraphs need addContent() called once
-	 * per page portion so that each page's struct parents entry is populated and
-	 * StructureWriter can emit full MCR dicts.
-	 *
-	 * See plan §A9 (priority test list) and §A14 (MCR dict requirements).
+	 * Multi-page paragraphs need addContent() called once per page portion so
+	 * that each page's struct parents entry is populated and StructureWriter
+	 * can emit full MCR dicts rather than collapsing to a bare integer /K.
 	 *
 	 * ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict: /Type /MCR /Pg N 0 R /MCID n.
 	 * Matterhorn Protocol 1.1 §01-006 — untagged real content.
@@ -596,7 +574,6 @@ class ContentStreamTest extends PdfUaTestCase
 	 * distinct page objects.
 	 *
 	 * Matterhorn Protocol 1.1 condition 01-006 — untagged real content.
-	 * Plan §A14 — MCR /Pg per page.
 	 *
 	 * @group pdfua
 	 */
@@ -738,8 +715,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Figure BBox tests =========================
-
 	/**
 	 * A Figure struct element must carry a /BBox attribute in a /Layout attr object.
 	 *
@@ -747,7 +722,6 @@ class ContentStreamTest extends PdfUaTestCase
 	 * any Figure appearing in its entirety on a single page so that assistive
 	 * technology can locate it within the page coordinate system.
 	 * Matterhorn Protocol 1.1 condition 13-008 — Figure /BBox missing.
-	 * Plan §A4 — BBox emitted via open('Figure', ['Alt' => ..., 'BBox' => [...]]).
 	 *
 	 * The BBox array is [llx lly urx ury] in default user space units (pt).
 	 *
@@ -777,8 +751,6 @@ class ContentStreamTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= List Lbl+LBody tests =========================
-
 	/**
 	 * Each list item must produce both Lbl (bullet/marker) and LBody (content)
 	 * child struct elements inside the LI struct element.
@@ -789,7 +761,6 @@ class ContentStreamTest extends PdfUaTestCase
 	 *
 	 * Matterhorn Protocol 1.1 condition 21-001 — list numbering attribute missing,
 	 * which indicates incomplete list structure tagging.
-	 * Plan §A9 (priority test list) — testLiStructureHasLblAndLBody.
 	 *
 	 * Implementation: Li::open() opens a Lbl struct element as a child of LI,
 	 * stores a reference to it in blk['pdfua_li_lbl_elem'], and immediately closes
@@ -831,8 +802,6 @@ class ContentStreamTest extends PdfUaTestCase
 		);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Helpers =========================
 
 	/**
 	 * Assert that the count of PDFUA-emitted BDC + BMC operators equals the count

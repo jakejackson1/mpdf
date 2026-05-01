@@ -79,8 +79,6 @@ class FpdiStructMergerTest extends PdfUaTestCase
 		return $tmp;
 	}
 
-	// ========================= Unit: standalone FpdiStructMerger =========================
-
 	/**
 	 * addUntaggedWarning() appends a message and getUntaggedWarnings() returns it.
 	 */
@@ -113,8 +111,6 @@ class FpdiStructMergerTest extends PdfUaTestCase
 		$this->assertCount(1, $first);
 		$this->assertCount(0, $second);
 	}
-
-	// ========================= Unit: sourceIsTagged =========================
 
 	/**
 	 * sourceIsTagged() returns false for a PDF that has no /StructTreeRoot.
@@ -159,8 +155,6 @@ class FpdiStructMergerTest extends PdfUaTestCase
 
 		$this->assertTrue($merger->sourceIsTagged($readerId));
 	}
-
-	// ========================= Integration: Tier 1 — untagged source =========================
 
 	/**
 	 * Importing an untagged PDF page in PDFUA mode emits /Artifact BDC in the page stream.
@@ -254,8 +248,6 @@ class FpdiStructMergerTest extends PdfUaTestCase
 		$this->assertStringContainsString('/S /P', $output);
 		$this->assertStringContainsString('/P <</MCID', $output);
 	}
-
-	// ========================= Integration: Tier 2 — tagged source =========================
 
 	/**
 	 * Importing a tagged PDF page in PDFUA mode does NOT wrap it as Artifact.

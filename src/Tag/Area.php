@@ -3,26 +3,17 @@
 namespace Mpdf\Tag;
 
 /**
- * PDF/UA-1 — HTML <area> handler.
+ * HTML <area> handler (HTML5 §4.8.14): a clickable region inside a <map>.
  *
- * <area> declares a single clickable region inside a <map>. It is HTML-void —
- * no children, no end tag (WriteHTML treats <area …/> as self-closing).
+ * HTML-void; no rendering happens here. The handler validates inputs, enforces
+ * the strict/auto missing-alt policy (Matterhorn 28-002), and appends the area
+ * to the parent <map>'s registry. Actual Link annotations and Link struct
+ * elements are emitted in Mpdf::printobjectbuffer() once the host <img usemap>
+ * has been laid out.
  *
- * The handler does no rendering. It validates inputs, applies the strict /
- * auto policy for missing alt text (Matterhorn 28-002 prevention), and
- * appends the area to the parent <map>'s registry on $mpdf->pdfUaImageMaps.
- *
- * The actual Link annotations and Link struct elements are emitted later,
- * inside Mpdf::printobjectbuffer(), once the host <img usemap> is laid out
- * and its placed-image rectangle is known.
- *
- * Spec:
- *   - HTML5 §4.8.14 — the <area> element (shape, coords, alt, href).
- *   - ISO 32000-1:2008 §12.5.6.5 — Link annotation /Rect /A /Contents.
- *   - ISO 32000-1:2008 §14.8 Table 335 — Link struct element.
- *   - ISO 14289-1:2014 §7.18 — interactive annotation tagging.
- *   - Matterhorn Protocol 1.1 condition 28-002 — Link annotation needs a
- *     text alternative.
+ * @see ISO 32000-1:2008 §12.5.6.5 (Link annotation /Rect /A /Contents).
+ * @see ISO 32000-1:2008 §14.8 Table 335 (Link struct element).
+ * @see ISO 14289-1:2014 §7.18 (interactive annotation tagging).
  */
 class Area extends Tag
 {
@@ -35,9 +26,9 @@ class Area extends Tag
 		$registry = $this->ua->getImageMapRegistry();
 		$mapName  = $registry->getCurrentMapName();
 		if ($mapName === null) {
-			// <area> outside any open <map>. HTML5 §4.8.14 says it MAY
-			// appear inside <picture> too, but we only care about the
-			// <map> case for PDF link-annotation purposes.
+			// <area> outside any open <map>. HTML5 §4.8.14 also permits <area>
+			// inside <picture>, but only the <map> case maps to a PDF link
+			// annotation.
 			if ($this->ua !== null) {
 				$this->ua->addWarning('PDF/UA-1: <area> outside <map>; ignored.');
 			}
@@ -50,11 +41,10 @@ class Area extends Tag
 		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
 		$target = isset($attr['TARGET']) ? $attr['TARGET'] : null;
 
-		// Strict-mode policy: missing alt is a Matterhorn 28-002 violation
-		// the moment the link annotation is emitted, so we reject it at
-		// parse time when strict and synthesise a fallback when auto. This
-		// mirrors the policy in Mpdf::printobjectbuffer() for <img> itself
-		// (Matterhorn 13-004) and Tag\A::open() for empty <a href>.
+		// Missing alt becomes a Matterhorn 28-002 violation once the link
+		// annotation is emitted: reject in strict mode, synthesise in auto
+		// mode. Mirrors the <img> policy (Matterhorn 13-004) and Tag\A::open
+		// for empty <a href>.
 		if ($alt === null && ($href !== null && $href !== '')) {
 			if (empty($this->mpdf->PDFUAauto)) {
 				throw new \Mpdf\MpdfException(
@@ -70,10 +60,8 @@ class Area extends Tag
 		}
 
 		if ($href === null || $href === '') {
-			// No href ⇒ no clickable region to emit. Warn so authors can
-			// clean up the markup; do not fail strict mode (this is a markup
-			// quality issue, not a 28-002 violation since no annotation
-			// will be emitted).
+			// No href = no clickable region, so no annotation will be emitted
+			// and no 28-002 violation can occur. Warn but do not fail strict.
 			if ($this->ua !== null) {
 				$this->ua->addWarning('PDF/UA-1: <area> without href in <map name="' . $mapName . '"> — skipped (no clickable region).');
 			}
@@ -85,17 +73,15 @@ class Area extends Tag
 
 	public function close(&$ahtml, &$ihtml)
 	{
-		// <area> is HTML-void; close() is a no-op. WriteHTML's self-closing
-		// path (src/Mpdf.php — preg_match('/\/$/', $e)) calls this immediately
-		// after open().
+		// <area> is HTML-void; WriteHTML's self-closing path calls this
+		// immediately after open().
 	}
 
 	/**
 	 * Parse a coords="x1,y1,…" attribute into an ordered list of floats.
 	 *
-	 * Tolerates both whitespace and comma separators. Non-numeric tokens
-	 * are skipped — the shape-conversion step will reject the area if the
-	 * resulting count is too small.
+	 * Tolerates whitespace and/or comma separators. Non-numeric tokens are
+	 * skipped; the shape-conversion step rejects under-sized results.
 	 *
 	 * @param string $raw
 	 * @return array

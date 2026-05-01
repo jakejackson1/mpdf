@@ -19,8 +19,6 @@ use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 class StructTypeTest extends TestCase
 {
 
-	// ================== fromHtmlTag ==================
-
 	/**
 	 * Core tag-map entries for common block and inline tags.
 	 */
@@ -104,7 +102,7 @@ class StructTypeTest extends TestCase
 	/**
 	 * <fieldset> / <legend> / <form> map to standard PDF struct types so that
 	 * BlockTag-based emission produces tagged real content rather than
-	 * untagged-content rule 7.1#3 violations (audit 2026-05-01 H2).
+	 * untagged-content rule 7.1#3 violations.
 	 *
 	 * - FIELDSET → Sect : closest grouping element for related form controls.
 	 * - LEGEND   → Caption : Tagged PDF Best Practice — caption of a fieldset.
@@ -116,8 +114,6 @@ class StructTypeTest extends TestCase
 		$this->assertSame('Caption', StructType::fromHtmlTag('LEGEND'));
 		$this->assertSame('Div', StructType::fromHtmlTag('FORM'));
 	}
-
-	// ================== fromCssClass ==================
 
 	/**
 	 * Exact match for the mPDF ToC container class.
@@ -164,8 +160,6 @@ class StructTypeTest extends TestCase
 		$this->assertNull(StructType::fromCssClass(''));
 	}
 
-	// ================== isValid ==================
-
 	/**
 	 * All common standard struct types must be accepted.
 	 */
@@ -189,8 +183,6 @@ class StructTypeTest extends TestCase
 		$this->assertFalse(StructType::isValid('p'));     // case-sensitive
 		$this->assertFalse(StructType::isValid('PARAGRAPH'));
 	}
-
-	// ================== isGrouping ==================
 
 	/**
 	 * Grouping elements (ISO 32000-1 Table 333) must return true.
@@ -218,10 +210,8 @@ class StructTypeTest extends TestCase
 	}
 
 	/**
-	 * Ruby annotation tags map to Span (v1 fallback) — proper Ruby/RB/RT/RP
-	 * struct types are deferred (plan 2026-05-01 §4b). The Span mapping closes
-	 * the semantic-loss observation from audit L4 by ensuring every ruby part
-	 * has its own struct element rather than leaning on the parent block.
+	 * Ruby annotation tags map to Span — every ruby part receives its own
+	 * struct element rather than leaning on the parent block.
 	 */
 	public function testFromHtmlTagRuby()
 	{

@@ -520,17 +520,13 @@ class Table extends Tag
 		$this->mpdf->plainCell_properties = [];
 		unset($table);
 
-		// PDF/UA-1 Phase 4 — push a Table struct element onto the struct tree.
-		// Called after tableLevel is incremented so nested tables (tableLevel > 1)
-		// land as children of the enclosing TD struct element on the stack.
-		// The artifact guard in StructureTree::open() is a no-op during normal
-		// rendering; we honour the global artifact scope from headers/footers.
+		// Push the Table struct element after tableLevel is incremented so nested
+		// tables (tableLevel > 1) land as children of the enclosing TD on the stack.
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
 		if ($this->mpdf->PDFUA) {
 			$this->ua->getStructureTree()->open('Table');
 
-			// ARIA: register HTML id and queue aria-* cross-references.
 			$tableElem = $this->ua->getStructureTree()->getCurrent();
 			if (!empty($attr['ID'])) {
 				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $tableElem);
@@ -755,8 +751,8 @@ class Table extends Tag
 			$this->mpdf->tdbegin = true;
 			$this->mpdf->nestedtablejustfinished = true;
 			$this->mpdf->ignorefollowingspaces = true;
-			// PDF/UA-1 — pop the Table struct element for nested tables.
-			// For top-level tables the pop happens after _tableWrite() at the end of close().
+			// Pop the Table struct element for nested tables. Top-level tables
+			// pop after _tableWrite() at the end of close().
 			if ($this->mpdf->PDFUA) {
 				$this->ua->getStructureTree()->close();
 			}
@@ -1273,11 +1269,8 @@ class Table extends Tag
 			$this->mpdf->restoreInlineProperties($save_silp);
 		}
 
-		// PDF/UA-1 Phase 4 — pop the Table struct element from the struct tree.
-		// Called at the end of close() for top-level tables, after _tableWrite()
-		// has rendered all cells. The matching open() in Table::open() pushed
-		// 'Table' after tableLevel was incremented; we pop it here, at the end
-		// of the top-level close path (tableLevel == 0 by now after reset).
+		// Pop the Table struct element at the end of close() for top-level tables,
+		// after _tableWrite() has rendered all cells.
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
 		if ($this->mpdf->PDFUA) {

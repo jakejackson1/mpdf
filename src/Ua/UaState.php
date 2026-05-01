@@ -31,8 +31,6 @@ namespace Mpdf\Ua;
 class UaState
 {
 
-	// --- accumulated state ---
-
 	/**
 	 * PDFUAauto-mode warnings collected during rendering.
 	 *
@@ -48,9 +46,9 @@ class UaState
 	 * Sequential /StructParents integer counter.
 	 *
 	 * Allocated by nextStructParents() and emitted on every page dict, every
-	 * SVG Form XObject with internal MCIDs, and every FPDI tagged import (§1h,
-	 * §"SVG Images", §"Imported PDFs via FPDI"). StructureWriter emits
-	 * /ParentTreeNextKey equal to this counter's final value.
+	 * SVG Form XObject with internal MCIDs, and every FPDI tagged import.
+	 * StructureWriter emits /ParentTreeNextKey equal to this counter's final
+	 * value.
 	 *
 	 * ISO 32000-1 §14.7.4.4 — ParentTree key space; integers start at 0 and
 	 * must be dense per-key (the array entry indexed by a given /StructParents
@@ -78,7 +76,7 @@ class UaState
 	 * LI in HTML). Closed on the next sibling DT/DD or on </dl>.
 	 *
 	 * Tagged PDF Best Practice Guide §4.2.3 — DL maps to L, DT to Lbl, DD to
-	 * LBody; Lbl/LBody must be children of an LI (see §"Definition lists").
+	 * LBody; Lbl/LBody must be children of an LI.
 	 *
 	 * @var bool
 	 */
@@ -98,7 +96,7 @@ class UaState
 	 */
 	protected $lastHeadingLevel = 0;
 
-	// --- collaborators (injected once via __construct; no setters) ---
+	// Collaborators are injected once via __construct; no setters.
 
 	/** @var MarkedContentHelper */
 	protected $markedContentHelper;
@@ -131,13 +129,11 @@ class UaState
 	// matching the $PDFA / $PDFAauto pattern. Writer/consumer code reads
 	// $this->mpdf->PDFUA / $this->mpdf->PDFUAauto directly.
 
-	// ================== Constructor ==================
-
 	/**
 	 * Build a fully-populated UaState.
 	 *
-	 * All six collaborators are mandatory and injected once at bootstrap by
-	 * ServiceFactory (§2d). Every getter returns a non-null reference for the
+	 * All collaborators are mandatory and injected once at bootstrap by
+	 * ServiceFactory. Every getter returns a non-null reference for the
 	 * lifetime of the instance — callers never need null-guards and no
 	 * partially-initialised facade is ever observable.
 	 *
@@ -147,12 +143,12 @@ class UaState
 	 * (StructureTree, MarkedContentHelper, BaseWriter, Mpdf) so there is no
 	 * construction-time cycle and no setter-injection phase.
 	 *
-	 * @param StructureTree              $structureTree             element stack + ParentTree accumulator (Phase 2b)
-	 * @param MarkedContentHelper        $markedContentHelper       BDC/EMC emitter (Phase 3a)
-	 * @param StructureWriter            $structureWriter           StructTreeRoot serialiser (Phase 2e)
-	 * @param AriaIdResolver             $ariaIdResolver            deferred ARIA ID-reference resolver (Phase 4)
-	 * @param LigatureActualTextWriter   $ligatureActualTextWriter  /Span /ActualText wrapper for OTL ligatures (Phase 5)
-	 * @param Import\FpdiStructMerger    $fpdiStructMerger          tagged-source struct subtree merger (Phase 4)
+	 * @param StructureTree              $structureTree             element stack + ParentTree accumulator
+	 * @param MarkedContentHelper        $markedContentHelper       BDC/EMC emitter
+	 * @param StructureWriter            $structureWriter           StructTreeRoot serialiser
+	 * @param AriaIdResolver             $ariaIdResolver            deferred ARIA ID-reference resolver
+	 * @param LigatureActualTextWriter   $ligatureActualTextWriter  /Span /ActualText wrapper for OTL ligatures
+	 * @param Import\FpdiStructMerger    $fpdiStructMerger          tagged-source struct subtree merger
 	 * @param InlineStructStack          $inlineStructStack         per-tag inline Span depth stacks
 	 * @param AnchorState                $anchorState               current Link struct elem + anchor strip stack
 	 * @param ImageMap\ImageMapRegistry  $imageMapRegistry          <map>/<area> registry, deferred queue, drain/emit
@@ -178,8 +174,6 @@ class UaState
 		$this->anchorState              = $anchorState;
 		$this->imageMapRegistry         = $imageMapRegistry;
 	}
-
-	// ================== Getters ==================
 
 	/**
 	 * Return accumulated PDFUAauto-mode warnings.
@@ -229,61 +223,59 @@ class UaState
 		return $this->openedImplicitLI;
 	}
 
-	/** @return MarkedContentHelper BDC/EMC emitter (Phase 3a). */
+	/** @return MarkedContentHelper */
 	public function getMarkedContentHelper()
 	{
 		return $this->markedContentHelper;
 	}
 
-	/** @return StructureTree element stack + ParentTree accumulator (Phase 2b). */
+	/** @return StructureTree */
 	public function getStructureTree()
 	{
 		return $this->structureTree;
 	}
 
-	/** @return StructureWriter StructTreeRoot serialiser (Phase 2e). */
+	/** @return StructureWriter */
 	public function getStructureWriter()
 	{
 		return $this->structureWriter;
 	}
 
-	/** @return AriaIdResolver deferred resolver for ID-referencing ARIA attrs (Phase 4). */
+	/** @return AriaIdResolver */
 	public function getAriaIdResolver()
 	{
 		return $this->ariaIdResolver;
 	}
 
-	/** @return LigatureActualTextWriter /Span /ActualText wrapper for OTL ligatures (Phase 5). */
+	/** @return LigatureActualTextWriter */
 	public function getLigatureActualTextWriter()
 	{
 		return $this->ligatureActualTextWriter;
 	}
 
-	/** @return Import\FpdiStructMerger tagged-source struct subtree merger (Phase 4). */
+	/** @return Import\FpdiStructMerger */
 	public function getFpdiStructMerger()
 	{
 		return $this->fpdiStructMerger;
 	}
 
-	/** @return InlineStructStack per-tag inline Span depth stacks. */
+	/** @return InlineStructStack */
 	public function getInlineStructStack()
 	{
 		return $this->inlineStructStack;
 	}
 
-	/** @return AnchorState current Link struct elem + anchor strip stack. */
+	/** @return AnchorState */
 	public function getAnchorState()
 	{
 		return $this->anchorState;
 	}
 
-	/** @return ImageMap\ImageMapRegistry HTML image-map registry, deferred queue, drain/emit. */
+	/** @return ImageMap\ImageMapRegistry */
 	public function getImageMapRegistry()
 	{
 		return $this->imageMapRegistry;
 	}
-
-	// ================== Setters ==================
 
 	/**
 	 * Record the PDF object number assigned to the StructTreeRoot dict.
@@ -341,14 +333,6 @@ class UaState
 	{
 		$this->lastHeadingLevel = (int) $level;
 	}
-
-	// The six collaborator fields (markedContentHelper, structureTree,
-	// structureWriter, ariaIdResolver, ligatureActualTextWriter,
-	// fpdiStructMerger) are populated exclusively through __construct(). There
-	// are deliberately no setters for them: the facade is immutable from
-	// bootstrap onwards so every getter always returns the same non-null reference.
-
-	// ================== Behaviour ==================
 
 	/**
 	 * Append a PDFUAauto-mode warning.

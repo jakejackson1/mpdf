@@ -445,8 +445,8 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		// ISO 32000-1:2008 §14.7.2 Table 321 — StructTreeRoot ref in catalog.
 		if ($this->mpdf->PDFUA) {
 			$this->writer->write('/MarkInfo <</Marked true /Suspects false>>');
-			// StructTreeRoot object number is 0 until Phase 2 StructureWriter runs.
-			// The conditional emit ensures valid PDF when the tree is absent in Phase 1.
+			// StructTreeRoot object number is 0 until StructureWriter runs.
+			// The conditional emit ensures valid PDF when the tree is absent.
 			if ($this->ua->getStructTreeRootObjNum()) {
 				$this->writer->write('/StructTreeRoot ' . $this->ua->getStructTreeRootObjNum() . ' 0 R');
 			}
@@ -667,7 +667,6 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 							// Link with such a URI) could still reach this branch.
 							// Drop the /A action so the annotation is a degenerate
 							// but well-formed Link rect with no executable URL.
-							// Plan: /Users/jakejackson/Sites/mpdf/.claude/plans/2026-05-01-ua1-javascript-url-handling.md
 							if ($this->mpdf->PDFUA && \Mpdf\Ua\UaPolicy::isPolicyBlockedHref($pl[4])) {
 								$this->ua->addWarning(
 									'PDF/UA-1: stripped /URI action with policy-blocked scheme: '

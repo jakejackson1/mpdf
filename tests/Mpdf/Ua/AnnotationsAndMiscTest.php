@@ -3,7 +3,7 @@
 namespace Mpdf\Ua;
 
 /**
- * Phase 4 PDF/UA-1 tests: sticky-note annotations, form widget annotations,
+ * PDF/UA-1 tests for sticky-note annotations, form widget annotations,
  * barcode Figure tagging, watermark Artifact tagging, and textcircle Span tagging.
  *
  * All tests render small HTML snippets against a PDFUA-enabled Mpdf instance
@@ -20,8 +20,6 @@ namespace Mpdf\Ua;
  */
 class AnnotationsAndMiscTest extends PdfUaTestCase
 {
-
-	// ========================= Sticky-note Annotations =========================
 
 	/**
 	 * A sticky-note annotation produces /S /Annot in the struct tree.
@@ -121,8 +119,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Type /OBJR', $output);
 	}
 
-	// ========================= Barcodes =========================
-
 	/**
 	 * A barcode produces /S /Figure in the struct tree.
 	 *
@@ -176,15 +172,13 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
-	// ========================= Watermarks =========================
-
 	/**
 	 * A text watermark is tagged as an Artifact with /Type /Background.
 	 *
 	 * Watermarks are decorative repeating elements; they must be outside the
 	 * logical structure and tagged with /Artifact so AT can ignore them.
-	 * See plan §"Why /Type /Background" — Background is the correct Artifact
-	 * /Type per ISO 32000-1 §14.8.2.2 Table 329 for decorative overlays.
+	 * Background is the correct Artifact /Type per ISO 32000-1 §14.8.2.2
+	 * Table 329 for decorative overlays.
 	 */
 	public function testWatermarkTextIsArtifact()
 	{
@@ -231,8 +225,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		$this->assertStringContainsString('/Type /Background', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
-
-	// ========================= Active Form Fields =========================
 
 	/**
 	 * A text input form field produces /S /Form in the struct tree.
@@ -331,8 +323,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		);
 	}
 
-	// ========================= TextCircle =========================
-
 	/**
 	 * A textcircle element produces /S /Span in the struct tree.
 	 *
@@ -367,8 +357,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		$this->assertStringContainsString('/ActualText', $output);
 	}
 
-	// ========================= Widget /TU entry =========================
-
 	/**
 	 * A widget annotation for a form field must carry /TU (tooltip / user name).
 	 *
@@ -376,7 +364,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	 * that assistive technology can announce the field's purpose to the user.
 	 * ISO 14289-1:2014 §7.18 — all widget annotations must have /TU.
 	 * Matterhorn Protocol 1.1 condition 11-002 — /TU missing from widget dict.
-	 * Plan §A9 (priority test list) — testWidgetAnnotationHasTuEntry.
 	 *
 	 * @group pdfua
 	 */
@@ -403,8 +390,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 		);
 	}
 
-	// ========================= Annotation StructParent round-trip =========================
-
 	/**
 	 * The /StructParent integer on an annotation dict must resolve through the
 	 * ParentTree to a struct element whose /S is /Note.
@@ -414,7 +399,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	 *
 	 * ISO 32000-1:2008 §14.7.4.4 — /StructParent (singular) on annotation dicts.
 	 * ISO 32000-1:2008 §7.9.7 — NumTree format for the ParentTree.
-	 * Plan §A9 (priority test list) — testAnnotationStructParentRoundTrip.
 	 *
 	 * @group pdfua
 	 */
@@ -475,8 +459,6 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 			'The struct element referenced by ParentTree[' . $spIndex . '] must have /S /Annot'
 		);
 	}
-
-	// ========================= Helpers =========================
 
 	/**
 	 * Count BDC, BMC, and EMC operators; assert they balance.
