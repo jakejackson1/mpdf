@@ -216,4 +216,19 @@ class StructTypeTest extends TestCase
 		$this->assertFalse(StructType::isGrouping('H1'));
 		$this->assertFalse(StructType::isGrouping('Link'));
 	}
+
+	/**
+	 * Ruby annotation tags map to Span (v1 fallback) — proper Ruby/RB/RT/RP
+	 * struct types are deferred (plan 2026-05-01 §4b). The Span mapping closes
+	 * the semantic-loss observation from audit L4 by ensuring every ruby part
+	 * has its own struct element rather than leaning on the parent block.
+	 */
+	public function testFromHtmlTagRuby()
+	{
+		$this->assertSame('Span', StructType::fromHtmlTag('RUBY'));
+		$this->assertSame('Span', StructType::fromHtmlTag('RB'));
+		$this->assertSame('Span', StructType::fromHtmlTag('RT'));
+		$this->assertSame('Span', StructType::fromHtmlTag('RP'));
+		$this->assertSame('Span', StructType::fromHtmlTag('RTC'));
+	}
 }
