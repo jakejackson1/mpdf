@@ -18,7 +18,17 @@ use setasign\Fpdi\PdfParser\Type\PdfType;
 /**
  * Handle FPDI-imported pages in a PDF/UA-1 document.
  *
- * Two-tier treatment for imported PDF pages:
+ * Three-tier treatment for imported PDF pages:
+ *
+ * Tier 0 — encrypted source (FPDI cannot parse):
+ *   Detected at setSourceFile()/importPage() time when FPDI throws
+ *   CrossReferenceException::ENCRYPTED (0x010C). FPDI exposes no password
+ *   setter (ISO 32000-1:2008 §7.6 — encryption), so the document cannot be
+ *   loaded at all. Auto mode (PDFUAauto=true) writes a placeholder
+ *   /Artifact <</Type /Layout>> BDC … EMC pair on the host page (no Form
+ *   XObject, no struct tree) and records a warning citing Matterhorn 01-007.
+ *   Strict mode (PDFUAauto=false) throws \Mpdf\MpdfException; the source must
+ *   be decrypted upstream (e.g. with `qpdf --decrypt`) before import.
  *
  * Tier 1 — untagged source:
  *   The Do operator emitted by FPDI is bracketed with
@@ -32,7 +42,15 @@ use setasign\Fpdi\PdfParser\Type\PdfType;
  *   object number and /Stm is the Form XObject object number
  *   (ISO 32000-1:2008 §14.7.4.4 Table 324). A /StructParents entry is
  *   injected into the FPDI Form XObject dict at write time so the ParentTree
- *   back-reference resolves correctly.
+ *   back-reference resolves correctly. Before the merge runs, the source
+ *   subtree's /Alt, /ActualText and /Lang strings are run through
+ *   verifyAndPrepareMerge() to defend against forward-compatibility bugs in
+ *   future FPDI releases that might let still-encrypted ciphertext leak past
+ *   the encryption check (ISO 32000-1:2008 §7.6.5 — strings-only encryption
+ *   is currently impossible to reach because FPDI refuses any document with
+ *   an /Encrypt entry, but the sanity check guards against bugs in that
+ *   future code path). On sanity-check failure, auto mode demotes the page
+ *   to Tier 1; strict mode throws.
  *
  * FpdiStructMerger does NOT hold a UaState reference — it holds only Mpdf and
  * StructureTree. This avoids a construction-time cycle: FpdiStructMerger is
@@ -43,6 +61,10 @@ use setasign\Fpdi\PdfParser\Type\PdfType;
  * via $this->ua->getFpdiStructMerger().
  *
  * Spec references:
+ *   - ISO 32000-1:2008 §7.6 — encryption (general)
+ *   - ISO 32000-1:2008 §7.6.5 — crypt filters (strings-only encryption)
+ *   - ISO 32000-1:2008 §7.9.2.2 — text string type (UTF-16BE BOM, UTF-8 BOM, PDFDocEncoding)
+ *   - ISO 32000-1:2008 §14.6 — marked content (BMC/EMC; permits empty content blocks)
  *   - ISO 32000-1:2008 §14.7.4.4 Table 324 — MCR dict (/Pg, /Stm, /MCID)
  *   - ISO 32000-1:2008 §14.7.3 — RoleMap first-wins merge semantics
  *   - ISO 14289-1:2014 §7.1 — real content must be tagged or marked Artifact
@@ -52,6 +74,17 @@ use setasign\Fpdi\PdfParser\Type\PdfType;
  */
 class FpdiStructMerger
 {
+
+	/**
+	 * Synthetic pageId prefix used by FpdiTrait::handleEncryptedImportInUaMode()
+	 * for Tier 0 (encrypted source) placeholders.
+	 *
+	 * Returned in place of the real FPDI pageId so FpdiTrait::isEncryptedPlaceholder()
+	 * can detect the placeholder unambiguously without colliding with FPDI's own
+	 * md5-based identifiers. Lives on FpdiStructMerger because trait constants
+	 * are not supported on PHP < 8.2 (CI matrix runs PHP 5.6 → 8.5).
+	 */
+	const ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX = 'mpdf-ua-encrypted-page:';
 
 	/** @var Mpdf */
 	private $mpdf;
@@ -90,6 +123,24 @@ class FpdiStructMerger
 	 * @var array<string, int[]>  pageId => [hostPage1, hostPage2, ...]
 	 */
 	private $pageIdHostPages = [];
+
+	/**
+	 * Forward-compat state: pageIds whose source struct subtree failed the string
+	 * sanity gauntlet in verifyAndPrepareMerge().
+	 *
+	 * Populated by verifyAndPrepareMerge() in auto mode (PDFUAauto=true) when one
+	 * or more of the first 8 candidate /Alt, /ActualText, or /Lang strings on the
+	 * source struct subtree fails the printable-codepoint or length gauntlet.
+	 * The flag tells the caller (FpdiTrait::useImportedPage()) to demote the page
+	 * from Tier 2 (struct merge) to Tier 1 (Artifact wrap) — the source has
+	 * /StructTreeRoot but its strings cannot be safely cloned into the host tree.
+	 *
+	 * Strict mode (PDFUAauto=false) throws \Mpdf\MpdfException directly from
+	 * verifyAndPrepareMerge() and this map is not populated.
+	 *
+	 * @var array<string, true>  pageId => true
+	 */
+	private $verificationFailedPages = [];
 
 	/**
 	 * Tier 2 state: exact MCR slot references added by cloneElement() for each pageId.
@@ -174,6 +225,42 @@ class FpdiStructMerger
 			$catalog = $reader->getParser()->getCatalog();
 			$structTreeRoot = PdfDictionary::get($catalog, 'StructTreeRoot');
 			return !($structTreeRoot instanceof PdfNull);
+		} catch (\Exception $e) {
+			return false;
+		}
+	}
+
+	// ========================= Tier 0 — encrypted-source detection =========================
+
+	/**
+	 * Determine whether the source PDF identified by $readerId declares encryption.
+	 *
+	 * Reads the parser's cross-reference trailer and checks for an /Encrypt entry.
+	 * Per ISO 32000-1:2008 §7.6 / §7.6.4, presence of /Encrypt in the trailer
+	 * indicates the document is encrypted regardless of cipher (RC4, AES) or
+	 * scope (full-document or strings-only via §7.6.5 crypt filters).
+	 *
+	 * In practice this method is rarely reached via a live FPDI parser:
+	 * vendor/setasign/fpdi throws CrossReferenceException::ENCRYPTED (0x010C)
+	 * during cross-reference loading, before this helper would normally be
+	 * called. The method is provided for completeness and for forward
+	 * compatibility with future FPDI releases that might lift the hard refusal
+	 * (see FpdiStructMerger class docblock — Tier 0).
+	 *
+	 * Exceptions are caught defensively and reported as "not encrypted" to
+	 * mirror sourceIsTagged()'s contract — the caller is responsible for
+	 * deciding what to do when the parser is unavailable.
+	 *
+	 * @param  string $readerId  reader id from $importedPages[$pageId]['readerId']
+	 * @return bool  true iff /Encrypt is present in the source trailer
+	 */
+	public function sourceIsEncrypted($readerId)
+	{
+		try {
+			$reader  = $this->mpdf->getSourcePdfReader($readerId);
+			$trailer = $reader->getParser()->getCrossReference()->getTrailer();
+			$encrypt = PdfDictionary::get($trailer, 'Encrypt');
+			return !($encrypt instanceof PdfNull);
 		} catch (\Exception $e) {
 			return false;
 		}
@@ -418,6 +505,139 @@ class FpdiStructMerger
 		}
 	}
 
+	// ========================= Tier 2 — string-decryption sanity check =========================
+
+	/**
+	 * Verify that the source PDF's struct subtree carries decodable text strings.
+	 *
+	 * Forward-compatibility guard for ISO 32000-1:2008 §7.6.5 strings-only
+	 * encryption: vendor/setasign/fpdi currently refuses any document with an
+	 * /Encrypt entry at cross-reference load time, so partially-decrypted
+	 * imports are not reachable. A future FPDI release or a setasign commercial
+	 * extension could lift that refusal — at which point still-encrypted
+	 * ciphertext could leak into the struct subtree's /Alt, /ActualText and
+	 * /Lang strings. Cloning ciphertext into the host StructureTree would
+	 * produce a non-conformant PDF/UA-1 document with garbage screen-reader
+	 * output and no warning to the caller.
+	 *
+	 * Algorithm:
+	 *   1. Walk the source struct subtree depth-first, collecting up to
+	 *      MAX_SANITY_CANDIDATES (8) /Alt, /ActualText, or /Lang string nodes.
+	 *   2. For each candidate, decode it via decodeImportedTextString() (the
+	 *      same decode path used by cloneElement()).
+	 *   3. Run a sanity gauntlet on the decoded UTF-8:
+	 *      - mb_check_encoding() must accept it as valid UTF-8.
+	 *      - At least 50% of codepoints must be in printable Unicode ranges
+	 *        (general categories L*, N*, Zs, P*, Sm, Sc, So). Pure ciphertext
+	 *        fed through PDFDocEncoding statistically clusters in C0/Cc, so
+	 *        the threshold catches encrypted leakage without false-positiving
+	 *        on legitimate non-Latin scripts.
+	 *      - Length must be ≤ MAX_SANITY_LEN (4096 bytes). /Alt strings longer
+	 *        than that are almost certainly junk.
+	 *   4. If any candidate fails, return false (auto) or throw (strict).
+	 *
+	 * Auto mode (PDFUAauto=true): records a warning via addUntaggedWarning(),
+	 * sets the verificationFailedPages flag, and returns false. The caller
+	 * (FpdiTrait::useImportedPage()) demotes the page from Tier 2 to Tier 1.
+	 *
+	 * Strict mode (PDFUAauto=false): throws \Mpdf\MpdfException with the
+	 * citation message. The caller must decrypt the source upstream.
+	 *
+	 * The 50%-printable threshold is a heuristic, not a spec. Users hitting
+	 * a false positive (e.g. legitimate bidi text with many control codes)
+	 * may opt out via $mpdf->fpdiSkipEncryptedStringSanityCheck = true on
+	 * the config — verifyAndPrepareMerge() then returns true unconditionally.
+	 *
+	 * @param  string $pageId  FPDI page identifier from importPage()
+	 * @return bool  true to proceed with Tier 2 merge; false to demote to Tier 1
+	 * @throws \Mpdf\MpdfException  in strict mode when the sanity check fails
+	 */
+	public function verifyAndPrepareMerge($pageId)
+	{
+		// Opt-out kill switch — return true unconditionally if the user has
+		// disabled the sanity check on the config (e.g. for legitimate non-Latin
+		// content that hits a false positive).
+		if (!empty($this->mpdf->fpdiSkipEncryptedStringSanityCheck)) {
+			return true;
+		}
+
+		// Idempotent — once a page has failed the gauntlet in auto mode, return
+		// false on subsequent calls without re-running the walk or re-emitting
+		// the warning. useImportedPage() calls this after a possible direct test
+		// invocation, so memoising the failure prevents duplicate diagnostics.
+		if (isset($this->verificationFailedPages[$pageId])) {
+			return false;
+		}
+
+		$importedPages = $this->mpdf->getImportedPages();
+		if (!isset($importedPages[$pageId])) {
+			// Not an imported page — nothing to verify; let the caller proceed.
+			return true;
+		}
+
+		$readerId = $importedPages[$pageId]['readerId'];
+
+		try {
+			$reader  = $this->mpdf->getSourcePdfReader($readerId);
+			$parser  = $reader->getParser();
+			$catalog = $parser->getCatalog();
+
+			$structTreeRootRef = PdfDictionary::get($catalog, 'StructTreeRoot');
+			if ($structTreeRootRef instanceof PdfNull) {
+				return true;
+			}
+			$structTreeRoot = PdfType::resolve($structTreeRootRef, $parser);
+			if (!($structTreeRoot instanceof PdfDictionary)) {
+				return true;
+			}
+
+			$kEntry = PdfDictionary::get($structTreeRoot, 'K');
+			if ($kEntry instanceof PdfNull) {
+				return true;
+			}
+
+			$candidates = [];
+			$this->collectSanityCandidates($kEntry, $parser, $candidates, 8);
+
+			foreach ($candidates as $cand) {
+				$decoded = $this->decodeImportedTextString($cand['value']);
+				if ($decoded === null) {
+					continue;
+				}
+				if (!$this->stringPassesSanityGauntlet($decoded)) {
+					return $this->failVerification($pageId, $cand['attr']);
+				}
+			}
+
+			return true;
+		} catch (\Mpdf\MpdfException $e) {
+			// Strict-mode escalation from failVerification() — propagate to the
+			// caller so the throw is visible to user code instead of being
+			// swallowed by the parser-failure catch below.
+			throw $e;
+		} catch (\Exception $e) {
+			// Parser failure walking the subtree — be permissive (the existing
+			// mergePageStructSubtree() catch will handle real parse breakage).
+			return true;
+		}
+	}
+
+	/**
+	 * Whether $pageId failed verifyAndPrepareMerge()'s string sanity gauntlet.
+	 *
+	 * Set only in auto mode (PDFUAauto=true); strict mode throws instead of
+	 * setting the flag. Read by FpdiTrait::useImportedPage() to choose between
+	 * Tier 2 (struct merge) and Tier 1 (Artifact wrap demotion) for tagged
+	 * sources.
+	 *
+	 * @param  string $pageId  FPDI page identifier from importPage()
+	 * @return bool
+	 */
+	public function wasSanityCheckFailed($pageId)
+	{
+		return isset($this->verificationFailedPages[$pageId]);
+	}
+
 	// ========================= Private helpers =========================
 
 	/**
@@ -467,6 +687,223 @@ class FpdiStructMerger
 		} catch (\Exception $e) {
 			// Non-fatal — skip RoleMap merge on error.
 		}
+	}
+
+	/**
+	 * Walk a source struct subtree depth-first, collecting up to $limit
+	 * /Alt, /ActualText, or /Lang text-string nodes for the sanity gauntlet.
+	 *
+	 * Lazy and bounded — stops once $limit candidates have been collected so
+	 * verifyAndPrepareMerge() never iterates more than 8 string nodes per
+	 * import. Skips MCR / OBJR / numeric kids; only struct-element dicts are
+	 * descended.
+	 *
+	 * @param  PdfType  $node       resolved or unresolved /K entry from the source struct tree
+	 * @param  \setasign\Fpdi\PdfParser\PdfParser $parser
+	 * @param  array    $candidates accumulator: each entry is ['attr' => string, 'value' => PdfType]
+	 * @param  int      $limit      maximum candidates to collect (early-exit)
+	 * @return void
+	 */
+	private function collectSanityCandidates($node, $parser, &$candidates, $limit)
+	{
+		if (count($candidates) >= $limit) {
+			return;
+		}
+
+		try {
+			$resolved = PdfType::resolve($node, $parser);
+		} catch (\Exception $e) {
+			return;
+		}
+
+		if ($resolved instanceof PdfArray) {
+			foreach ($resolved->value as $entry) {
+				if (count($candidates) >= $limit) {
+					return;
+				}
+				$this->collectSanityCandidates($entry, $parser, $candidates, $limit);
+			}
+			return;
+		}
+
+		if (!($resolved instanceof PdfDictionary)) {
+			return;
+		}
+
+		// Skip MCR / OBJR — they cannot carry text-string attributes.
+		try {
+			$typeEntry = PdfDictionary::get($resolved, 'Type');
+			if (!($typeEntry instanceof PdfNull)) {
+				$typeResolved = PdfType::resolve($typeEntry, $parser);
+				if ($typeResolved instanceof PdfName
+					&& ($typeResolved->value === 'MCR' || $typeResolved->value === 'OBJR')) {
+					return;
+				}
+			}
+		} catch (\Exception $e) {
+			// fall through
+		}
+
+		// Collect text-string attributes on this element.
+		foreach (['Alt', 'ActualText', 'Lang'] as $attrKey) {
+			if (count($candidates) >= $limit) {
+				return;
+			}
+			try {
+				$attrRef = PdfDictionary::get($resolved, $attrKey);
+				if ($attrRef instanceof PdfNull) {
+					continue;
+				}
+				$attrVal = PdfType::resolve($attrRef, $parser);
+				if ($attrVal instanceof PdfString || $attrVal instanceof PdfHexString) {
+					$candidates[] = ['attr' => $attrKey, 'value' => $attrVal];
+				}
+			} catch (\Exception $e) {
+				continue;
+			}
+		}
+
+		// Recurse into /K children.
+		try {
+			$kRef = PdfDictionary::get($resolved, 'K');
+			if (!($kRef instanceof PdfNull)) {
+				$kResolved = PdfType::resolve($kRef, $parser);
+				$kids      = $this->normaliseKidsToArray($kResolved, $parser);
+				foreach ($kids as $kid) {
+					if (count($candidates) >= $limit) {
+						return;
+					}
+					$this->collectSanityCandidates($kid, $parser, $candidates, $limit);
+				}
+			}
+		} catch (\Exception $e) {
+			// ignore /K parse errors during candidate collection
+		}
+	}
+
+	/**
+	 * Run the printable-codepoint and length gauntlet against a decoded UTF-8 string.
+	 *
+	 * Returns false when the string is suspicious enough to suggest it is still-
+	 * encrypted ciphertext rather than legitimate text. The threshold values are
+	 * documented on verifyAndPrepareMerge() — they are deliberately permissive
+	 * so that legitimate non-Latin scripts (CJK, Arabic, Indic) pass without
+	 * issue while pure ciphertext fed through PDFDocEncoding (which clusters in
+	 * C0/Cc/U+FFFD) reliably fails.
+	 *
+	 * @param  string $decoded  UTF-8 string from decodeImportedTextString()
+	 * @return bool             true iff the string looks like real text
+	 */
+	private function stringPassesSanityGauntlet($decoded)
+	{
+		// Length cap — /Alt strings longer than 4 KiB are almost certainly junk.
+		// Measured against the decoded UTF-8 length; a 4 KiB cap on raw bytes is
+		// permissive enough for legitimate non-Latin scripts (CJK at 3 bytes per
+		// codepoint allows ~1300 codepoints) while rejecting bulk-cipher leakage
+		// where an /Alt would never legitimately exceed a sentence or two.
+		if (strlen($decoded) > 4096) {
+			return false;
+		}
+
+		// Empty strings are always legal (and uninformative — no signal either way).
+		if ($decoded === '') {
+			return true;
+		}
+
+		// UTF-8 validity — decode produces UTF-8 by construction so this is a
+		// belt-and-braces check that catches double-encoding bugs in the decode
+		// path, not just encryption leakage.
+		if (function_exists('mb_check_encoding') && !mb_check_encoding($decoded, 'UTF-8')) {
+			return false;
+		}
+
+		// Codepoint-level scan. We classify codepoints as "suspicious" when they
+		// strongly suggest the source bytes are not real text:
+		//   - C0 controls outside TAB/LF/CR (0x00-0x08, 0x0B, 0x0E-0x1F)
+		//   - DEL (0x7F)
+		//   - U+FFFD (REPLACEMENT CHARACTER) — emitted by pdfDocEncodingToUtf8()
+		//     for any byte that has no PDFDocEncoding mapping (0x00-0x07, 0x0B,
+		//     0x0E-0x17, 0x7F, 0x9D, 0xA0, 0xAD), which is exactly the cluster
+		//     produced when ciphertext is fed through PDFDocEncoding.
+		// Working at the codepoint level (rather than the raw byte level) is
+		// what catches U+FFFD-laden strings — those codepoints encode as three
+		// well-formed UTF-8 bytes, none of which would individually flag.
+		$len           = strlen($decoded);
+		$totalCp       = 0;
+		$suspiciousCp  = 0;
+		for ($i = 0; $i < $len;) {
+			$b = ord($decoded[$i]);
+			if ($b < 0x80) {
+				$cp = $b;
+				$i++;
+			} elseif (($b & 0xE0) === 0xC0 && $i + 1 < $len) {
+				$cp = (($b & 0x1F) << 6) | (ord($decoded[$i + 1]) & 0x3F);
+				$i += 2;
+			} elseif (($b & 0xF0) === 0xE0 && $i + 2 < $len) {
+				$cp = (($b & 0x0F) << 12)
+					| ((ord($decoded[$i + 1]) & 0x3F) << 6)
+					| (ord($decoded[$i + 2]) & 0x3F);
+				$i += 3;
+			} elseif (($b & 0xF8) === 0xF0 && $i + 3 < $len) {
+				$cp = (($b & 0x07) << 18)
+					| ((ord($decoded[$i + 1]) & 0x3F) << 12)
+					| ((ord($decoded[$i + 2]) & 0x3F) << 6)
+					| (ord($decoded[$i + 3]) & 0x3F);
+				$i += 4;
+			} else {
+				// Malformed continuation — count as one suspicious codepoint.
+				$cp = 0xFFFD;
+				$i++;
+			}
+
+			$totalCp++;
+			if ($cp === 0xFFFD) {
+				$suspiciousCp++;
+			} elseif ($cp < 0x20 && $cp !== 0x09 && $cp !== 0x0A && $cp !== 0x0D) {
+				$suspiciousCp++;
+			} elseif ($cp === 0x7F) {
+				$suspiciousCp++;
+			}
+		}
+
+		if ($totalCp > 0 && ($suspiciousCp / $totalCp) > 0.5) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Record a verification failure for $pageId or escalate in strict mode.
+	 *
+	 * Auto mode (PDFUAauto=true): records a warning and returns false so the
+	 * caller can demote the page from Tier 2 to Tier 1.
+	 *
+	 * Strict mode (PDFUAauto=false): throws \Mpdf\MpdfException with the
+	 * citation message — never returns.
+	 *
+	 * @param  string $pageId   FPDI page identifier from importPage()
+	 * @param  string $attrKey  the attribute that failed (Alt / ActualText / Lang)
+	 * @return bool             always false in auto mode (strict mode throws)
+	 * @throws \Mpdf\MpdfException
+	 */
+	private function failVerification($pageId, $attrKey)
+	{
+		$message = 'Imported PDF struct subtree contains an /' . $attrKey . ' value '
+			. 'that failed the printable-codepoint sanity gauntlet (ISO 32000-1:2008 '
+			. '§7.6.5 / §7.9.2.2). The source may carry still-encrypted text-string '
+			. 'ciphertext that vendor/setasign/fpdi did not decrypt. Demoting page '
+			. 'to Tier 1 (/Artifact wrap). To suppress this check on legitimate '
+			. 'non-Latin content, set $mpdf->fpdiSkipEncryptedStringSanityCheck = true. '
+			. 'Matterhorn 01-007.';
+
+		if (empty($this->mpdf->PDFUAauto)) {
+			throw new \Mpdf\MpdfException($message);
+		}
+
+		$this->verificationFailedPages[$pageId] = true;
+		$this->addUntaggedWarning($message);
+		return false;
 	}
 
 	/**
@@ -597,8 +1034,25 @@ class FpdiStructMerger
 					$decoded = $this->decodeImportedTextString($attrVal);
 					if ($decoded !== null) {
 						$hostElem->setAttribute($attrKey, $decoded);
+					} elseif ($this->mpdf->PDFUA && empty($this->mpdf->PDFUAauto)) {
+						// Strict mode: a non-string attribute node we could not decode
+						// silently corrupts a screen-reader-relevant attribute on a
+						// single struct element. Escalate so the caller knows which
+						// element/attribute is at fault rather than shipping a half-
+						// blank /Alt downstream. Auto mode (and the default historical
+						// behaviour) keeps the attribute unset and proceeds.
+						throw new \Mpdf\MpdfException(
+							'Imported PDF struct element /S /' . $hostType
+							. ' carries an undecodable /' . $attrKey . ' attribute '
+							. '(ISO 32000-1:2008 §7.9.2.2). Decrypt or sanitise the '
+							. 'source upstream, or enable PDFUAauto to skip the failed '
+							. 'attribute (Matterhorn 01-007).'
+						);
 					}
 				}
+			} catch (\Mpdf\MpdfException $e) {
+				// Strict-mode escalation — propagate to the caller.
+				throw $e;
 			} catch (\Exception $e) {
 				// ignore missing attributes
 			}

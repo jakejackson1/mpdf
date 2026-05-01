@@ -109,6 +109,15 @@ class ConfigVariables
 			// Adding mPDFI functions
 			'enableImports' => false,
 
+			// PDF/UA-1 forward-compat sanity check on FPDI-imported tagged sources.
+			// The struct subtree's first /Alt, /ActualText and /Lang strings are
+			// run through a printable-codepoint gauntlet to defend against future
+			// FPDI releases letting partially-decrypted ciphertext leak into the
+			// host StructureTree (ISO 32000-1:2008 §7.6.5 strings-only encryption,
+			// FpdiStructMerger::verifyAndPrepareMerge()). Set to true to bypass
+			// the check on legitimate non-Latin content that hits a false positive.
+			'fpdiSkipEncryptedStringSanityCheck' => false,
+
 			// Allows top and bottom margins to collapse between block elements
 			'collapseBlockMargins' => true,
 
