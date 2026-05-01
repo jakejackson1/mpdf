@@ -565,22 +565,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $pdfuaLinkStructElem;
 
 	/**
-	 * Tracks which (if any) struct element type Tag\A::open() pushed onto the
-	 * structure tree, so the matching Tag\A::close() can pop the right number
-	 * of brackets. Possible values: 'Link', 'Span', or null (no struct element
-	 * was opened — e.g. <a name="…"> destination anchor with no accessibility
-	 * payload).
-	 *
-	 * Lives on Mpdf rather than Tag\A because the Tag dispatcher constructs a
-	 * fresh Tag\A instance for each open/close call (see Tag::getTagInstance),
-	 * so per-instance scalars cannot persist across the open→close pair. HTML5
-	 * forbids nested <a>, so a single scalar is sufficient.
-	 *
-	 * @var string|null
-	 */
-	var $pdfuaAnchorStructType;
-
-	/**
 	 * PDF/UA-1 — registry of <map name="…"> definitions parsed during
 	 * WriteHTML(). Populated by Tag\Map::open() / Tag\Area::open() and consumed
 	 * by Mpdf::printobjectbuffer() when an <img usemap="#name"> resolves the
@@ -636,6 +620,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @var array
 	 */
 	var $pdfUaDeferredImageMaps;
+
+	/**
+	 * PDF/UA-1 — stack of per-anchor strip records pushed by Tag\A::open()
+	 * when a `javascript:` / `vbscript:` href is auto-stripped, popped by
+	 * Tag\A::close() to balance any Span struct element opened in place of
+	 * the Link. Each entry is a 2-element array `[bool $stripped, int $spanDepth]`
+	 * where $spanDepth is the number of Span struct elements pushed for ARIA /
+	 * lang preservation (0 or 1 in the current implementation).
+	 *
+	 * Empty when no <a> elements are currently open or none have been stripped.
+	 * Read by Tag\A::close() to decide whether to pop a Link, a Span, or do
+	 * nothing.
+	 *
+	 * @var array
+	 */
+	var $pdfuaStrippedAnchorStack;
 	var $pgwidth;
 	var $fontlist;
 	var $oldx;
@@ -1343,6 +1343,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->InlineBDF = []; // mPDF 6
 		$this->InlineBDFctr = 0; // mPDF 6
 		$this->InlineUaStruct = []; // PDF/UA-1 inline Span(/Lang|/Alt) bracket stack
+		$this->pdfuaStrippedAnchorStack = []; // PDF/UA-1 javascript:/vbscript: anchor strip stack (Tag\A)
 		$this->tbrot_Annots = [];
 		$this->kwt_Annots = [];
 		$this->columnAnnots = [];
@@ -1645,7 +1646,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 		$this->HREF = '';
 		$this->pdfuaLinkStructElem = null;
-		$this->pdfuaAnchorStructType = null;
 		$this->pdfUaImageMaps = [];
 		$this->pdfUaCurrentMapName = null;
 		$this->pdfUaDeferredImageMaps = [];
