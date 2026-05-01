@@ -201,7 +201,9 @@ class HighBugRegressionsTest extends PdfUaTestCase
 
 	/**
 	 * Same condition in strict mode (PDFUAauto=false) must throw with
-	 * guidance pointing at the offending href.
+	 * guidance pointing at the offending href. (M2 audit: this fires only
+	 * for non-empty hrefs whose body produces no content / no annotation —
+	 * empty hrefs are no longer treated as hyperlinks.)
 	 */
 	public function testEmptyAnchorThrowsInStrictMode()
 	{
@@ -209,6 +211,123 @@ class HighBugRegressionsTest extends PdfUaTestCase
 		$this->expectException('\Mpdf\MpdfException');
 		$this->expectExceptionMessageMatches('/no accessible content/');
 		$this->getOutput($mpdf, '<p>Before <a href="https://example.com"></a> after.</p>');
+	}
+
+	// =================================================================
+	// M2 — destination anchors and empty/whitespace href must NOT open Link
+	// =================================================================
+
+	/**
+	 * `<a name="x">Section</a>` (HTML5 destination anchor — no `href`) must
+	 * not open a Link struct element. The surrounding <p> tags the inner
+	 * text via MCID; the /Dests catalog (registered through the existing
+	 * NAME path in Tag\A) owns the destination registration.
+	 */
+	public function testNamedAnchorWithoutHrefDoesNotOpenLinkInAuto()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$output = $this->getOutput($mpdf, '<p><a name="section-2">Section 2</a></p>');
+
+		$this->assertStringNotContainsString('/S /Link', $output);
+	}
+
+	/**
+	 * Same input in strict mode (PDFUAauto=false). Pre-M2 this never reached
+	 * the throw (the `isset($attr['HREF'])` guard already excluded NAME-only
+	 * anchors), but the regression is asserted here to lock in current
+	 * behaviour.
+	 */
+	public function testNamedAnchorWithoutHrefDoesNotThrowInStrict()
+	{
+		$mpdf = $this->makeMpdf();
+		$output = $this->getOutput($mpdf, '<p><a name="section-2">Section 2</a></p>');
+
+		$this->assertNotEmpty($output);
+		$this->assertStringNotContainsString('/S /Link', $output);
+	}
+
+	/**
+	 * `<a name="x" href="">Section</a>` — destination anchor with empty
+	 * `href` (common templating artefact). Pre-M2 this opened a Link struct
+	 * element, got pruned in auto mode, and threw in strict mode quoting
+	 * `<a href="">` — a confusing message for what is a legitimate
+	 * destination anchor. Post-M2: no Link struct element, no throw.
+	 */
+	public function testNamedAnchorWithEmptyHrefDoesNotThrowInStrict()
+	{
+		$mpdf = $this->makeMpdf();
+		$output = $this->getOutput($mpdf, '<p><a name="section-2" href="">Section 2</a></p>');
+
+		$this->assertNotEmpty($output);
+		$this->assertStringNotContainsString('/S /Link', $output);
+	}
+
+	/**
+	 * `<a href="   ">Section</a>` — whitespace-only `href`. HTML5 specifies
+	 * that whitespace-only hyperlink targets are not valid hyperlinks; mPDF
+	 * therefore must not open a Link struct element for them.
+	 */
+	public function testWhitespaceHrefDoesNotOpenLink()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$output = $this->getOutput($mpdf, '<p><a href="   ">Section</a></p>');
+
+		$this->assertStringNotContainsString('/S /Link', $output);
+	}
+
+	/**
+	 * `<a name="x" lang="fr">Section</a>` — non-hyperlink anchor that does
+	 * carry inline accessibility metadata. Tag\A emits a Span struct element
+	 * (not a Link) to host the /Lang entry — Matterhorn 11-001/11-002.
+	 *
+	 * The /Lang value is written by StructureWriter as a UTF-16BE-with-BOM
+	 * text string; the BOM-prefixed bytes are asserted directly so the test
+	 * does not depend on encoding internals.
+	 */
+	public function testNamedAnchorWithLangOpensSpan()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$output = $this->getOutput($mpdf, '<p><a name="section-2" lang="fr">Section 2</a></p>');
+
+		$this->assertStringNotContainsString('/S /Link', $output);
+		$this->assertStringContainsString('/S /Span', $output);
+		// /Lang (<utf16-bom>fr) — BOM is FE FF, then 00 'f' 00 'r'.
+		$this->assertStringContainsString("/Lang (\xFE\xFF\x00f\x00r)", $output);
+	}
+
+	// =================================================================
+	// M2 phase 3 — pruneEmptyLinks defence-in-depth still fires for the
+	// residual case (authored hyperlink with empty body, no annotation)
+	// =================================================================
+
+	/**
+	 * Locked-in regression for the residual MEDIUM-A throw path: a non-empty
+	 * `href` whose body produces no MCRs and no OBJR refs is still a
+	 * Matterhorn 02-003 violation and must throw in strict mode.
+	 *
+	 * Identical input shape to {@see testEmptyAnchorThrowsInStrictMode};
+	 * kept as a separate test under the M2 heading so future audit replays
+	 * confirm the defence-in-depth pruning path remains live after the
+	 * Tag\A rewrite.
+	 */
+	public function testEmptyHyperlinkBodyThrowsInStrictMode()
+	{
+		$mpdf = $this->makeMpdf();
+		$this->expectException('\Mpdf\MpdfException');
+		$this->expectExceptionMessageMatches('@example\.com@');
+		$this->getOutput($mpdf, '<p>Before <a href="https://example.com"></a> after.</p>');
+	}
+
+	/**
+	 * Auto-mode counterpart to the strict-mode throw above: the empty Link
+	 * is pruned silently and no /S /Link makes it into the output.
+	 */
+	public function testEmptyHyperlinkBodyPrunedInAutoMode()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$output = $this->getOutput($mpdf, '<p>Before <a href="https://example.com"></a> after.</p>');
+
+		$this->assertStringNotContainsString('/S /Link', $output);
 	}
 
 	// =================================================================

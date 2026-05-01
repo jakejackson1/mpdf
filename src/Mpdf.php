@@ -559,6 +559,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @var \Mpdf\Ua\StructureElement|null
 	 */
 	var $pdfuaLinkStructElem;
+
+	/**
+	 * Tracks which (if any) struct element type Tag\A::open() pushed onto the
+	 * structure tree, so the matching Tag\A::close() can pop the right number
+	 * of brackets. Possible values: 'Link', 'Span', or null (no struct element
+	 * was opened — e.g. <a name="…"> destination anchor with no accessibility
+	 * payload).
+	 *
+	 * Lives on Mpdf rather than Tag\A because the Tag dispatcher constructs a
+	 * fresh Tag\A instance for each open/close call (see Tag::getTagInstance),
+	 * so per-instance scalars cannot persist across the open→close pair. HTML5
+	 * forbids nested <a>, so a single scalar is sufficient.
+	 *
+	 * @var string|null
+	 */
+	var $pdfuaAnchorStructType;
 	var $pgwidth;
 	var $fontlist;
 	var $oldx;
@@ -1568,6 +1584,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 		$this->HREF = '';
 		$this->pdfuaLinkStructElem = null;
+		$this->pdfuaAnchorStructType = null;
 		$this->oldy = -1;
 		$this->B = 0;
 		$this->I = 0;

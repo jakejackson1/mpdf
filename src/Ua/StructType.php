@@ -30,8 +30,11 @@ class StructType
 	 *
 	 * Only the default mapping for each tag is stored here. The <a> tag
 	 * maps to 'Link' as its default but the A.php tag handler must check
-	 * whether an href attribute is present before calling open(); destination
-	 * anchors (<a name="...">) must not open a struct element.
+	 * whether an href attribute is present *and non-empty after trim()*
+	 * before opening a Link struct element. Destination anchors
+	 * (<a name="...">) and empty/whitespace-href anchors must not open a
+	 * Link — Tag\A::open() emits a Span only when Lang or aria-label is
+	 * present, otherwise no struct element at all.
 	 *
 	 * @var array<string,string>
 	 */
