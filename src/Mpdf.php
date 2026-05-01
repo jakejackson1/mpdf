@@ -559,6 +559,63 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @var \Mpdf\Ua\StructureElement|null
 	 */
 	var $pdfuaLinkStructElem;
+
+	/**
+	 * PDF/UA-1 — registry of <map name="…"> definitions parsed during
+	 * WriteHTML(). Populated by Tag\Map::open() / Tag\Area::open() and consumed
+	 * by Mpdf::printobjectbuffer() when an <img usemap="#name"> resolves the
+	 * same name. Map names are stored lowercase (HTML5 §4.8.13 case-insensitive).
+	 *
+	 * Each entry is the list of areas in source order:
+	 *   [
+	 *     'rooms' => [
+	 *       ['shape'=>'rect',   'coords'=>[10,10,100,100], 'href'=>'/lobby',  'alt'=>'Lobby',  'target'=>null],
+	 *       ['shape'=>'circle', 'coords'=>[200,200,40],    'href'=>'/atrium', 'alt'=>'Atrium', 'target'=>null],
+	 *     ],
+	 *   ]
+	 *
+	 * Reset to [] in __construct(); never cleared mid-document because <map>
+	 * declarations are document-global and an <img usemap> can reference a
+	 * <map> that appears either before OR after the image in source order
+	 * (HTML5 §4.8.13). Memory cost is bounded by author intent.
+	 *
+	 * @var array
+	 */
+	var $pdfUaImageMaps;
+
+	/**
+	 * PDF/UA-1 — name (lowercase) of the <map> currently being parsed, or null
+	 * outside any <map>. Set in Tag\Map::open(), cleared in Tag\Map::close().
+	 * <area> tags use this to know which map to register against. Per HTML5
+	 * §4.8.13 <map> is parsed strictly serially (no nesting).
+	 *
+	 * @var string|null
+	 */
+	var $pdfUaCurrentMapName;
+
+	/**
+	 * PDF/UA-1 — deferred image-map link emissions. Each entry captures the
+	 * placed-image rectangle and the host Figure struct element so the Link
+	 * annotations + Link struct elements can be created after WriteHTML()
+	 * finishes parsing. Required because <map> may appear AFTER the host <img>
+	 * in source order (HTML5 §4.8.13) but printobjectbuffer() for the image
+	 * runs as soon as its containing block closes — too early to resolve the
+	 * map registry. Drained at the end of WriteHTML() in
+	 * processDeferredImageMaps().
+	 *
+	 * Each entry shape:
+	 *   [
+	 *     'mapName'  => string,                    // lowercase
+	 *     'page'     => int,                       // target page number
+	 *     'imgX'     => float, 'imgY'  => float,   // user units (top-left)
+	 *     'imgW'     => float, 'imgH'  => float,
+	 *     'origW'    => float, 'origH' => float,   // pixel space
+	 *     'figure'   => StructureElement,          // host Figure (for parenting)
+	 *   ]
+	 *
+	 * @var array
+	 */
+	var $pdfUaDeferredImageMaps;
 	var $pgwidth;
 	var $fontlist;
 	var $oldx;
@@ -1568,6 +1625,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 		$this->HREF = '';
 		$this->pdfuaLinkStructElem = null;
+		$this->pdfUaImageMaps = [];
+		$this->pdfUaCurrentMapName = null;
+		$this->pdfUaDeferredImageMaps = [];
 		$this->oldy = -1;
 		$this->B = 0;
 		$this->I = 0;
@@ -4560,6 +4620,214 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// Save cross-reference to Column buffer
 		$ref = count($this->PageLinks[$this->page]) - 1; // *COLUMNS*
 		$this->columnLinks[$this->CurrCol][(int) $this->x][(int) $this->y] = $ref; // *COLUMNS*
+	}
+
+	/**
+	 * PDF/UA-1 M3 — drain $pdfUaDeferredImageMaps. Called from WriteHTML()'s
+	 * close path once the entire HTML has been parsed and the <map> registry
+	 * is final.
+	 *
+	 * For each queued image:
+	 *   1. Resolve the map by name (warn-and-skip if unknown).
+	 *   2. Push the host Figure struct element back onto the StructureTree
+	 *      stack so the Link kids parent under it.
+	 *   3. Switch $this->page to the captured page so Mpdf::Link() routes
+	 *      the annotation onto the correct page's PageLinks array.
+	 *   4. Call emitImageMapLinks() to do the per-area work.
+	 *   5. Restore $this->page and pop the Figure.
+	 *
+	 * @return void
+	 */
+	private function processDeferredImageMaps()
+	{
+		$savedPage = $this->page;
+		foreach ($this->pdfUaDeferredImageMaps as $deferred) {
+			$mapName = $deferred['mapName'];
+			if (!isset($this->pdfUaImageMaps[$mapName])) {
+				$this->ua->addWarning(
+					'PDF/UA-1: <img usemap="#' . $mapName . '"> references unknown map; '
+					. 'no link annotations emitted.'
+				);
+				continue;
+			}
+			$figureElem = $deferred['figure'];
+			$this->page = $deferred['page'];
+			if ($figureElem !== null) {
+				$this->ua->getStructureTree()->pushExisting($figureElem);
+			}
+			$this->emitImageMapLinks(
+				$this->pdfUaImageMaps[$mapName],
+				$deferred['imgX'],
+				$deferred['imgY'],
+				$deferred['imgW'],
+				$deferred['imgH'],
+				$deferred['origW'],
+				$deferred['origH']
+			);
+			if ($figureElem !== null) {
+				$this->ua->getStructureTree()->close();
+			}
+		}
+		$this->pdfUaDeferredImageMaps = [];
+		$this->page = $savedPage;
+	}
+
+	/**
+	 * PDF/UA-1 M3 — emit one PDF Link annotation + Link struct element per
+	 * <area> on a host <img usemap>. Called from processDeferredImageMaps()
+	 * after the host image has been laid out and the placed-image rectangle
+	 * is known.
+	 *
+	 * Coordinate space: HTML <area coords> are in image-pixel space with the
+	 * origin at the image's top-left corner. We map them to PDF user units by
+	 * scaling against the placed image's extents (sx = imgW/origW). Mpdf::Link()
+	 * then handles the y-axis flip when emitting the annotation /Rect.
+	 *
+	 * Shape support:
+	 *   - rect:    exact axis-aligned rectangle from coords[0..3].
+	 *   - circle:  bounding box of the disc (PDF Link annotations do not
+	 *              support shaped regions; over-claims slightly, see plan §3e).
+	 *   - poly:    bounding box of the polygon vertices (same caveat).
+	 *
+	 * Each emitted area:
+	 *   1. Opens a Link struct element under the host Figure (top of the
+	 *      StructureTree stack — the caller has already pushed the Figure).
+	 *   2. Sets /Alt on the struct element from the area's alt attribute
+	 *      (Matterhorn 28-002).
+	 *   3. Captures the element on $pdfuaLinkStructElem so Mpdf::Link()
+	 *      threads the OBJR/StructParent wiring through writeAnnotations()
+	 *      (ISO 14289-1 §7.18.5).
+	 *   4. Calls $this->Link() with the user-space rectangle and href.
+	 *   5. Closes the struct element.
+	 *
+	 * @param array $areas    list of area descriptors from $this->pdfUaImageMaps
+	 * @param float $imgX     INNER-X of the placed image (user units)
+	 * @param float $imgY     INNER-Y of the placed image (user units, top-left)
+	 * @param float $imgW     placed image width in user units
+	 * @param float $imgH     placed image height in user units
+	 * @param float $origW    source image width in pixels
+	 * @param float $origH    source image height in pixels
+	 * @return void
+	 */
+	private function emitImageMapLinks($areas, $imgX, $imgY, $imgW, $imgH, $origW, $origH)
+	{
+		if ($origW <= 0 || $origH <= 0 || $imgW <= 0 || $imgH <= 0) {
+			return;
+		}
+		$sx = $imgW / $origW;
+		$sy = $imgH / $origH;
+		foreach ($areas as $area) {
+			$rect = $this->imageMapShapeToRect($area['shape'], $area['coords'], $origW, $origH);
+			if ($rect === null) {
+				if ($this->ua !== null) {
+					$this->ua->addWarning(
+						'PDF/UA-1: <area shape="' . $area['shape'] . '"> coords malformed; skipped.'
+					);
+				}
+				continue;
+			}
+			list($x1, $y1, $x2, $y2) = $rect;
+			$rx = $imgX + $x1 * $sx;
+			$ry = $imgY + $y1 * $sy;
+			$rw = ($x2 - $x1) * $sx;
+			$rh = ($y2 - $y1) * $sy;
+
+			if ($rw <= 0 || $rh <= 0) {
+				continue;
+			}
+
+			// Open a Link struct element under the active Figure (top of stack).
+			// Mirrors Tag\A::open() at src/Tag/A.php — the Alt attribute is
+			// the area's alt text (Matterhorn 28-002), and we stash _href so
+			// the strict-mode empty-Link check can quote it if pruning catches
+			// this element (it should never — we always add an OBJR below).
+			$structAttrs = ['Alt' => $area['alt']];
+			$this->ua->getStructureTree()->open('Link', $structAttrs);
+			$linkElem = $this->ua->getStructureTree()->getCurrent();
+			$linkElem->setAttribute('_href', $area['href']);
+			$this->pdfuaLinkStructElem = $linkElem;
+
+			// Resolve href: "#frag" → internal GoTo, anything else → URI action.
+			// Mirrors the routing in Tag\Img::open() and Tag\A::open().
+			$href = $area['href'];
+			if (isset($href[0]) && $href[0] === '#') {
+				$target = substr($href, 1);
+				while (array_key_exists($target, $this->internallink)) {
+					$target = '#' . $target;
+				}
+				if (!isset($this->internallink[$target])) {
+					$this->internallink[$target] = $this->AddLink();
+				}
+				$linkRef = $this->internallink[$target];
+			} else {
+				$linkRef = $href;
+			}
+
+			$this->Link($rx, $ry, $rw, $rh, $linkRef);
+
+			$this->pdfuaLinkStructElem = null;
+			$this->ua->getStructureTree()->close();
+		}
+	}
+
+	/**
+	 * PDF/UA-1 M3 — convert an HTML image-map shape + coords into an
+	 * axis-aligned rectangle in image-pixel space.
+	 *
+	 * PDF Link annotations (ISO 32000-1 §12.5.6.5) have a single /Rect — they
+	 * do not support /QuadPoints. For circle and poly we therefore emit the
+	 * bounding box; the alt text remains accurate so Matterhorn 28-002 is
+	 * satisfied even if the clickable region over-claims slightly.
+	 *
+	 * @param string $shape   'rect' | 'circle' | 'poly' | 'polygon' | 'default'
+	 * @param array  $coords  numeric coords (already parsed by Tag\Area)
+	 * @param float  $origW   source image width in pixels (for shape="default")
+	 * @param float  $origH   source image height in pixels (for shape="default")
+	 * @return array|null     [x1, y1, x2, y2] in image-pixel space, or null if invalid
+	 */
+	private function imageMapShapeToRect($shape, $coords, $origW, $origH)
+	{
+		switch ($shape) {
+			case 'rect':
+			case 'rectangle':
+				if (count($coords) < 4) {
+					return null;
+				}
+				return [
+					min($coords[0], $coords[2]), min($coords[1], $coords[3]),
+					max($coords[0], $coords[2]), max($coords[1], $coords[3]),
+				];
+			case 'default':
+				// Auto-claim the entire image — legitimate per HTML5 §4.8.14.
+				return [0.0, 0.0, (float) $origW, (float) $origH];
+			case 'circle':
+			case 'circ':
+				if (count($coords) < 3) {
+					return null;
+				}
+				$cx = $coords[0];
+				$cy = $coords[1];
+				$r = $coords[2];
+				if ($r <= 0) {
+					return null;
+				}
+				return [$cx - $r, $cy - $r, $cx + $r, $cy + $r];
+			case 'poly':
+			case 'polygon':
+				if (count($coords) < 6 || count($coords) % 2 !== 0) {
+					return null;
+				}
+				$xs = [];
+				$ys = [];
+				$n = count($coords);
+				for ($i = 0; $i < $n; $i += 2) {
+					$xs[] = $coords[$i];
+					$ys[] = $coords[$i + 1];
+				}
+				return [min($xs), min($ys), max($xs), max($ys)];
+			default:
+				return null;
+		}
 	}
 
 	function Text($x, $y, $txt, $OTLdata = [], $textvar = 0, $aixextra = '', $coordsys = '', $return = false)
@@ -7965,6 +8233,67 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if (isset($objattr['link'])) {
 					$this->Link($objattr['INNER-X'], $objattr['INNER-Y'], $objattr['INNER-WIDTH'], $objattr['INNER-HEIGHT'], $objattr['link']);
 				}
+
+				// PDF/UA-1 M3 — HTML image map (<img usemap="#name">).
+				// Defer Link emission until WriteHTML() finishes — HTML5 §4.8.13
+				// permits the <map> to appear AFTER the host <img>, but the
+				// image's printobjectbuffer() runs as soon as its containing
+				// block closes (well before later <map> tokens are parsed).
+				// We snapshot the placed-image rectangle and host Figure here,
+				// then drain the queue in processDeferredImageMaps() called from
+				// WriteHTML()'s close path.
+				//
+				// Spec:
+				//   ISO 32000-1:2008 §12.5.6.5 — Link annotation /Rect /A /Contents.
+				//   ISO 32000-1:2008 §14.8 Table 335 — Link struct element with OBJR kid.
+				//   ISO 14289-1:2014 §7.18 — interactive content tagging.
+				//   Matterhorn 28-002 — Link annotation needs a text alternative.
+				//
+				// Decorative-image case: $pdfuaImageMcid === -1 means addArtifact()
+				// returned the sentinel — no Figure was pushed. An image map on a
+				// decorative image is a markup contradiction (a clickable region
+				// implies meaningful content). Warn-and-skip eagerly.
+				//
+				// Rotated/transformed case: warn-and-skip (geometry math out of
+				// scope for v1; see plan §3d).
+				if ($this->PDFUA
+					&& !empty($objattr['pdfua_image_map_name'])
+					&& $objattr['type'] == 'image'
+				) {
+					if (!empty($objattr['ROTATE']) || !empty($objattr['transform'])) {
+						$this->ua->addWarning(
+							'PDF/UA-1: image map on rotated/transformed <img> is not supported; '
+							. 'link annotations skipped. Remove rotate/transform or split into pre-rotated source.'
+						);
+					} elseif ($pdfuaImageMcid === -1 || $pdfuaImageMcid === null) {
+						// -1 = decorative (addArtifact returned the sentinel).
+						// null = struct tree was off-path (excluded by outer guard,
+						// but keep defensive).
+						$this->ua->addWarning(
+							'PDF/UA-1: image map ignored on decorative image (alt="") — '
+							. 'an image map implies meaningful content; provide alt text.'
+						);
+					} else {
+						// $figureElem is set in the alt-present branch above
+						// (non-decorative image). The decorative branch was
+						// excluded by the $pdfuaImageMcid === -1 check, so by
+						// the time we get here $figureElem is defined — but
+						// PHPStan can't see that. Fall back to null defensively
+						// (processDeferredImageMaps tolerates a null figure).
+						$this->pdfUaDeferredImageMaps[] = [
+							'mapName' => $objattr['pdfua_image_map_name'],
+							'page'    => $this->page,
+							'imgX'    => $objattr['INNER-X'],
+							'imgY'    => $objattr['INNER-Y'],
+							'imgW'    => $obiw,
+							'imgH'    => $obih,
+							'origW'   => $objattr['orig_w'],
+							'origH'   => $objattr['orig_h'],
+							'figure'  => isset($figureElem) ? $figureElem : null,
+						];
+					}
+				}
+
 				if (isset($objattr['opacity'])) {
 					$this->SetAlpha(1);
 				}
@@ -14760,6 +15089,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->textbuffer = [];
 			}
 
+			// PDF/UA-1 M3 — drain deferred image-map link emissions. <map>
+			// elements may appear AFTER the host <img> in source order
+			// (HTML5 §4.8.13), so the registry isn't necessarily complete at
+			// printobjectbuffer() time. By now the entire HTML has been
+			// parsed, so the registry is final.
+			if ($this->PDFUA && !$parseonly && !empty($this->pdfUaDeferredImageMaps)) {
+				$this->processDeferredImageMaps();
+			}
+
 			/* -- CSS-FLOAT -- */
 			// If ended with a float, need to move to end page
 			$currpos = $this->page * 1000 + $this->y;
@@ -20091,7 +20429,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	{
 		if ($str == '') { // enable all tags
 			// Insert new supported tags in the long string below.
-			$this->enabledtags = "<a><abbr><acronym><address><article><aside><b><bdi><bdo><big><blockquote><br><caption><center><cite><code><del><details><dd><div><dl><dt><em><fieldset><figcaption><figure><font><form><h1><h2><h3><h4><h5><h6><hgroup><hr><i><img><input><ins><kbd><legend><li><main><mark><meter><nav><ol><option><p><pre><progress><q><s><samp><section><select><small><span><strike><strong><sub><summary><sup><table><tbody><td><template><textarea><tfoot><th><thead><time><tr><tt><u><ul><var><footer><header><annotation><bookmark><textcircle><barcode><dottab><indexentry><indexinsert><watermarktext><watermarkimage><tts><ttz><tta><column_break><columnbreak><newcolumn><newpage><page_break><pagebreak><formfeed><columns><toc><tocentry><tocpagebreak><pageheader><pagefooter><setpageheader><setpagefooter><sethtmlpageheader><sethtmlpagefooter>";
+			$this->enabledtags = "<a><abbr><acronym><address><area><article><aside><b><bdi><bdo><big><blockquote><br><caption><center><cite><code><del><details><dd><div><dl><dt><em><fieldset><figcaption><figure><font><form><h1><h2><h3><h4><h5><h6><hgroup><hr><i><img><input><ins><kbd><legend><li><main><map><mark><meter><nav><ol><option><p><pre><progress><q><s><samp><section><select><small><span><strike><strong><sub><summary><sup><table><tbody><td><template><textarea><tfoot><th><thead><time><tr><tt><u><ul><var><footer><header><annotation><bookmark><textcircle><barcode><dottab><indexentry><indexinsert><watermarktext><watermarkimage><tts><ttz><tta><column_break><columnbreak><newcolumn><newpage><page_break><pagebreak><formfeed><columns><toc><tocentry><tocpagebreak><pageheader><pagefooter><setpageheader><setpagefooter><sethtmlpageheader><sethtmlpagefooter>";
 		} else {
 			$str = explode(",", $str);
 			foreach ($str as $v) {
@@ -28248,7 +28586,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// Make self closing tabs valid XHTML
 		// Tags which are self-closing: 1) Replaceable and 2) Non-replaced items
-		$selftabs = 'input|hr|img|br|barcode|dottab';
+		$selftabs = 'input|hr|img|br|barcode|dottab|area';
 		$selftabs2 = 'indexentry|indexinsert|bookmark|watermarktext|watermarkimage|column_break|columnbreak|newcolumn|newpage|page_break|pagebreak|formfeed|columns|toc|tocpagebreak|setpageheader|setpagefooter|sethtmlpageheader|sethtmlpagefooter|annotation';
 
 		// Fix self-closing tags which don't close themselves

@@ -184,6 +184,28 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that a document with an HTML image map passes ua1.
+	 *
+	 * Each <area> with an href produces a Link annotation; each Link annotation
+	 * is wired to a Link struct element via OBJR + /StructParent. The Link
+	 * struct elements carry /Alt populated from the area's alt attribute,
+	 * satisfying Matterhorn 28-002. ISO 32000-1 §12.5.6.5 (Link annotation),
+	 * §14.7.4.4.2 Table 338 (OBJR), §14.8 Table 335 (Link struct element).
+	 *
+	 * The fixture exercises rect, circle, and poly shapes plus the
+	 * deferred-emit path (the <map> is after the host <img> in source order).
+	 *
+	 * @return void
+	 */
+	public function testDocumentWithImageMapPassesUa1()
+	{
+		$html = $this->loadExampleFixture('imagemap');
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'document with image map');
+	}
+
+	/**
 	 * Test that a document with OTL-ligatured text passes ua1.
 	 *
 	 * DejaVuSerif ligates "fi", "ffi", and "ffl". Each ligature glyph cluster
