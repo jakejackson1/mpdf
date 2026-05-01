@@ -441,6 +441,28 @@ class StructureElementsTest extends PdfUaTestCase
 		$this->assertBdcEmcBalanced($output);
 	}
 
+	// ========================= Ruby annotations =========================
+
+	/**
+	 * <ruby><rb>kanji</rb><rt>furigana</rt></ruby> emits Span struct elements
+	 * for each part. Plan 2026-05-01 §4a — Span fallback for ruby annotations
+	 * (audit L4). v2 (proper Ruby/RB/RT/RP standard struct types per ISO
+	 * 32000-1 §14.8.5.6) is deferred pending layout-engine work.
+	 *
+	 * The Ruby and Rt handlers unconditionally push Span struct elements so
+	 * AT and tagged-PDF consumers see dedicated annotation handles rather
+	 * than ruby parts dissolving into the parent block's struct element.
+	 */
+	public function testRubyAnnotationProducesSpanStructElements()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p><ruby><rb>kanji</rb><rt>furigana</rt></ruby></p>'
+		);
+		$this->assertStringContainsString('/S /Span', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
 	// ========================= Watermarks =========================
 
 	/**

@@ -194,6 +194,49 @@ class PoorHtmlAutoModeTest extends PdfUaTestCase
 		$this->generateAndCheck($html, '<th scope="rowgroup">');
 	}
 
+	public function testRubyAnnotationPasses()
+	{
+		// Audit 2026-05-01 L4 — ruby tags previously had no handlers; verify
+		// they do not crash and produce conformant tagging via Span fallback
+		// (plan 2026-05-01 §4a). v2 proper Ruby/RB/RT/RP layout deferred.
+		$html = '<p>Word <ruby><rb>kanji</rb><rp>(</rp><rt>furigana</rt><rp>)</rp></ruby> in context.</p>';
+		$this->generateAndCheck($html, '<ruby><rt> with <rp> fallbacks');
+	}
+
+	public function testRubyInsideHeadingPasses()
+	{
+		$html = '<h1>Title with <ruby>kanji<rt>furigana</rt></ruby> annotation</h1><p>Body.</p>';
+		$this->generateAndCheck($html, '<ruby> inside <h1>');
+	}
+
+	public function testRubyInsideLinkPasses()
+	{
+		$html = '<p><a href="https://example.com">Link <ruby>kanji<rt>furigana</rt></ruby> text</a></p>';
+		$this->generateAndCheck($html, '<ruby> inside <a href>');
+	}
+
+	public function testRubyWithoutRbPasses()
+	{
+		// HTML5 allows the ruby base to be bare text (no <rb>).
+		$html = '<p><ruby>kanji<rt>furigana</rt></ruby></p>';
+		$this->generateAndCheck($html, 'bare-text ruby base (no <rb>)');
+	}
+
+	public function testRubyNestedPasses()
+	{
+		// Degenerate but legal — ensure the per-tag InlineUaStruct stack
+		// handles same-name nesting without corruption.
+		$html = '<p><ruby><ruby>kanji<rt>inner</rt></ruby><rt>outer</rt></ruby></p>';
+		$this->generateAndCheck($html, 'nested <ruby><ruby></ruby></ruby>');
+	}
+
+	public function testRubyWithRtcPasses()
+	{
+		// HTML5 <rtc> groups multiple <rt> for compound bases.
+		$html = '<p><ruby>kanji<rtc><rt>semantic</rt><rt>phonetic</rt></rtc></ruby></p>';
+		$this->generateAndCheck($html, '<rtc> grouping multiple <rt>');
+	}
+
 	// =====================================================================
 	// Helpers
 	// =====================================================================
