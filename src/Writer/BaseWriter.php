@@ -117,6 +117,51 @@ final class BaseWriter
 	}
 
 	/**
+	 * Escape a string so the result is a valid PDF Name token per
+	 * ISO 32000-1:2008 §7.3.5.
+	 *
+	 * Any byte outside the printable range 0x21–0x7E, or in the regular-
+	 * character delimiter set ( ) < > [ ] { } / % # plus whitespace, is
+	 * encoded as `#XX` (two uppercase hex digits). The `#` itself is
+	 * encoded as `#23`.
+	 *
+	 * Use this for PDF Name production where the input is not pre-validated —
+	 * for instance custom-property keys that flow into the /Info dict
+	 * (UA1 audit H-3). For struct element IDs, prefer
+	 * StructureElement::sanitiseIdForPdf() which adds a length cap and
+	 * collision-resistant hash suffix.
+	 *
+	 * @param  string $name  raw bytes to escape
+	 * @return string
+	 */
+	public function escapeName($name)
+	{
+		$out = '';
+		$len = strlen((string) $name);
+		for ($i = 0; $i < $len; $i++) {
+			$ord = ord($name[$i]);
+			if ($ord < 0x21 || $ord > 0x7E
+				|| $ord === 0x23 // #
+				|| $ord === 0x25 // %
+				|| $ord === 0x28 // (
+				|| $ord === 0x29 // )
+				|| $ord === 0x2F // /
+				|| $ord === 0x3C // <
+				|| $ord === 0x3E // >
+				|| $ord === 0x5B // [
+				|| $ord === 0x5D // ]
+				|| $ord === 0x7B // {
+				|| $ord === 0x7D // }
+			) {
+				$out .= sprintf('#%02X', $ord);
+			} else {
+				$out .= $name[$i];
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Un-escapes a PDF string
 	 *
 	 * @param string $s

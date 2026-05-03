@@ -421,13 +421,34 @@ class Td extends Tag
 				// characters illegal in PDF names (parens, slash, %, whitespace …)
 				// so we normalise via the same helper Th.php uses, otherwise AT
 				// cannot cross-reference TD-to-TH.
-				$ids = preg_split('/\s+/', trim($attr['HEADERS']), -1, PREG_SPLIT_NO_EMPTY);
-				if (!empty($ids)) {
-					$sanitised = [];
-					foreach ($ids as $rawId) {
-						$sanitised[] = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($rawId);
+				$rawHeaders = (string) $attr['HEADERS'];
+				if (strlen($rawHeaders) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH) {
+					// UA1 audit M-1 — bound the input the same way aria-* attributes are bounded.
+					$this->ua->addWarning(
+						'TD headers="" exceeded ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH
+						. ' bytes; ignored to prevent memory amplification (UA1 audit M-1).'
+					);
+				} else {
+					$ids = preg_split(
+						'/\s+/',
+						trim($rawHeaders),
+						\Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS + 1,
+						PREG_SPLIT_NO_EMPTY
+					);
+					if (is_array($ids) && !empty($ids)) {
+						if (count($ids) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS) {
+							$this->ua->addWarning(
+								'TD headers="" had more than ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS
+								. ' IDs; truncated (UA1 audit M-1).'
+							);
+							$ids = array_slice($ids, 0, \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS);
+						}
+						$sanitised = [];
+						foreach ($ids as $rawId) {
+							$sanitised[] = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($rawId);
+						}
+						$tdAttrs['Headers'] = $sanitised;
 					}
-					$tdAttrs['Headers'] = $sanitised;
 				}
 			}
 			// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the same

@@ -2,6 +2,8 @@
 
 namespace Mpdf\Tag;
 
+use Mpdf\Ua\UaPolicy;
+
 /**
  * HTML <area> handler (HTML5 §4.8.14): a clickable region inside a <map>.
  *
@@ -40,6 +42,31 @@ class Area extends Tag
 		$href = isset($attr['HREF']) ? $attr['HREF'] : null;
 		$alt = isset($attr['ALT']) ? $attr['ALT'] : null;
 		$target = isset($attr['TARGET']) ? $attr['TARGET'] : null;
+
+		// PDF/UA-1 — javascript:/vbscript: (and friends) hrefs have no
+		// accessible alternative (Matterhorn 17-001 + 28-002). Mirror the
+		// Tag\A::open() policy: strict throws, auto skips the area entirely
+		// (unlike <a>, <area> is HTML-void with no inner text to preserve).
+		if ($href !== null && $href !== '' && UaPolicy::isPolicyBlockedHref($href)) {
+			if (empty($this->mpdf->PDFUAauto)) {
+				throw new \Mpdf\MpdfException(
+					'PDF/UA-1 Matterhorn 17-001 / 28-002: <area href="'
+					. UaPolicy::formatHrefForMessage($href)
+					. '"> uses a scheme with no accessible alternative. '
+					. 'Remove the area, supply a real URL, or enable PDFUAauto '
+					. 'to drop the area silently.'
+				);
+			}
+			if ($this->ua !== null) {
+				$this->ua->addWarning(
+					'PDF/UA-1: <area href="'
+					. UaPolicy::formatHrefForMessage($href)
+					. '"> stripped (no Link annotation emitted) — '
+					. 'scheme has no accessible alternative.'
+				);
+			}
+			return;
+		}
 
 		// Missing alt becomes a Matterhorn 28-002 violation once the link
 		// annotation is emitted: reject in strict mode, synthesise in auto

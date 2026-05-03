@@ -438,6 +438,12 @@ trait FpdiTrait
 			if ($useTaggedMerge) {
 				// Tier 2: nothing to close; the struct elements carry the tagging.
 				// No EMC needed because no BDC was emitted.
+				// Flush merger-side warnings (e.g. cycle / depth-cap / node-budget
+				// diagnostics from FpdiStructMerger; UA1 audit H-2 / M-4) into
+				// UaState so callers can see them via getPdfUaWarnings().
+				foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
+					$this->ua->addWarning($w);
+				}
 			} else {
 				// Tier 1: close the Artifact sequence.
 				$this->writer->write('EMC');

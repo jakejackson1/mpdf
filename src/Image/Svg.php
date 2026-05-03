@@ -3018,8 +3018,23 @@ class Svg
 	 */
 	function mergeStyles($data)
 	{
+		// UA1 audit M-3 — DOMDocument::loadXML defaults to allowing external
+		// entity resolution; refuse network access (LIBXML_NONET) and disable
+		// the entity loader on PHP < 8.0 (deprecated/no-op on 8.0+).
+		$prevEntityLoader = null;
+		if (\PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
+			$prevEntityLoader = libxml_disable_entity_loader(true);
+		}
 		$xml = new \DOMDocument();
-		if (!$xml->loadXML($data, LIBXML_NOERROR)) {
+		try {
+			$loaded = $xml->loadXML($data, LIBXML_NOERROR | LIBXML_NONET);
+		} catch (\Exception $e) {
+			$loaded = false;
+		}
+		if ($prevEntityLoader !== null) {
+			libxml_disable_entity_loader($prevEntityLoader);
+		}
+		if (!$loaded) {
 			return $data;
 		}
 
@@ -3375,17 +3390,31 @@ class Svg
 		// so the user does not see PHP warnings; on failure return [null, null]
 		// and let the rest of ImageSVG() proceed unchanged.
 		$useInternalErrors = libxml_use_internal_errors(true);
+		// UA1 audit M-3 — `LIBXML_NOENT` substitutes external entity *content*
+		// into the parsed text. Combined with a DOCTYPE that defines a SYSTEM
+		// entity it produces a classic XXE: a `<title>&xxe;</title>` reads
+		// `/etc/hosts` into the accessible-name. Today the documented entry
+		// path (`Svg::ImageSVG()`) strips DOCTYPE before reaching this method,
+		// but the method is `public` — defensive callers must not rely on
+		// that incidental scrubbing. Drop NOENT entirely; entity content is
+		// not a legitimate accessible-name source.
+		//
+		// On PHP < 8.0 we additionally disable the libxml external-entity
+		// loader (the function is deprecated/no-op on 8.0+).
+		$prevEntityLoader = null;
+		if (\PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
+			$prevEntityLoader = libxml_disable_entity_loader(true);
+		}
 		try {
-			// LIBXML_NONET — refuse to fetch external entities (defence-in-depth
-			// against XXE; the SVG should not need network resolution anyway).
-			// LIBXML_NOENT — substitute character entities like &amp;, &#233; so
-			// (string) cast on the SimpleXMLElement returns the resolved text.
-			$xml = simplexml_load_string($data, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOENT);
+			$xml = simplexml_load_string($data, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA);
 		} catch (\Exception $e) {
 			$xml = false;
 		}
 		libxml_clear_errors();
 		libxml_use_internal_errors($useInternalErrors);
+		if ($prevEntityLoader !== null) {
+			libxml_disable_entity_loader($prevEntityLoader);
+		}
 
 		if ($xml === false) {
 			return $result;

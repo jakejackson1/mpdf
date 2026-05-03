@@ -208,7 +208,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		}
 
 		foreach ($this->mpdf->customProperties as $key => $value) {
-			$this->writer->write('/' . $key . ' ' . $this->writer->utf16BigEndianTextString($value));
+			// UA1 audit H-3 — custom-property keys must be escaped per
+			// ISO 32000-1 §7.3.5 PDF Name production. Without escapeName(),
+			// a key like "good\n/Producer (pwned)" smuggles extra entries
+			// into the /Info dict.
+			$this->writer->write('/' . $this->writer->escapeName($key) . ' ' . $this->writer->utf16BigEndianTextString($value));
 		}
 
 		$now = PdfDate::format(time());

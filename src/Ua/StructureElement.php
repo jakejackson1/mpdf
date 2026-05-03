@@ -201,9 +201,17 @@ class StructureElement
 		// bytes. Without a cap the output is silently a malformed PDF name.
 		// $truncTo + len('#2D') + $hashChars must equal $maxBytes so the
 		// distinguishing suffix fits.
+		//
+		// UA1 audit M-2 — the suffix was previously 7 hex chars (28 bits),
+		// putting the birthday-bound collision at ~2^14 distinct overlong
+		// inputs (the pen-test demonstrated 5 collisions in 58 050 distinct
+		// IDs). Widened to 16 hex (64 bits) so the bound is now ~2^32, well
+		// past any realistic document. A collision silently breaks
+		// /Headers cross-references (Matterhorn 09-002 / 09-004 / 14-005),
+		// so the wider hash is required for PDF/UA-1 conformance.
 		$maxBytes  = 127;
-		$hashChars = 7;
-		$truncTo   = $maxBytes - 3 - $hashChars; // = 117
+		$hashChars = 16;
+		$truncTo   = $maxBytes - 3 - $hashChars; // = 108
 
 		$id = (string) $id;
 		$out = '';

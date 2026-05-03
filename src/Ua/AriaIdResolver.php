@@ -47,6 +47,26 @@ namespace Mpdf\Ua;
 class AriaIdResolver
 {
 
+	/**
+	 * Maximum byte length of an ARIA ID-list attribute value before queue()
+	 * rejects it. Defends against pathological inputs where a 1 MB
+	 * `aria-labelledby="a a a..."` would amplify to ~300 MB peak memory in
+	 * the resolver pending queue (UA1 audit M-1).
+	 *
+	 * 16 KiB is an order of magnitude beyond any legitimate use — even an
+	 * extreme accessibility annotation would not exceed a few hundred bytes.
+	 */
+	const MAX_ARIA_IDS_LENGTH = 16384;
+
+	/**
+	 * Maximum number of IDs split out of a single ARIA attribute. Bounds
+	 * the per-element memory footprint of the deferred resolution queue.
+	 *
+	 * 256 tokens is well beyond any plausible legitimate fan-in (a typical
+	 * `aria-labelledby` references one or two IDs).
+	 */
+	const MAX_ARIA_IDS_TOKENS = 256;
+
 	/** @var StructureTree  injected once; walked during resolveAll() to populate /Alt /E /Ref. */
 	private $tree;
 
@@ -141,13 +161,40 @@ class AriaIdResolver
 	 */
 	public function queue(StructureElement $elem, $ariaAttrName, $targetIds)
 	{
+		$targetIds = (string) $targetIds;
+
+		// UA1 audit M-1 — reject oversized inputs at the call site rather
+		// than letting preg_split allocate millions of tuples in $pending.
+		if (strlen($targetIds) > self::MAX_ARIA_IDS_LENGTH) {
+			$this->unresolvedWarnings[] = $ariaAttrName
+				. ' attribute exceeded ' . self::MAX_ARIA_IDS_LENGTH
+				. ' bytes; ignored to prevent memory amplification (UA1 audit M-1).';
+			return;
+		}
+
 		// Normalize IDs to lowercase to match registerId() normalization.
 		// Both mPDF-uppercased ID values (from HTML id= attributes, Mpdf.php ~line 14204)
 		// and mixed-case aria-* target values resolve to the same key.
-		foreach (preg_split('/\s+/', trim((string) $targetIds)) as $id) {
-			if ($id !== '') {
-				$this->pending[] = [$elem, $ariaAttrName, strtolower($id)];
-			}
+		// Cap the split at MAX_ARIA_IDS_TOKENS so a value packed with whitespace
+		// cannot expand to an unbounded number of pending tuples.
+		$tokens = preg_split(
+			'/\s+/',
+			trim($targetIds),
+			self::MAX_ARIA_IDS_TOKENS + 1,
+			PREG_SPLIT_NO_EMPTY
+		);
+		if (!is_array($tokens)) {
+			return;
+		}
+		if (count($tokens) > self::MAX_ARIA_IDS_TOKENS) {
+			$this->unresolvedWarnings[] = $ariaAttrName
+				. ' attribute had more than ' . self::MAX_ARIA_IDS_TOKENS
+				. ' IDs; truncated (UA1 audit M-1).';
+			$tokens = array_slice($tokens, 0, self::MAX_ARIA_IDS_TOKENS);
+		}
+
+		foreach ($tokens as $id) {
+			$this->pending[] = [$elem, $ariaAttrName, strtolower($id)];
 		}
 	}
 

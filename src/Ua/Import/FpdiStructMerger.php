@@ -9,6 +9,7 @@ use Mpdf\Ua\StructType;
 use setasign\Fpdi\PdfParser\Type\PdfArray;
 use setasign\Fpdi\PdfParser\Type\PdfDictionary;
 use setasign\Fpdi\PdfParser\Type\PdfHexString;
+use setasign\Fpdi\PdfParser\Type\PdfIndirectObjectReference;
 use setasign\Fpdi\PdfParser\Type\PdfName;
 use setasign\Fpdi\PdfParser\Type\PdfNull;
 use setasign\Fpdi\PdfParser\Type\PdfNumeric;
@@ -86,6 +87,30 @@ class FpdiStructMerger
 	 */
 	const ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX = 'mpdf-ua-encrypted-page:';
 
+	/**
+	 * Maximum recursion depth for cloneElement() and collectSanityCandidates().
+	 *
+	 * Defends against malicious or malformed imported PDFs whose /K trees
+	 * are pathologically deep (e.g. a 50000-deep nested chain). The merger
+	 * trusts FPDI for indirect-reference cycle handling but tracks resolved-
+	 * child cycles itself — without this cap a deeply nested chain could
+	 * exhaust PHP's call stack and crash the worker (UA1 audit H-2).
+	 *
+	 * 1024 is generous — real tagged PDFs rarely nest beyond a few dozen
+	 * levels, and even that is unusual.
+	 */
+	const MAX_RECURSION_DEPTH = 1024;
+
+	/**
+	 * Maximum nodes visited per import in cloneElement() / collectSanityCandidates().
+	 *
+	 * Caps CPU/memory amplification from imported PDFs whose struct trees
+	 * have hundreds of thousands of nodes (UA1 audit M-4). 50000 lets normal
+	 * tagged documents through (a 100-page PDF rarely exceeds 10000 struct
+	 * nodes) while bounding pathological cases.
+	 */
+	const NODE_BUDGET = 50000;
+
 	/** @var Mpdf */
 	private $mpdf;
 
@@ -141,6 +166,41 @@ class FpdiStructMerger
 	 * @var array<string, true>  pageId => true
 	 */
 	private $verificationFailedPages = [];
+
+	/**
+	 * Per-import cycle/depth/budget tracking state for cloneElement().
+	 *
+	 * Reset at the top of mergePageStructSubtree(). $cloneVisited is a
+	 * path-based ancestor set keyed on spl_object_id() of the resolved struct
+	 * dict — entries are pushed on recursion enter and popped on return so
+	 * legitimate DAG sharing is preserved. $cloneAborted is sticky once a
+	 * cycle / depth / budget violation is reported, to avoid duplicate
+	 * warnings on continued recursion.
+	 *
+	 * @var array<int, true>
+	 */
+	private $cloneVisited = [];
+
+	/** @var int Number of cloneElement() calls in the current import. */
+	private $cloneNodeCount = 0;
+
+	/** @var bool True iff a cycle/depth/budget violation was reported in the current import. */
+	private $cloneAborted = false;
+
+	/**
+	 * Per-verify cycle/depth/budget tracking state for collectSanityCandidates().
+	 * Reset at the top of verifyAndPrepareMerge(). Same semantics as the
+	 * clone-state fields above.
+	 *
+	 * @var array<int, true>
+	 */
+	private $sanityVisited = [];
+
+	/** @var int Number of collectSanityCandidates() calls in the current verify. */
+	private $sanityNodeCount = 0;
+
+	/** @var bool True iff a cycle/depth/budget violation was reported during verify. */
+	private $sanityAborted = false;
 
 	/**
 	 * Tier 2 state: exact MCR slot references added by cloneElement() for each pageId.
@@ -294,6 +354,14 @@ class FpdiStructMerger
 		$this->mergedSubtrees[$pageId] = [];
 		$this->mergedMcrs[$pageId]     = [];
 
+		// Reset per-import cycle/depth/budget tracking before entering the
+		// recursion. UA1 audit H-2 (cyclic /K refs segfaulting PHP) and M-4
+		// (CPU amplification on huge sanity walks) are addressed by these
+		// guards; see the cloneElement() entry checks for the policy.
+		$this->cloneVisited    = [];
+		$this->cloneNodeCount  = 0;
+		$this->cloneAborted    = false;
+
 		$importedPages = $this->mpdf->getImportedPages();
 		if (!isset($importedPages[$pageId])) {
 			return;
@@ -336,6 +404,9 @@ class FpdiStructMerger
 				$cloned = $this->cloneElement($kid, $parser, $hostParent, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId);
 				if ($cloned !== null) {
 					$this->mergedSubtrees[$pageId][] = $cloned;
+				}
+				if ($this->cloneAborted) {
+					break;
 				}
 			}
 
@@ -546,6 +617,12 @@ class FpdiStructMerger
 			return false;
 		}
 
+		// Reset per-verify cycle/depth/budget tracking before walking the
+		// source struct subtree (UA1 audit H-2 / M-4).
+		$this->sanityVisited   = [];
+		$this->sanityNodeCount = 0;
+		$this->sanityAborted   = false;
+
 		$importedPages = $this->mpdf->getImportedPages();
 		if (!isset($importedPages[$pageId])) {
 			// Not an imported page — nothing to verify; let the caller proceed.
@@ -679,31 +756,94 @@ class FpdiStructMerger
 	 * @param  int      $limit      maximum candidates to collect (early-exit)
 	 * @return void
 	 */
-	private function collectSanityCandidates($node, $parser, &$candidates, $limit)
+	private function collectSanityCandidates($node, $parser, &$candidates, $limit, $depth = 0)
 	{
 		if (count($candidates) >= $limit) {
 			return;
 		}
 
-		try {
-			$resolved = PdfType::resolve($node, $parser);
-		} catch (\Exception $e) {
+		// UA1 audit H-2 / M-4 — per-verify cycle, depth, and node guards.
+		if ($this->sanityAborted) {
+			return;
+		}
+		if ($depth > self::MAX_RECURSION_DEPTH) {
+			$this->sanityAborted = true;
+			$this->addUntaggedWarning(
+				'Imported PDF struct sanity walk depth exceeded '
+				. self::MAX_RECURSION_DEPTH
+				. '; verify truncated (UA1 audit H-2).'
+			);
+			return;
+		}
+		$this->sanityNodeCount++;
+		if ($this->sanityNodeCount > self::NODE_BUDGET) {
+			$this->sanityAborted = true;
+			$this->addUntaggedWarning(
+				'Imported PDF struct sanity walk exceeded '
+				. self::NODE_BUDGET
+				. ' nodes; verify truncated (UA1 audit M-4).'
+			);
 			return;
 		}
 
-		if ($resolved instanceof PdfArray) {
-			foreach ($resolved->value as $entry) {
-				if (count($candidates) >= $limit) {
+		// Cycle detection — same indirect-object-number strategy as
+		// cloneElement() (FPDI does not cache resolved indirect objects, so
+		// spl_object_id of the resolved dict is unstable across calls).
+		$refKey = null;
+		if ($node instanceof PdfIndirectObjectReference) {
+			$refKey = 'ref:' . (int) $node->value;
+			if (isset($this->sanityVisited[$refKey])) {
+				return;
+			}
+			$this->sanityVisited[$refKey] = true;
+		}
+
+		try {
+			try {
+				$resolved = PdfType::resolve($node, $parser);
+			} catch (\Exception $e) {
+				return;
+			}
+
+			if ($resolved instanceof PdfArray) {
+				foreach ($resolved->value as $entry) {
+					if (count($candidates) >= $limit || $this->sanityAborted) {
+						return;
+					}
+					$this->collectSanityCandidates($entry, $parser, $candidates, $limit, $depth + 1);
+				}
+				return;
+			}
+
+			if (!($resolved instanceof PdfDictionary)) {
+				return;
+			}
+
+			$inlineKey = null;
+			if ($refKey === null) {
+				$inlineKey = 'obj:' . spl_object_id($resolved);
+				if (isset($this->sanityVisited[$inlineKey])) {
 					return;
 				}
-				$this->collectSanityCandidates($entry, $parser, $candidates, $limit);
+				$this->sanityVisited[$inlineKey] = true;
 			}
-			return;
-		}
 
-		if (!($resolved instanceof PdfDictionary)) {
-			return;
+			try {
+				$this->collectSanityCandidatesInner($resolved, $parser, $candidates, $limit, $depth);
+			} finally {
+				if ($inlineKey !== null) {
+					unset($this->sanityVisited[$inlineKey]);
+				}
+			}
+		} finally {
+			if ($refKey !== null) {
+				unset($this->sanityVisited[$refKey]);
+			}
 		}
+	}
+
+	private function collectSanityCandidatesInner($resolved, $parser, &$candidates, $limit, $depth)
+	{
 
 		// Skip MCR / OBJR — they cannot carry text-string attributes.
 		try {
@@ -745,10 +885,10 @@ class FpdiStructMerger
 				$kResolved = PdfType::resolve($kRef, $parser);
 				$kids      = $this->normaliseKidsToArray($kResolved, $parser);
 				foreach ($kids as $kid) {
-					if (count($candidates) >= $limit) {
+					if (count($candidates) >= $limit || $this->sanityAborted) {
 						return;
 					}
-					$this->collectSanityCandidates($kid, $parser, $candidates, $limit);
+					$this->collectSanityCandidates($kid, $parser, $candidates, $limit, $depth + 1);
 				}
 			}
 		} catch (\Exception $e) {
@@ -931,18 +1071,101 @@ class FpdiStructMerger
 	 * @param  string               $pageId          FPDI page identifier for MCR slot recording
 	 * @return StructureElement|null  the created host element, or null if the source was not a struct elem
 	 */
-	private function cloneElement($sourceElem, $parser, $hostParent, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId = '')
+	private function cloneElement($sourceElem, $parser, $hostParent, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId = '', $depth = 0)
 	{
-		try {
-			$resolved = PdfType::resolve($sourceElem, $parser);
-		} catch (\Exception $e) {
+		// UA1 audit H-2 / M-4 — per-import cycle, depth, and node-count guards.
+		// Once aborted, fall through every nested call so the merger unwinds
+		// quickly rather than continuing to walk a malicious source PDF.
+		if ($this->cloneAborted) {
+			return null;
+		}
+		if ($depth > self::MAX_RECURSION_DEPTH) {
+			$this->cloneAborted = true;
+			$this->addUntaggedWarning(
+				'Imported PDF struct subtree depth exceeded '
+				. self::MAX_RECURSION_DEPTH
+				. '; merge truncated to prevent stack exhaustion (UA1 audit H-2).'
+			);
+			return null;
+		}
+		$this->cloneNodeCount++;
+		if ($this->cloneNodeCount > self::NODE_BUDGET) {
+			$this->cloneAborted = true;
+			$this->addUntaggedWarning(
+				'Imported PDF struct subtree exceeded '
+				. self::NODE_BUDGET
+				. ' nodes; merge truncated (UA1 audit M-4).'
+			);
 			return null;
 		}
 
-		if (!($resolved instanceof PdfDictionary)) {
-			// Could be a bare integer MCID or an OBJR dict — skip.
-			return null;
+		// Cycle detection key — prefer the indirect-object number when we have
+		// one, falling back to spl_object_id of the resolved dict otherwise.
+		// FPDI's PdfParser::getIndirectObject() does NOT cache by default, so
+		// the same indirect ref produces a fresh PdfDictionary on each call;
+		// tracking by spl_object_id alone fails the cycle case (UA1 audit H-2).
+		$visitedKey = null;
+		if ($sourceElem instanceof PdfIndirectObjectReference) {
+			$visitedKey = 'ref:' . (int) $sourceElem->value;
+			if (isset($this->cloneVisited[$visitedKey])) {
+				$this->addUntaggedWarning(
+					'Cycle detected in imported PDF struct subtree at object '
+					. (int) $sourceElem->value . '; subtree truncated (UA1 audit H-2).'
+				);
+				return null;
+			}
+			$this->cloneVisited[$visitedKey] = true;
 		}
+
+		try {
+			try {
+				$resolved = PdfType::resolve($sourceElem, $parser);
+			} catch (\Exception $e) {
+				return null;
+			}
+
+			if (!($resolved instanceof PdfDictionary)) {
+				// Could be a bare integer MCID or an OBJR dict — skip.
+				return null;
+			}
+
+			// Defence-in-depth: if the source was already an inline dict (no
+			// indirect ref), use the resolved dict's object identity. Inline
+			// cycles cannot exist in valid PDF, so this only matters for
+			// hand-crafted adversarial input.
+			$inlineKey = null;
+			if ($visitedKey === null) {
+				$inlineKey = 'obj:' . spl_object_id($resolved);
+				if (isset($this->cloneVisited[$inlineKey])) {
+					$this->addUntaggedWarning(
+						'Cycle detected in imported PDF struct subtree; subtree truncated (UA1 audit H-2).'
+					);
+					return null;
+				}
+				$this->cloneVisited[$inlineKey] = true;
+			}
+
+			try {
+				return $this->cloneElementInner($resolved, $parser, $hostParent, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId, $depth);
+			} finally {
+				if ($inlineKey !== null) {
+					unset($this->cloneVisited[$inlineKey]);
+				}
+			}
+		} finally {
+			if ($visitedKey !== null) {
+				unset($this->cloneVisited[$visitedKey]);
+			}
+		}
+	}
+
+	/**
+	 * Inner body of cloneElement() — separated so the cycle-tracking try/finally
+	 * stays a thin wrapper. $resolved is guaranteed to be a non-MCR / non-OBJR
+	 * struct-element dict by the cycle-tracking entry point above.
+	 */
+	private function cloneElementInner($resolved, $parser, $hostParent, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId, $depth)
+	{
 
 		// Check /Type — struct elements have no /Type or /Type /StructElem.
 		// MCR dicts have /Type /MCR; OBJR dicts have /Type /OBJR — skip those.
@@ -1039,6 +1262,9 @@ class FpdiStructMerger
 				$kids = $this->normaliseKidsToArray($kResolved, $parser);
 
 				foreach ($kids as $kid) {
+					if ($this->cloneAborted) {
+						break;
+					}
 					try {
 						$kidResolved = PdfType::resolve($kid, $parser);
 					} catch (\Exception $e) {
@@ -1085,7 +1311,7 @@ class FpdiStructMerger
 							}
 						} elseif ($kidType !== 'OBJR') {
 							// Nested struct element — recurse.
-							$this->cloneElement($kid, $parser, $hostElem, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId);
+							$this->cloneElement($kid, $parser, $hostElem, $structParents, $foXObjectObjNum, $hostPageObjNum, $pageId, $depth + 1);
 						}
 					}
 				}
