@@ -70,6 +70,18 @@ class MarkedContentHelper
 	 */
 	public function begin($structType, $mcid, $altText = null)
 	{
+		// UA1 audit I-1 — assert the BDC tag is a known PDF/UA struct type.
+		// $mcid === -1 is the Artifact sentinel and emits /Artifact BMC, so
+		// $structType is unused on that branch. assert() is compiled out in
+		// production (zend.assertions=-1), so the cost is zero off the
+		// development path; in dev/CI it catches tag handlers that hand the
+		// helper a misspelled or non-standard struct type before the bytes
+		// land in the content stream where they would silently fail veraPDF
+		// (Matterhorn 01-006 / 09-001).
+		assert(
+			$mcid === -1 || StructType::isValid($structType),
+			'MarkedContentHelper::begin(): structType "' . $structType . '" is not a valid PDF/UA struct type'
+		);
 		if ($mcid === -1) {
 			// ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no property dict).
 			$this->writer->write('/Artifact BMC');
