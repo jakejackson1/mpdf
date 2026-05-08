@@ -365,4 +365,20 @@ class UaState
 	{
 		return $this->structParentsCounter++;
 	}
+
+	/**
+	 * Read the current /StructParents counter without advancing it.
+	 *
+	 * Returned value equals the integer that the next nextStructParents()
+	 * call would emit. Used as an upper bound for sanity-checking caller-
+	 * supplied /StructParents indices (UA1 audit L-1 — defence-in-depth in
+	 * StructureTree::addContent so an out-of-range $structParentsIndex
+	 * cannot silently corrupt the ParentTree).
+	 *
+	 * @return int
+	 */
+	public function peekStructParents()
+	{
+		return $this->structParentsCounter;
+	}
 }

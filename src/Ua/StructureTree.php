@@ -305,6 +305,23 @@ class StructureTree
 				'structParentsIndex must be a non-negative integer'
 			);
 		}
+		// UA1 audit L-1 — upper-bound sanity. /StructParents integers are
+		// allocated monotonically from UaState::nextStructParents(), so any
+		// value at or above the current counter has not been allocated and
+		// would silently extend $parentTree past its dense-key invariant.
+		// No untrusted reach is known today; the guard is defence-in-depth
+		// against future tag-handler regressions or test fixtures that build
+		// the index by hand. UaState is null only during ServiceFactory
+		// bootstrap; callers reach addContent() after wiring is complete.
+		if ($this->uaState !== null) {
+			$ceiling = $this->uaState->peekStructParents();
+			if ($structParentsIndex >= $ceiling) {
+				throw new \Mpdf\Exception\InvalidArgumentException(
+					'structParentsIndex ' . $structParentsIndex
+					. ' is outside the allocated range [0, ' . $ceiling . ')'
+				);
+			}
+		}
 		if ($this->isInArtifact()) {
 			return $this->addArtifact();
 		}
@@ -328,6 +345,21 @@ class StructureTree
 	 */
 	public function addContentForElement(StructureElement $elem, $structParentsIndex)
 	{
+		if (!is_int($structParentsIndex) || $structParentsIndex < 0) {
+			throw new \Mpdf\Exception\InvalidArgumentException(
+				'structParentsIndex must be a non-negative integer'
+			);
+		}
+		// UA1 audit L-1 — see addContent() for rationale.
+		if ($this->uaState !== null) {
+			$ceiling = $this->uaState->peekStructParents();
+			if ($structParentsIndex >= $ceiling) {
+				throw new \Mpdf\Exception\InvalidArgumentException(
+					'structParentsIndex ' . $structParentsIndex
+					. ' is outside the allocated range [0, ' . $ceiling . ')'
+				);
+			}
+		}
 		if ($this->isInArtifact()) {
 			return -1;
 		}
