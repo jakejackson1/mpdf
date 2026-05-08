@@ -70,6 +70,8 @@
 		"cs": "@php vendor/bin/phpcs --report-width=160 --standard=ruleset.xml --severity=1 --warning-severity=0 --extensions=php src utils tests",
         "cs:fix": "@php vendor/bin/phpcbf --standard=ruleset.xml --extensions=php src utils tests",
 		"test": "@php vendor/bin/phpunit",
+		"test:security": "@php vendor/bin/phpunit --group=security --no-coverage",
+		"audit:deps": "@composer audit --no-interaction",
 		"coverage": "@php vendor/bin/phpunit --coverage-text"
 	},
 	"config": {

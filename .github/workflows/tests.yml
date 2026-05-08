@@ -55,6 +55,42 @@ jobs:
       - name: "Tests"
         run: composer test
 
+  security:
+
+    name: "Security tests + composer audit"
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+
+      - name: "Install PHP 8.3"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          coverage: "none"
+          php-version: "8.3"
+          extensions: "mbstring, gd, bcmath, bz2"
+          tools: composer:v2
+          ini-values: error_reporting=-1, zend.assertions=1, assert.exception=1
+
+      - name: "Install dependencies"
+        run: "composer install --no-interaction --no-progress"
+
+      # UA1 audit I-3 — fail the build on any reported advisory in
+      # composer.lock dependencies. composer audit exits non-zero when an
+      # entry in the audit database matches an installed package version.
+      - name: "composer audit (dependency advisories)"
+        run: composer audit --no-interaction
+
+      # UA1 audit I-3 — dedicated run for tests/Mpdf/Ua/Security/. The
+      # group is included in the default test job too, but a separate
+      # job makes regressions visible at a glance in the CI checks list
+      # and lets us turn on assert.exception=1 only here so the assert()
+      # bodies in MarkedContentHelper / StructureWriter actually fire.
+      - name: "Security PHPUnit suite"
+        run: vendor/bin/phpunit --group=security --no-coverage
+
   verapdf:
 
     name: "veraPDF PDF/UA-1 conformance"
