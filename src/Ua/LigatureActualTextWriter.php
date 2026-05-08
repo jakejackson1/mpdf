@@ -111,6 +111,21 @@ class LigatureActualTextWriter
 		// UTF-16BE Byte Order Mark (U+FEFF).
 		$hex = 'FEFF';
 		foreach ($codepoints as $cp) {
+			// UA1 audit L-4 — clamp codepoints to the Unicode scalar range.
+			// Lone surrogates (U+D800..U+DFFF) and out-of-range integers
+			// produce malformed UTF-16BE that breaks AT extraction
+			// (Matterhorn 24-001) and the UTF-16 round-trip itself. Negative
+			// or > 0x10FFFF inputs reach this method only via a font-data
+			// regression today, but the clamp closes a subtle accessibility
+			// failure with no meaningful cost.
+			if (!is_int($cp) || $cp < 0 || $cp > 0x10FFFF
+				|| ($cp >= 0xD800 && $cp <= 0xDFFF)
+			) {
+				// U+FFFD REPLACEMENT CHARACTER preserves byte alignment so
+				// downstream offsets stay correct.
+				$hex .= 'FFFD';
+				continue;
+			}
 			if ($cp < 0x10000) {
 				// BMP codepoint: 2 bytes in UTF-16BE.
 				$hex .= sprintf('%04X', $cp);
