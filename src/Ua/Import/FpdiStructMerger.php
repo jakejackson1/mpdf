@@ -1235,14 +1235,24 @@ class FpdiStructMerger
 						// silently corrupts a screen-reader-relevant attribute on a
 						// single struct element. Escalate so the caller knows which
 						// element/attribute is at fault rather than shipping a half-
-						// blank /Alt downstream. Auto mode (and the default historical
-						// behaviour) keeps the attribute unset and proceeds.
+						// blank /Alt downstream.
 						throw new \Mpdf\MpdfException(
 							'Imported PDF struct element /S /' . $hostType
 							. ' carries an undecodable /' . $attrKey . ' attribute '
 							. '(ISO 32000-1:2008 §7.9.2.2). Decrypt or sanitise the '
 							. 'source upstream, or enable PDFUAauto to skip the failed '
 							. 'attribute (Matterhorn 01-007).'
+						);
+					} else {
+						// UA1 audit L-3 — auto mode previously dropped the
+						// attribute silently, masking a Matterhorn 13-004 /
+						// 01-007 violation. Surface a warning via
+						// getPdfUaWarnings() so producers can investigate.
+						$this->addUntaggedWarning(
+							'Imported PDF struct element /S /' . $hostType
+							. ' carries an undecodable /' . $attrKey . ' attribute '
+							. '(ISO 32000-1:2008 §7.9.2.2); attribute dropped under '
+							. 'PDFUAauto. Matterhorn 13-004 / 01-007.'
 						);
 					}
 				}
