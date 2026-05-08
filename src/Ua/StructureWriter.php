@@ -285,8 +285,24 @@ class StructureWriter
 		// already passed through StructureElement::sanitiseIdForPdf(), so the byte
 		// sequence is restricted to PDF-name-safe chars and survives both
 		// (...) byte-string and /... name-object emission identically.
+		//
+		// UA1 audit I-2 — assert the stored /ID lives in the sanitiseIdForPdf()
+		// codomain: ASCII bytes from the safe set [a-z0-9_.-#] plus '%' is
+		// excluded, length ≤ 127 (ISO 32000-1 §7.3.5). sanitiseIdForPdf() itself
+		// is not idempotent — it would re-escape any '#' in already-sanitised
+		// input — so we cannot assert sanitise(x) === x. The codomain check
+		// still catches raw HTML ids that bypassed the canonical sanitiser
+		// before landing in /Headers cross-references where a silent rename
+		// would corrupt Matterhorn 09-002 / 09-004 / 14-005.
 		if ($elem->getId() !== null) {
-			$this->writer->write('/ID (' . $elem->getId() . ')');
+			$id = $elem->getId();
+			assert(
+				is_string($id)
+					&& strlen($id) <= 127
+					&& preg_match('/\A[a-z0-9_.\-#]*\z/', $id) === 1,
+				'StructureWriter: stored /ID is outside sanitiseIdForPdf() codomain: ' . var_export($id, true)
+			);
+			$this->writer->write('/ID (' . $id . ')');
 		}
 
 		// Direct dict keys: /Alt, /ActualText, /Lang, /E, /T are written directly
