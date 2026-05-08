@@ -302,13 +302,33 @@ class ImageMapRegistry
 			$href = $area['href'];
 			if (isset($href[0]) && $href[0] === '#') {
 				$target = substr($href, 1);
+				// UA1 audit L-6 — defence-in-depth iteration cap. Each
+				// iteration prepends a '#' so the loop terminates as soon as
+				// the prefixed key is unused; an adversarial $internallink
+				// shape could in theory keep extending it. 1024 prefix chars
+				// is far past any realistic anchor-name collision and well
+				// below memory pressure.
+				$collisionGuard = 0;
 				while (array_key_exists($target, $this->mpdf->internallink)) {
 					$target = '#' . $target;
+					if (++$collisionGuard >= 1024) {
+						$this->warn(
+							'PDF/UA-1: <area href="#' . substr($area['href'], 1)
+							. '"> internal-link disambiguation exceeded 1024 '
+							. 'iterations; emitting external link instead.'
+						);
+						$target = null;
+						break;
+					}
 				}
-				if (!isset($this->mpdf->internallink[$target])) {
-					$this->mpdf->internallink[$target] = $this->mpdf->AddLink();
+				if ($target === null) {
+					$linkRef = $href;
+				} else {
+					if (!isset($this->mpdf->internallink[$target])) {
+						$this->mpdf->internallink[$target] = $this->mpdf->AddLink();
+					}
+					$linkRef = $this->mpdf->internallink[$target];
 				}
-				$linkRef = $this->mpdf->internallink[$target];
 			} else {
 				$linkRef = $href;
 			}
