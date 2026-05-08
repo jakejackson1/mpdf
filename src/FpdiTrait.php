@@ -265,13 +265,43 @@ trait FpdiTrait
 			return 'resource:' . (string) $file;
 		}
 		if (is_string($file)) {
-			$rp = @realpath($file);
-			return 'file:' . ($rp !== false ? $rp : $file);
+			// UA1 audit L-5 — synthesise a stable, non-leaking key. The full
+			// resolved path used to surface in synthetic pageIds (and any
+			// warning that quoted them), exposing $_SERVER['DOCUMENT_ROOT']
+			// or container internals to PDF consumers. Hash the canonical
+			// path for the matching identity, but only emit a redacted
+			// human-readable hint (basename) so logs still carry context.
+			$rp     = @realpath($file);
+			$canon  = $rp !== false ? $rp : $file;
+			$digest = substr(sha1($canon), 0, 12);
+			return 'file:' . $this->redactPath($canon) . '@' . $digest;
 		}
 		if (is_object($file)) {
 			return 'object:' . spl_object_hash($file);
 		}
 		return 'unknown:' . gettype($file);
+	}
+
+	/**
+	 * Redact a filesystem path for inclusion in user-facing diagnostics.
+	 *
+	 * Returns the basename only; absolute paths leak deployment topology
+	 * (web root, container layout, build paths) when warnings are surfaced
+	 * to PDF consumers via getPdfUaWarnings(). Empty / non-string inputs
+	 * round-trip as the empty string.
+	 *
+	 * UA1 audit I-6 — structural guarantee that future warning sites
+	 * cannot regress past path redaction.
+	 *
+	 * @param  mixed $path
+	 * @return string
+	 */
+	private function redactPath($path)
+	{
+		if (!is_string($path) || $path === '') {
+			return '';
+		}
+		return basename($path);
 	}
 
 	/**
