@@ -1382,16 +1382,25 @@ class FpdiStructMerger
 			// Hex literal: pairs of hex digits → raw bytes. Whitespace is legal
 			// between digits per ISO 32000-1 §7.3.4.3 and must be stripped.
 			$hex = preg_replace('/\s+/', '', (string) $node->value);
-			if ($hex === '' || strlen($hex) % 2 !== 0) {
-				if (strlen($hex) % 2 === 1) {
-					// Odd-length hex string is implicitly padded with 0.
-					$hex .= '0';
-				} else {
-					return '';
-				}
+			if ($hex === '') {
+				return '';
 			}
-			$raw = @pack('H*', $hex);
-			if ($raw === false) {
+			// ISO 32000-1 §7.3.4.3 — odd-length hex strings are implicitly
+			// padded with a trailing '0'. Apply that pad first so the length
+			// validation below sees the same shape pack() will receive.
+			if (strlen($hex) % 2 === 1) {
+				$hex .= '0';
+			}
+			// UA1 audit L-2 — pack('H*') with non-hex bytes prints a PHP
+			// warning to stderr and returns garbage prior to PHP 8.0; on PHP
+			// 8.0+ it throws a ValueError. Validate before calling, drop the
+			// `@` silencing, and return null on any anomaly so callers can
+			// surface it via the strict-mode escalation path.
+			if (!preg_match('/\A[0-9A-Fa-f]+\z/', $hex)) {
+				return null;
+			}
+			$raw = pack('H*', $hex);
+			if ($raw === false || $raw === '') {
 				return null;
 			}
 		} elseif ($node instanceof PdfString) {
