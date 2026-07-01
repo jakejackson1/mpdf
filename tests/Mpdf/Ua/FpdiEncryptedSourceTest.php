@@ -261,6 +261,38 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Regression: an encrypted source set *before* a valid one must not blank the
+	 * later valid import. importPage() reads from the most recently set source, so
+	 * the Tier 0 placeholder decision keys on that source — not on whichever source
+	 * was most recently *flagged* encrypted. Before the fix a valid page imported
+	 * after any encrypted source was silently replaced by a placeholder (data loss).
+	 */
+	public function testEncryptedSourceDoesNotBlankLaterValidImport()
+	{
+		$this->encryptedPdf   = $this->makeEncryptedPdf();
+		$this->cleanTaggedPdf = $this->makeCleanTaggedPdf();
+
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf->setSourceFile($this->encryptedPdf);   // flagged encrypted (auto mode)
+		$mpdf->setSourceFile($this->cleanTaggedPdf); // valid — now the active source
+		$pageId = $mpdf->importPage(1);
+
+		$this->assertFalse(
+			$mpdf->isEncryptedPlaceholder($pageId),
+			'a valid source imported after an encrypted one must not become a Tier 0 placeholder'
+		);
+		$this->assertStringNotContainsString(
+			\Mpdf\Ua\Import\FpdiStructMerger::ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX,
+			$pageId,
+			'the valid import must return a real Form XObject id, not an encrypted placeholder'
+		);
+		$this->assertTrue(
+			$mpdf->getPdfUaFpdiStructMerger()->verifyAndPrepareMerge($pageId),
+			'the valid source after an encrypted one must still merge as a real tagged page'
+		);
+	}
+
+	/**
 	 * Importing an encrypted PDF in strict PDFUA mode throws \Mpdf\MpdfException.
 	 *
 	 * The throw happens at setSourceFile() time because the FPDI parser hits

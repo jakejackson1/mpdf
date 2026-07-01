@@ -75,6 +75,19 @@ trait FpdiTrait
 	 */
 	protected $encryptedSourceFiles = [];
 
+	/**
+	 * Key (encryptedSourceKey() shape) of the source passed to the most recent
+	 * setSourceFile() call, whether it succeeded or was flagged encrypted.
+	 *
+	 * importPage() reads from whichever source was set last, so this — not the
+	 * most-recently-*flagged* key — is what decides the Tier 0 placeholder path.
+	 * Using the last-flagged key instead would blank every later import from a
+	 * valid source once any earlier source was encrypted.
+	 *
+	 * @var string|null
+	 */
+	protected $lastSetSourceKey = null;
+
 	protected function setPageFormat($format, $orientation)
 	{
 		// in mPDF this needs to be "P" (why ever)
@@ -156,7 +169,11 @@ trait FpdiTrait
 	public function setSourceFile($file)
 	{
 		try {
-			return $this->fpdiSetSourceFile($file);
+			$pageCount = $this->fpdiSetSourceFile($file);
+			if ($this->PDFUA) {
+				$this->lastSetSourceKey = $this->encryptedSourceKey($file);
+			}
+			return $pageCount;
 		} catch (CrossReferenceException $e) {
 			if ($e->getCode() !== CrossReferenceException::ENCRYPTED) {
 				throw $e;
@@ -182,7 +199,11 @@ trait FpdiTrait
 	public function setSourceFileWithParserParams($file, array $parserParams = [])
 	{
 		try {
-			return $this->fpdiSetSourceFileWithParserParams($file, $parserParams);
+			$pageCount = $this->fpdiSetSourceFileWithParserParams($file, $parserParams);
+			if ($this->PDFUA) {
+				$this->lastSetSourceKey = $this->encryptedSourceKey($file);
+			}
+			return $pageCount;
 		} catch (CrossReferenceException $e) {
 			if ($e->getCode() !== CrossReferenceException::ENCRYPTED) {
 				throw $e;
@@ -230,6 +251,7 @@ trait FpdiTrait
 		// spl_object_hash() / resource id (matches FPDI's getPdfReaderId logic).
 		$key = $this->encryptedSourceKey($file);
 		$this->encryptedSourceFiles[$key] = true;
+		$this->lastSetSourceKey = $key;
 
 		// Surface a UA-aware warning at this stage so callers inspecting
 		// getPdfUaWarnings() after Output() see the encrypted-source diagnostic
@@ -534,16 +556,17 @@ trait FpdiTrait
 	 */
 	public function importPage($pageNumber, $box = PageBoundaries::CROP_BOX, $groupXObject = true)
 	{
-		// PDF/UA-1 Tier 0 fast path — if setSourceFile() previously caught a
-		// CrossReferenceException::ENCRYPTED for the current source in auto mode,
-		// the FPDI parser was never wired up (currentReaderId may still be set
-		// to the file, but the trailer was never loaded). Synthesise a placeholder
-		// pageId without re-attempting fpdiImportPage(), which would re-throw.
-		if ($this->PDFUA && !empty($this->encryptedSourceFiles)) {
-			$activeKey = $this->currentEncryptedSourceKey();
-			if ($activeKey !== null && isset($this->encryptedSourceFiles[$activeKey])) {
-				return $this->handleEncryptedImportInUaMode($pageNumber, $activeKey);
-			}
+		// PDF/UA-1 Tier 0 fast path — if the source set by the most recent
+		// setSourceFile() was caught as CrossReferenceException::ENCRYPTED in auto
+		// mode, its parser was never wired up. Synthesise a placeholder pageId
+		// without re-attempting fpdiImportPage(), which would re-throw. Keying on
+		// the last-set source (not the last-flagged one) is what stops a valid
+		// import that follows an encrypted one from being blanked.
+		if ($this->PDFUA
+			&& $this->lastSetSourceKey !== null
+			&& isset($this->encryptedSourceFiles[$this->lastSetSourceKey])
+		) {
+			return $this->handleEncryptedImportInUaMode($pageNumber, $this->lastSetSourceKey);
 		}
 
 		try {
@@ -551,8 +574,12 @@ trait FpdiTrait
 		} catch (CrossReferenceException $e) {
 			if ($this->PDFUA && $e->getCode() === CrossReferenceException::ENCRYPTED) {
 				// Late-detected encryption — vendor parser threw during page parse
-				// rather than during setSourceFile(). Reuse the same Tier 0 path.
-				return $this->handleEncryptedImportInUaMode($pageNumber, $this->currentEncryptedSourceKey());
+				// rather than during setSourceFile(). Flag the active source and
+				// reuse the same Tier 0 path.
+				if ($this->lastSetSourceKey !== null) {
+					$this->encryptedSourceFiles[$this->lastSetSourceKey] = true;
+				}
+				return $this->handleEncryptedImportInUaMode($pageNumber, $this->lastSetSourceKey);
 			}
 			throw $e;
 		}
@@ -560,30 +587,6 @@ trait FpdiTrait
 		$this->importedPages[$pageId]['externalLinks'] = $this->getImportedExternalPageLinks($pageNumber);
 
 		return $pageId;
-	}
-
-	/**
-	 * Identify the source-file key for the currently-active FPDI reader, if any.
-	 *
-	 * Used by importPage() to determine whether the in-flight setSourceFile() call
-	 * was rejected as encrypted (auto mode). Returns the same string shape as
-	 * encryptedSourceKey() so the lookup against $encryptedSourceFiles is direct.
-	 *
-	 * Falls back to the most-recently-flagged key when the reader id is not
-	 * resolvable, on the assumption that the immediately-preceding setSourceFile()
-	 * is the source under test (this matches the typical mPDF usage pattern of
-	 * one setSourceFile + one importPage per template).
-	 *
-	 * @return string|null
-	 */
-	private function currentEncryptedSourceKey()
-	{
-		if (empty($this->encryptedSourceFiles)) {
-			return null;
-		}
-		// Most recently inserted key — PHP arrays preserve insertion order.
-		$keys = array_keys($this->encryptedSourceFiles);
-		return end($keys);
 	}
 
 	/**
