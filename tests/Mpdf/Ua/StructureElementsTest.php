@@ -104,6 +104,26 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A <dl> nested inside a <dd> must get its own implicit LI, independent of
+	 * the outer list. Each <dl> level owns its implicit-LI frame, so both the
+	 * outer and inner definition pairs produce an LI — two /S /LI total. Before
+	 * the per-<dl> frame fix the inner <dt> closed the inner L instead of a
+	 * previous implicit LI, dropping the inner LI and nesting Lbl/LBody directly
+	 * under L (veraPDF clause 7.2 test 18: "LBody should be contained in LI").
+	 */
+	public function testNestedDefinitionListCreatesImplicitLiPerLevel()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<dl><dt>Outer term</dt><dd>Outer def'
+			. '<dl><dt>Inner term</dt><dd>Inner def</dd></dl>'
+			. '</dd></dl>'
+		);
+		$this->assertSame(2, substr_count($output, '/S /LI'), 'each <dl> level must contribute its own implicit LI');
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
 	 * <abbr title="HyperText Markup Language">HTML</abbr> produces Span struct element
 	 * with /E expansion text.
 	 */

@@ -71,16 +71,21 @@ class UaState
 	protected $structTreeRootObjNum = 0;
 
 	/**
-	 * True while a DT or DD tag handler has auto-opened an implicit LI parent
-	 * because the DOM structure is <dl><dt>…</dt><dd>…</dd></dl> (no explicit
-	 * LI in HTML). Closed on the next sibling DT/DD or on </dl>.
+	 * Per-<dl> stack of "implicit LI open" booleans. Each <dl> pushes a frame on
+	 * open and pops it on close; DT/DD read and set only the top frame. A single
+	 * shared bool would corrupt nested <dl> (a <dl> inside a <dd>): the inner
+	 * <dt> would close the outer list's implicit LI instead of its own.
+	 *
+	 * A frame is true while a DT or DD has auto-opened an implicit LI parent
+	 * because the DOM is <dl><dt>…</dt><dd>…</dd></dl> (no explicit LI in HTML);
+	 * that LI is closed on the next sibling DT, or on </dl>.
 	 *
 	 * Tagged PDF Best Practice Guide §4.2.3 — DL maps to L, DT to Lbl, DD to
 	 * LBody; Lbl/LBody must be children of an LI.
 	 *
-	 * @var bool
+	 * @var bool[]
 	 */
-	protected $openedImplicitLI = false;
+	protected $implicitLIStack = [];
 
 	/**
 	 * The last heading level (1-6) emitted into the struct tree, or 0 if no
@@ -214,13 +219,36 @@ class UaState
 	}
 
 	/**
-	 * Return whether a DT/DD tag has auto-opened an implicit LI on the struct stack.
+	 * Return whether the current <dl> has an implicit LI open (top frame), or
+	 * false when no <dl> is open.
 	 *
 	 * @return bool
 	 */
 	public function isOpenedImplicitLI()
 	{
-		return $this->openedImplicitLI;
+		return !empty($this->implicitLIStack) && end($this->implicitLIStack);
+	}
+
+	/**
+	 * Push a fresh implicit-LI frame for a newly opened <dl>. Balanced by
+	 * popImplicitLIFrame() on </dl>.
+	 *
+	 * @return void
+	 */
+	public function pushImplicitLIFrame()
+	{
+		$this->implicitLIStack[] = false;
+	}
+
+	/**
+	 * Pop the current <dl>'s implicit-LI frame on </dl>. No-op if the stack is
+	 * empty (malformed </dl> without a matching <dl>).
+	 *
+	 * @return void
+	 */
+	public function popImplicitLIFrame()
+	{
+		array_pop($this->implicitLIStack);
 	}
 
 	/** @return MarkedContentHelper */
@@ -292,17 +320,21 @@ class UaState
 	}
 
 	/**
-	 * Mark / unmark whether a DT/DD tag has opened an implicit LI parent.
+	 * Mark / unmark whether the current <dl> (top frame) has an implicit LI open.
 	 *
 	 * Called from DT/DD open handlers when the current struct parent is L
-	 * (so no explicit LI is on the stack); cleared by the matching close.
+	 * (so no explicit LI is on the stack); cleared by the matching close. No-op
+	 * when no <dl> frame is open.
 	 *
 	 * @param  bool $v
 	 * @return void
 	 */
 	public function setOpenedImplicitLI($v)
 	{
-		$this->openedImplicitLI = (bool) $v;
+		if (empty($this->implicitLIStack)) {
+			return;
+		}
+		$this->implicitLIStack[count($this->implicitLIStack) - 1] = (bool) $v;
 	}
 
 	/**

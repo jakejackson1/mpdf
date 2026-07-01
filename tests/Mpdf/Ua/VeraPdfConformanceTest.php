@@ -107,6 +107,26 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A <dl> nested inside a <dd> must pass ua1. Each <dl> level owns its own
+	 * implicit-LI frame, so the inner definition pair nests under its own LI
+	 * rather than leaking Lbl/LBody as bare children of L (which veraPDF flags
+	 * as clause 7.2 test 18 — "LBody should be contained in LI").
+	 *
+	 * @return void
+	 */
+	public function testNestedDefinitionListPassesUa1()
+	{
+		$html = '<h1>Glossary</h1>'
+			. '<dl><dt>Outer term</dt><dd>Outer definition'
+			. '<dl><dt>Inner term</dt><dd>Inner definition</dd></dl>'
+			. '</dd></dl>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'nested definition list');
+	}
+
+	/**
 	 * Test that a document with a complex table passes ua1.
 	 *
 	 * Exercises Table/THead/TBody/TR/TH/TD struct elements, /Scope attribute
