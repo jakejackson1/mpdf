@@ -169,6 +169,7 @@ class A extends Tag
 			if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
 				$structAttrs['Alt'] = $attr['ARIA-LABEL'];
 			}
+			$spanDepth = 0;
 			if (!empty($structAttrs)) {
 				$this->ua->getStructureTree()->open('Span', $structAttrs);
 				$elem = $this->ua->getStructureTree()->getCurrent();
@@ -182,7 +183,13 @@ class A extends Tag
 					}
 				}
 				$this->ua->getAnchorState()->setAnchorStructType('Span');
+				$spanDepth = 1;
 			}
+			// close() pops exactly one strip frame per PDFUA <a>; push one here so
+			// the pop is balanced. A depth-0 frame (no Span opened) pops nothing
+			// off the struct tree — without it, close() would pop a frame belonging
+			// to a different anchor, or leak this branch's Span onto the stack.
+			$this->ua->getAnchorState()->pushStripFrame(true, $spanDepth);
 		}
 	}
 

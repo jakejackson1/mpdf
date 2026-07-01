@@ -269,6 +269,36 @@ class HighBugRegressionsTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Regression: a non-hyperlink `<a name="x" lang="fr">` opens a Span to host
+	 * its /Lang, but Tag\A::open() previously pushed no strip frame, so
+	 * Tag\A::close() never popped that Span off the struct-element stack. The
+	 * leaked Span then swallowed every following block: the second `<p>` nested
+	 * inside the first instead of being its sibling, corrupting reading order.
+	 *
+	 * The corruption is invisible to veraPDF (P-inside-P is not a UA-1
+	 * violation), so this asserts the in-memory struct tree directly: both
+	 * paragraphs must be direct children of the Document root.
+	 */
+	public function testNonHyperlinkAnchorSpanDoesNotLeakIntoFollowingBlocks()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->WriteHTML('<h1>Heading</h1><p>x <a name="a" lang="fr">y</a> z</p><p>second</p>');
+
+		$topLevelParagraphs = 0;
+		foreach ($mpdf->getPdfUaStructureTree()->getRoot()->getChildren() as $child) {
+			if ($child->getType() === 'P') {
+				$topLevelParagraphs++;
+			}
+		}
+
+		$this->assertSame(
+			2,
+			$topLevelParagraphs,
+			'both <p> elements must be siblings under Document; a leaked anchor Span nests the second inside the first'
+		);
+	}
+
+	/**
 	 * Locked-in regression for the residual empty-link throw path: a
 	 * non-empty `href` whose body produces no MCRs and no OBJR refs is still
 	 * a Matterhorn 02-003 violation and must throw in strict mode.
