@@ -322,6 +322,13 @@ class LigatureActualTextTest extends PdfUaTestCase
 	 * This test proves the gate is real: the same fi-ligature word 'find' with
 	 * the same OTL-enabled font must produce zero /Span /ActualText wrappers
 	 * in a non-PDFUA document.
+	 *
+	 * It also guards the D1 side-effect fix: recording ligature_source is now
+	 * gated on PDFUA. Doing it unconditionally forced a (previously-empty)
+	 * GPOSinfo onto every ligature, pushing non-PDFUA runs off the Tj fast path
+	 * onto applyGPOSpdf's TJ path (render routing keys on
+	 * !empty($OTLdata['GPOSinfo'])). Outside PDFUA the ligature must therefore
+	 * still render via a simple Tj show operator.
 	 */
 	public function testNoWrapperWhenPdfuaDisabled()
 	{
@@ -340,6 +347,19 @@ class LigatureActualTextTest extends PdfUaTestCase
 			'/Span <</ActualText',
 			$pdf,
 			'ActualText wrappers must not appear when PDFUA mode is disabled'
+		);
+
+		// D1: the ligature must not be forced onto the applyGPOSpdf TJ path by a
+		// phantom GPOSinfo — it renders via the Tj fast path outside PDFUA.
+		$this->assertSame(
+			0,
+			substr_count($pdf, ' TJ'),
+			'a non-PDFUA ligature must not be pushed onto the TJ path by a phantom GPOSinfo'
+		);
+		$this->assertGreaterThanOrEqual(
+			1,
+			substr_count($pdf, ' Tj'),
+			'the non-PDFUA ligature run must render via the Tj fast path'
 		);
 	}
 }
