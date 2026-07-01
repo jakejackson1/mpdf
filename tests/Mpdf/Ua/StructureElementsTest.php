@@ -420,18 +420,34 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <ruby><rb>kanji</rb><rt>furigana</rt></ruby> emits Span struct elements
-	 * for each part. The Ruby and Rt handlers unconditionally push Span struct
-	 * elements so AT and tagged-PDF consumers see dedicated annotation handles
-	 * rather than ruby parts dissolving into the parent block's struct element.
+	 * <ruby><rb>kanji</rb><rt>furigana</rt></ruby> emits the standard ruby
+	 * struct types — Ruby container with RB (base) and RT (annotation) children
+	 * (ISO 32000-1 §14.8.5.6 Table 337) — rather than anonymous Spans.
 	 */
-	public function testRubyAnnotationProducesSpanStructElements()
+	public function testRubyAnnotationProducesRubyStructElements()
 	{
 		$output = $this->getOutput(
 			$this->makeMpdf(),
 			'<p><ruby><rb>kanji</rb><rt>furigana</rt></ruby></p>'
 		);
-		$this->assertStringContainsString('/S /Span', $output);
+		$this->assertStringContainsString('/S /Ruby', $output);
+		$this->assertStringContainsString('/S /RB', $output);
+		$this->assertStringContainsString('/S /RT', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * <rp> fallback parentheses are tagged as RP struct elements beneath the
+	 * Ruby container (ISO 32000-1 §14.8.5.6 Table 337).
+	 */
+	public function testRubyParenthesisProducesRpStructElement()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<p><ruby><rb>kanji</rb><rp>(</rp><rt>furigana</rt><rp>)</rp></ruby></p>'
+		);
+		$this->assertStringContainsString('/S /Ruby', $output);
+		$this->assertStringContainsString('/S /RP', $output);
 		$this->assertBdcEmcBalanced($output);
 	}
 

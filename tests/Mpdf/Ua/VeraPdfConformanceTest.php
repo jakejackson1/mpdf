@@ -1063,6 +1063,29 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Ruby annotations tagged with the standard Ruby/RB/RT/RP struct types must
+	 * pass veraPDF's UA-1 profile. Exercises the <rb>+<rt> shape, the <rp>
+	 * fallback parentheses, and a bare-text base (no <rb>) whose content attaches
+	 * directly to the Ruby element.
+	 *
+	 * ISO 32000-1:2008 §14.8.5.6 Table 337 — Ruby/RB/RT/RP standard struct types.
+	 *
+	 * @return void
+	 */
+	public function testDocumentWithRubyAnnotationsPassesUa1()
+	{
+		$html = '<h1>Ruby annotations</h1>'
+			. '<p>Base and annotation: <ruby><rb>kanji</rb><rt>furigana</rt></ruby>.</p>'
+			. '<p>With parenthesis fallback: '
+			. '<ruby><rb>base</rb><rp>(</rp><rt>anno</rt><rp>)</rp></ruby>.</p>'
+			. '<p>Bare-text base: <ruby>kanji<rt>furigana</rt></ruby>.</p>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'document with ruby annotations');
+	}
+
+	/**
 	 * Load an mpdf-example HTML fixture from tests/data/html/pdfua-examples/.
 	 *
 	 * The fixture must be a plain HTML file (no PHP tags). If the fixture file

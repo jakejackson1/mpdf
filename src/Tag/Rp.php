@@ -3,21 +3,28 @@
 namespace Mpdf\Tag;
 
 /**
- * HTML <rp> tag handler — Span fallback.
+ * HTML <rp> tag handler — RP standard struct type.
  *
- * <rp> wraps fallback parentheses ("(", ")") shown by AT or non-ruby UAs
- * around the rt. In a layout-aware ruby renderer the rp is suppressed when
- * the rt is rendered above the rb. mPDF does not currently render ruby
- * specially — the rp text flows inline like any other inline tag — so we
- * treat it as a bare InlineTag subclass: no unconditional Span push, just
- * the standard /Lang / /Alt machinery from the parent.
+ * <rp> wraps fallback parentheses ("(", ")") shown around the rt by user agents
+ * that cannot render ruby. mPDF does not stack ruby, so the rp text flows inline
+ * and is visible; this handler opens an RP struct element beneath the enclosing
+ * Ruby so the parentheses are tagged as ruby punctuation rather than anonymous
+ * inline content.
  *
  * Spec references:
  *   - W3C Ruby Annotation §3 — fallback parenthesis semantics
- *   - ISO 32000-1:2008 §14.8.5.6 Table 339 — /RP standard struct type
+ *   - ISO 32000-1:2008 §14.8.5.6 Table 337 — /RP standard struct type
  */
 class Rp extends InlineTag
 {
 
+	public function open($attr, &$ahtml, &$ihtml)
+	{
+		parent::open($attr, $ahtml, $ihtml);
 
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->open('RP');
+			$this->pushInlineUaStructDepth(1);
+		}
+	}
 }

@@ -210,15 +210,31 @@ class StructTypeTest extends TestCase
 	}
 
 	/**
-	 * Ruby annotation tags map to Span — every ruby part receives its own
-	 * struct element rather than leaning on the parent block.
+	 * Ruby annotation tags map to their standard PDF struct types
+	 * (ISO 32000-1 §14.8.5.6 Table 337). <rtc> has no PDF equivalent and falls
+	 * back to Span (only materialised when lang=/aria-label= forces an element).
 	 */
 	public function testFromHtmlTagRuby()
 	{
-		$this->assertSame('Span', StructType::fromHtmlTag('RUBY'));
-		$this->assertSame('Span', StructType::fromHtmlTag('RB'));
-		$this->assertSame('Span', StructType::fromHtmlTag('RT'));
-		$this->assertSame('Span', StructType::fromHtmlTag('RP'));
+		$this->assertSame('Ruby', StructType::fromHtmlTag('RUBY'));
+		$this->assertSame('RB', StructType::fromHtmlTag('RB'));
+		$this->assertSame('RT', StructType::fromHtmlTag('RT'));
+		$this->assertSame('RP', StructType::fromHtmlTag('RP'));
 		$this->assertSame('Span', StructType::fromHtmlTag('RTC'));
+	}
+
+	/**
+	 * The ruby and warichu standard struct types are accepted by isValid()
+	 * so tag handlers and role= overrides can open them (ISO 32000-1 §14.8.5.6).
+	 */
+	public function testIsValidRubyAndWarichuTypes()
+	{
+		$this->assertTrue(StructType::isValid('Ruby'));
+		$this->assertTrue(StructType::isValid('RB'));
+		$this->assertTrue(StructType::isValid('RT'));
+		$this->assertTrue(StructType::isValid('RP'));
+		$this->assertTrue(StructType::isValid('Warichu'));
+		$this->assertTrue(StructType::isValid('WT'));
+		$this->assertTrue(StructType::isValid('WP'));
 	}
 }

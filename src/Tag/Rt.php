@@ -3,18 +3,15 @@
 namespace Mpdf\Tag;
 
 /**
- * HTML <rt> tag handler — Span fallback.
+ * HTML <rt> tag handler — RT standard struct type.
  *
- * <rt> carries the ruby annotation glyphs (e.g. furigana). Like Ruby.php,
- * this handler unconditionally opens a Span struct element so the rt's
- * content has its own tagged-tree handle separate from the rb. AT can then
- * inspect the tagged tree to recognise the annotation as distinct from the
- * base, even though mPDF still flows the rt linearly inline.
+ * <rt> carries the ruby annotation glyphs (e.g. furigana). This handler opens
+ * an RT struct element beneath the enclosing Ruby so the annotation is tagged
+ * distinctly from the base, even though mPDF still flows the rt linearly inline.
  *
  * Spec references:
  *   - W3C Ruby Annotation §1 — HTML <rt> semantics
- *   - ISO 32000-1:2008 §14.8.5.6 Table 339 — /RT standard struct type
- *   - ISO 32000-1:2008 §14.7.2 Table 322 — /E expansion text
+ *   - ISO 32000-1:2008 §14.8.5.6 Table 337 — /RT standard struct type
  */
 class Rt extends InlineTag
 {
@@ -23,16 +20,9 @@ class Rt extends InlineTag
 	{
 		parent::open($attr, $ahtml, $ihtml);
 
-		// Push a Span unconditionally so the annotation glyphs are tagged
-		// separately from the ruby base. See Ruby.php for the rationale.
 		if ($this->mpdf->PDFUA) {
-			$this->ua->getStructureTree()->open('Span');
+			$this->ua->getStructureTree()->open('RT');
 			$this->pushInlineUaStructDepth(1);
 		}
-	}
-
-	public function close(&$ahtml, &$ihtml)
-	{
-		parent::close($ahtml, $ihtml);
 	}
 }

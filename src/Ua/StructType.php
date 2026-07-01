@@ -89,15 +89,17 @@ class StructType
 		'MARK'       => 'Span', 'DEL' => 'Span',
 		'INS'        => 'Span', 'S'   => 'Span',
 		'SMALL'      => 'Span',
-		// Ruby annotation (W3C Ruby Annotation §1, ISO 32000-1 §14.8.5.6).
-		// Span fallback — ISO 14289-1:2014 §7.1's umbrella tagging requirement
-		// is satisfied by Span. The proper Ruby/RB/RT/RP standard struct types
-		// (ISO 32000-1 §14.8.5.6 Tables 339, 340) require a layout-engine pass
-		// that stacks the rt above the rb; mPDF still flows the rt linearly,
-		// so the Span fallback only affects the tagged-tree and ensures every
-		// ruby part has its own struct element rather than leaning on the parent.
-		'RUBY'       => 'Span', 'RB' => 'Span', 'RT' => 'Span',
-		'RP'         => 'Span', 'RTC' => 'Span',
+		// Ruby annotation — proper standard struct types (W3C Ruby Annotation §1,
+		// ISO 32000-1 §14.8.5.6 Table 337). <ruby> is the Ruby container; <rb>,
+		// <rt>, <rp> are the base, annotation, and parenthesis parts. mPDF flows
+		// the rt linearly rather than stacking it above the rb, but the *tagging*
+		// uses the correct standard types so AT and veraPDF see real ruby
+		// structure rather than anonymous Spans. <rtc> (HTML5 ruby text
+		// container) has no PDF standard type; it renders transparently — its
+		// <rt> children attach directly to the Ruby — and only takes a Span when
+		// lang=/aria-label= forces an element onto it.
+		'RUBY'       => 'Ruby', 'RB' => 'RB', 'RT' => 'RT',
+		'RP'         => 'RP', 'RTC' => 'Span',
 	];
 
 	/**
@@ -123,7 +125,8 @@ class StructType
 	];
 
 	/**
-	 * Standard PDF struct types per ISO 32000-1 §14.8 Tables 333–335.
+	 * Standard PDF struct types per ISO 32000-1 §14.8 Tables 333–335 and 337
+	 * (Ruby/Warichu, §14.8.5.6).
 	 *
 	 * Only these types may appear as the /S key in a StructElem dict. Non-standard
 	 * roles must be registered via StructureTree::addRoleMapping() and mapped to
@@ -139,6 +142,7 @@ class StructType
 		'Table', 'TR', 'TH', 'TD', 'THead', 'TBody', 'TFoot',
 		'Span', 'Quote', 'Note', 'Reference', 'BibEntry', 'Code',
 		'Link', 'Annot',
+		'Ruby', 'RB', 'RT', 'RP', 'Warichu', 'WT', 'WP',
 		'Figure', 'Formula', 'Form',
 	];
 
