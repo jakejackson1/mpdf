@@ -410,4 +410,53 @@ class ImageMapTest extends PdfUaTestCase
 		}
 		$this->assertTrue($found, 'Expected <area> outside warning');
 	}
+
+	/**
+	 * Image-map hotspots must use the height of the page the host image is on,
+	 * not the height of the final page. The deferred queue is drained at the end
+	 * of WriteHTML(), when $mpdf->hPt holds the last page's height; Mpdf::Link()
+	 * flips y with that live hPt. If the host image is on a portrait page but the
+	 * document ends on a landscape page, the hotspot lands ~246pt off.
+	 *
+	 * Here the <img usemap> is on a portrait A4 page (hPt ~841.89), then a
+	 * landscape page (hPt ~595.28) follows. The top-of-image hotspot's /Rect
+	 * yTop must be well above the landscape height — only possible if the y-flip
+	 * used the portrait page height captured at queue time.
+	 */
+	public function testHotspotUsesHostPageHeightAcrossOrientations()
+	{
+		$mpdf = $this->makeMpdf(['format' => 'A4']);
+		$pdf = $this->getOutput(
+			$mpdf,
+			'<h1>Plan</h1>'
+			. '<img src="' . $this->redPixelPng . '" usemap="#rooms" width="200" height="100" alt="Floor plan">'
+			. '<map name="rooms">'
+			. '<area shape="rect" coords="0,0,100,50" href="https://example.com/lobby" alt="Lobby">'
+			. '</map>'
+			. '<pagebreak orientation="L" />'
+			. '<p>Landscape page.</p>'
+		);
+
+		$this->assertStringContainsString('/Subtype /Link', $pdf);
+
+		$y1 = null;
+		if (preg_match_all('/<<([^>]*\/Subtype \/Link[^>]*)>>/s', $pdf, $objs)) {
+			foreach ($objs[1] as $obj) {
+				if (preg_match('/\/Rect \[\s*[\d.\-]+\s+([\d.\-]+)/', $obj, $r)) {
+					$y1 = (float) $r[1];
+					break;
+				}
+			}
+		}
+
+		$this->assertNotNull($y1, 'expected a Link annotation with a /Rect');
+		// A4 landscape height is 595.28pt. A hotspot at the top of an image on a
+		// portrait page must flip to a y well above that; a value at or below it
+		// means Link() used the final (landscape) page height.
+		$this->assertGreaterThan(
+			595.28,
+			$y1,
+			'image-map hotspot /Rect yTop must be flipped with the host (portrait) page height'
+		);
+	}
 }

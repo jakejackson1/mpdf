@@ -8064,6 +8064,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->ua->getImageMapRegistry()->queueDeferred([
 							'mapName' => $objattr['pdfua_image_map_name'],
 							'page'    => $this->page,
+							'pageHpt' => $this->hPt,
 							'imgX'    => $objattr['INNER-X'],
 							'imgY'    => $objattr['INNER-Y'],
 							'imgW'    => $obiw,

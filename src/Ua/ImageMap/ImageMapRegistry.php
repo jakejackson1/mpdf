@@ -70,9 +70,9 @@ class ImageMapRegistry
 	 * is awaiting a final <map> registry before its Link annotations can be
 	 * emitted.
 	 *
-	 * Entry shape: ['mapName'=>string, 'page'=>int, 'imgX'=>float,
-	 * 'imgY'=>float, 'imgW'=>float, 'imgH'=>float, 'origW'=>float,
-	 * 'origH'=>float, 'figure'=>?StructureElement].
+	 * Entry shape: ['mapName'=>string, 'page'=>int, 'pageHpt'=>float,
+	 * 'imgX'=>float, 'imgY'=>float, 'imgW'=>float, 'imgH'=>float,
+	 * 'origW'=>float, 'origH'=>float, 'figure'=>?StructureElement].
 	 *
 	 * @var array<int,array<string,mixed>>
 	 */
@@ -220,6 +220,7 @@ class ImageMapRegistry
 	public function drain()
 	{
 		$savedPage = $this->mpdf->page;
+		$savedHpt  = $this->mpdf->hPt;
 		foreach ($this->deferred as $deferred) {
 			$mapName = $deferred['mapName'];
 			if (!isset($this->maps[$mapName])) {
@@ -231,6 +232,11 @@ class ImageMapRegistry
 			}
 			$figureElem = $deferred['figure'];
 			$this->mpdf->page = $deferred['page'];
+			// Mpdf::Link() flips y with the live $mpdf->hPt. At drain time hPt
+			// holds the *final* page's height, so restore the host image's page
+			// height too — otherwise hotspots land at the wrong y on documents
+			// that mix page sizes / orientations.
+			$this->mpdf->hPt = $deferred['pageHpt'];
 			if ($figureElem !== null) {
 				$this->structureTree->pushExisting($figureElem);
 			}
@@ -249,6 +255,7 @@ class ImageMapRegistry
 		}
 		$this->deferred = [];
 		$this->mpdf->page = $savedPage;
+		$this->mpdf->hPt  = $savedHpt;
 	}
 
 	/**
