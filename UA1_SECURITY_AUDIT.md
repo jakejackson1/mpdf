@@ -8,6 +8,39 @@
 
 ---
 
+## Resolution status (updated 2026-07-02)
+
+**All three HIGH findings and all five MEDIUM findings are remediated and pinned
+by regression tests.** The merge block below is lifted. The detailed findings
+that follow are retained as the historical record of what was found; each now
+has a fix in the branch and a test that fails if the fix regresses.
+
+| Finding | Status | Regression test |
+|---|---|---|
+| H-1 URL-scheme bypass (NBSP/ZWSP/entity/`data:`/`livescript:`…) | ✅ Fixed | `tests/Mpdf/Ua/Security/UrlSchemeBypassTest.php` (+ `JavascriptUrlHandlingTest`) |
+| H-2 FPDI cyclic `/K` segfault | ✅ Fixed | `Security/FpdiCycleTest.php::testCyclicStructKDoesNotCrash` |
+| H-3 `/Info` dict key injection | ✅ Fixed | `Security/CustomPropertyInjectionTest.php` |
+| M-1 `aria-labelledby` memory amplification | ✅ Fixed | `Security/AriaDosTest.php` |
+| M-2 sanitised-id 28-bit collision | ✅ Fixed | `Security/IdCollisionTest.php` |
+| M-3 SVG `file://` external-entity (XXE) | ✅ Fixed | `Security/SvgXxeTest.php` |
+| M-4 sanity-walk unbounded by node count | ✅ Fixed | `FpdiStructMerger::NODE_BUDGET` + `sanityVisited`; `Security/FpdiCycleTest.php::testDeepStructKDoesNotCrash` |
+| M-5 sanity-gauntlet permissive `> 0.5` threshold | ✅ Fixed (now `>= 0.5`) | `Security/SanityGauntletThresholdTest.php` |
+
+Fixes: H-1 in `UaPolicy` (`/u` regex + NBSP/ZWSP/BOM/C0 stripping, `html_entity_decode`
++ `rawurldecode`, expanded deny list) with an output-side guard in
+`MetadataWriter::writeAnnotations()`; H-2/M-4 via per-import cycle set + depth cap
+(`MAX_RECURSION_DEPTH`) + node budget (`NODE_BUDGET`) in `FpdiStructMerger`;
+H-3 via `BaseWriter::escapeName()` on every `/Info` key; M-1 via a token cap +
+length guard in `AriaIdResolver`; M-2 via a widened id suffix; M-3 by dropping
+`LIBXML_NOENT`/adding `LIBXML_NONET` (and disabling the entity loader on PHP < 8.0);
+M-5 by tightening the boundary. The whole `tests/Mpdf/Ua/Security/` suite is green.
+
+The LOW (L-1…L-6) and INFO (I-1…I-6) items were non-blocking in the original
+audit; several (e.g. L-1 ParentTree upper-bound, L-5 path redaction, I-3 PHPStan
+baseline) were addressed opportunistically during remediation.
+
+---
+
 ## Executive summary
 
 | Severity | Count | Gating |
@@ -209,9 +242,14 @@ Dict-syntax round-trips (matched `<<`/`>>`). Detection requires semantic inspect
 
 ## Sign-off recommendation
 
-- **DO NOT MERGE** until H-1, H-2, H-3 are fixed.
-- **STRONGLY RECOMMEND** fixing M-1 through M-5 in the same PR — they are all narrow patches and the test gaps (I-4, I-5) should be filled alongside.
-- **OPTIONAL** for this PR: L-1 through L-6 and I-1, I-2, I-6 can land as a follow-up.
-- **SEPARATE PR** suggested for I-3 (CI hardening: PHPStan + `composer audit`).
+- ~~**DO NOT MERGE** until H-1, H-2, H-3 are fixed.~~ **Cleared** — H-1, H-2, H-3
+  are fixed and pinned (see Resolution status). The merge block is lifted.
+- ~~**STRONGLY RECOMMEND** fixing M-1 through M-5 in the same PR.~~ **Done** — M-1
+  through M-5 are fixed; the test gaps (I-4, I-5) are filled by the
+  `tests/Mpdf/Ua/Security/` suite and the extended `JavascriptUrlHandlingTest`.
+- **OPTIONAL** for this PR: L-1 through L-6 and I-1, I-2, I-6 remain non-blocking
+  follow-ups (several already addressed opportunistically — see Resolution status).
+- **SEPARATE PR** suggested for I-3 (CI hardening: PHPStan gating + `composer audit`);
+  the PHPStan baseline itself was corrected for the CI PHP 8.2 toolchain.
 
-PoC working tree at `/tmp/ua1-audit/` is preserved for the maintainer's inspection. Clean up with `rm -rf /tmp/ua1-audit` once findings are reviewed.
+The `/tmp/ua1-audit/` PoC working tree was scratch-only and is not part of the repo.

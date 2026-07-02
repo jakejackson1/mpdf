@@ -981,7 +981,11 @@ class FpdiStructMerger
 			}
 		}
 
-		if ($totalCp > 0 && ($suspiciousCp / $totalCp) > 0.5) {
+		// UA1 audit M-5 — reject at the boundary, not just above it. A string that
+		// is exactly half suspicious codepoints (e.g. 50 ASCII + 50 U+FFFD, the
+		// classic ciphertext-through-PDFDocEncoding shape) is not legible text.
+		// The strict `> 0.5` let that 50/50 case through.
+		if ($totalCp > 0 && ($suspiciousCp / $totalCp) >= 0.5) {
 			return false;
 		}
 
