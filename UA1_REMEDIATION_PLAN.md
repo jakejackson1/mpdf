@@ -156,32 +156,35 @@ FAIL on common input · **P2** requirement-gap deferral · **P3** hygiene.
   `testDocumentWithRubyAnnotationsPassesUa1`; updated `StructTypeTest` and
   `StructureElementsTest`; the six `PoorHtmlAutoModeTest` ruby probes stay green).
 
-#### C1b — rt-above-rb visual stacking · committed (remaining ruby work)
-- **Files:** `src/Mpdf.php` inline-layout path (`WriteFlowingBlock`/`finishFlowingBlock`,
-  the text-measurement and glyph-placement helpers), `src/Tag/Ruby.php`/`Rt.php`/`Rb.php`
-  (emit layout linkage alongside the struct push), `src/Otl.php` where inline-run metrics
-  are assembled.
-- **Scope note:** not a UA-1 conformance item (C1a delivers the tagging veraPDF validates)
-  but a real rendering-fidelity gap — mPDF flows the `rt` linearly after the `rb` instead
-  of stacking it above. Per the no-deferrals rule it is in scope, not future work.
-- **Approach:**
-  1. *Parse* — the ruby handlers tag an inline "ruby cluster": mark the `rb` run and its
-     `rt` run as an associated pair on the text buffer (a `ruby_group` id on the
-     OTLdata/textbuffer entries) carrying the reduced `rt` font size (~0.5em).
-  2. *Measure* — a ruby cluster's advance = `max(width(rb), width(rt))`; reserve extra
-     ascent above the line equal to the `rt` line-height so the stacked annotation does
-     not collide with the previous line.
-  3. *Place* — render the `rb` glyphs on the baseline; render the `rt` glyphs at the
-     reduced size, horizontally centred over the `rb` cluster, offset up by the base
-     ascent + gap. Spread a wider `rt` across the base (mono/jukugo ruby) per W3C Ruby
-     Annotation §4.
-  4. *`<rp>`* — visually suppress the fallback parentheses while stacking is active (they
-     are for non-ruby UAs) but keep the `RP` struct element in the tagged tree.
-  5. *Breaking/justification* — exclude ruby clusters from mid-cluster line breaks and
-     from inter-word justification stretching so the annotation stays aligned to its base.
-- **Verify:** visual snapshot fixtures (rb/rt widths, centring, ascent reservation, rp
-  suppression) in the Snapshot suite; the C1a struct-tree assertions and veraPDF PASS must
-  be retained unchanged — stacking must not alter the tagged output.
+#### C1b — rt-above-rb visual stacking · ✅ SHIPPED (this branch)
+- **Files:** `src/Css/DefaultCss.php` (RT font-size), `src/Tag/Ruby.php`/`Rt.php`/`Rp.php`
+  (per-run `textparam['ruby']` markers + rt raise), `src/Mpdf.php`
+  (`_buildRubyClusters()` + `finishFlowingBlock()` / `WriteFlowingBlock()` placement),
+  + tests below.
+- **Scope note (resolved):** not a UA-1 conformance item (C1a delivers the tagging veraPDF
+  validates) but a real rendering-fidelity gap — mPDF flowed the `rt` linearly after the
+  `rb` instead of stacking it above. Per the no-deferrals rule it was in scope.
+- **What shipped:**
+  - *Parse* — `Tag\Ruby`/`Rt`/`Rp` mark each run's `textparam['ruby']` (`base`|`rt`|`rp`,
+    carried end-to-end via saveFont/restoreFont). `RT` gains a DefaultCss `font-size:50%`
+    and `Tag\Rt` sets a `text-baseline` raise — reusing the `<sup>` machinery so
+    `_setInlineBlockHeights()` reserves the ascent and `Cell()` paints it raised for free.
+  - *Measure/Place* — `_buildRubyClusters()` pairs consecutive ruby runs into clusters
+    (cluster advance = `max(base, annotation)`), and the placement loops in **both**
+    `finishFlowingBlock()` and `WriteFlowingBlock()` centre the base group, centre the
+    raised annotation over it with zero net advance, and suppress `rp` runs. A wider
+    annotation centres the base under it (jukugo-style).
+  - *`<rp>`* — fallback parentheses are painted-suppressed; the `RP` struct element is
+    retained (C1a).
+  - *Breaking/justification* — ruby runs have no internal break opportunity (natural
+    cohesion) and are excluded from justification stretch (`SetSpacing(0,0)`), so the
+    painted base width matches the cluster advance (no overlap of following text).
+- **Verified:** geometry asserted directly from the content stream — annotation raised +
+  centred, narrow annotation adds no advance, wide annotation expands the cluster, ascent
+  reserved, `rp` suppressed, wrapped-line ruby stacks, justified ruby does not overlap
+  (`RubyStackingTest`, 8 cases). C1a struct tags + veraPDF ua1 retained unchanged; full
+  suite 1395 green; veraPDF gate 49 green; non-ruby text byte-identical (all logic gated on
+  a per-run ruby marker).
 - **Size:** large — the one substantial layout-engine change in the plan.
 
 ### C2. Rotated/transformed image maps emit QuadPoints · SHIPPED (this branch)

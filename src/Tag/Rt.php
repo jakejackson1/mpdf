@@ -24,5 +24,13 @@ class Rt extends InlineTag
 			$this->ua->getStructureTree()->open('RT');
 			$this->pushInlineUaStructDepth(1);
 		}
+
+		// Mark the annotation runs and lift them above the base. parent::open()
+		// has already applied the RT default (font-size 50%), so FontSize is now
+		// the reduced annotation size and the base size is ~2x it; raise the
+		// annotation baseline clear of the base ascent. The layout engine centres
+		// the run horizontally over its base and gives it zero net advance.
+		$this->mpdf->textparam['ruby'] = 'rt';
+		$this->mpdf->textparam['text-baseline'] = $this->mpdf->FontSize * 1.7;
 	}
 }

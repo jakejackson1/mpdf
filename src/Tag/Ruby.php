@@ -34,5 +34,12 @@ class Ruby extends InlineTag
 			$this->ua->getStructureTree()->open('Ruby');
 			$this->pushInlineUaStructDepth(1);
 		}
+
+		// Tag every run inside the <ruby> as ruby base content by default; the
+		// nested <rt>/<rp> handlers override this marker for their own runs. The
+		// inline layout engine reads textparam['ruby'] to stack the <rt> above the
+		// base (see finishFlowingBlock / WriteFlowingBlock). restoreInlineProperties()
+		// clears it when </ruby> closes.
+		$this->mpdf->textparam['ruby'] = 'base';
 	}
 }

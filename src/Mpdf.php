@@ -6914,6 +6914,130 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 	}
 
+	/**
+	 * Precompute rt-above-rb ruby-cluster layout for one flushed line.
+	 *
+	 * Reads the per-run textparam['ruby'] marker set by Tag\Ruby / Tag\Rt /
+	 * Tag\Rp ('base' | 'rt' | 'rp') and returns a per-chunk directive map that
+	 * the placement loops in finishFlowingBlock() and WriteFlowingBlock() apply
+	 * to stack each <rt> annotation above its base: the base group is centred
+	 * within the cluster advance = max(base-width, annotation-width), the raised
+	 * <rt> is centred over it with zero net advance, and <rp> parentheses are
+	 * suppressed. Widths are in user units (matching Cell()).
+	 *
+	 * Returns [] when the line has no ruby runs, so non-ruby text keeps the
+	 * unmodified code path (byte-for-byte).
+	 *
+	 * Directive keys per chunk index:
+	 *   clusterStart : capture the pen x as the cluster origin
+	 *   setXBefore   : set pen x = clusterOriginX + offset before painting
+	 *   setXAfter    : set pen x = clusterOriginX + offset after painting
+	 *   extraWidth   : padding added to contentWidth once per cluster
+	 *   widthZero    : this chunk contributes 0 to contentWidth (rt / rp)
+	 *   hidden       : do not paint or advance (rp)
+	 *
+	 * @param  array $content   line chunks (text per run)
+	 * @param  array $cOTLdata  per-chunk OTL data for width measurement
+	 * @param  array $font      per-chunk saved font snapshots
+	 * @return array<int,array<string,float|bool>>
+	 */
+	private function _buildRubyClusters($content, $cOTLdata, $font)
+	{
+		$hasRuby = false;
+		foreach ($font as $f) {
+			if (isset($f['textparam']['ruby'])) {
+				$hasRuby = true;
+				break;
+			}
+		}
+		if (!$hasRuby) {
+			return [];
+		}
+
+		$saved = $this->saveFont();
+		$roles = [];
+		$widths = [];
+		foreach ($content as $k => $chunk) {
+			$this->restoreFont($font[$k], false);
+			$roles[$k] = isset($this->textparam['ruby']) ? $this->textparam['ruby'] : null;
+			if (isset($this->objectbuffer[$k]) && $this->objectbuffer[$k]) {
+				$widths[$k] = $this->objectbuffer[$k]['OUTER-WIDTH'];
+			} else {
+				$widths[$k] = $this->GetStringWidth($this->aliasReplaceForWidth($chunk), true, isset($cOTLdata[$k]) ? $cOTLdata[$k] : false, $this->textvar);
+			}
+		}
+		$this->restoreFont($saved, false);
+
+		$ruby = [];
+		$keys = array_keys($content);
+		$n = count($keys);
+		$i = 0;
+		while ($i < $n) {
+			$k = $keys[$i];
+			if ($roles[$k] === null) {
+				$i++;
+				continue;
+			}
+			// Maximal run of consecutive ruby chunks = one cluster.
+			$baseKeys = [];
+			$rtKeys = [];
+			$rpKeys = [];
+			$clusterKeys = [];
+			$j = $i;
+			while ($j < $n && $roles[$keys[$j]] !== null) {
+				$kk = $keys[$j];
+				$clusterKeys[] = $kk;
+				if ($roles[$kk] === 'rt') {
+					$rtKeys[] = $kk;
+				} elseif ($roles[$kk] === 'rp') {
+					$rpKeys[] = $kk;
+				} else {
+					$baseKeys[] = $kk;
+				}
+				$j++;
+			}
+
+			$baseW = 0.0;
+			foreach ($baseKeys as $bk) {
+				$baseW += $widths[$bk];
+			}
+			$annW = 0.0;
+			foreach ($rtKeys as $rk) {
+				$annW += $widths[$rk];
+			}
+			$clusterW = max($baseW, $annW);
+
+			$ruby[$clusterKeys[0]]['clusterStart'] = true;
+
+			if ($baseKeys) {
+				$ruby[$baseKeys[0]]['setXBefore'] = ($clusterW - $baseW) / 2;
+				$ruby[$baseKeys[count($baseKeys) - 1]]['setXAfter'] = $clusterW;
+				$ruby[$baseKeys[0]]['extraWidth'] = $clusterW - $baseW;
+			} else {
+				// Annotation with no base run: the cluster still advances by clusterW.
+				$ruby[$clusterKeys[0]]['extraWidth'] = $clusterW;
+			}
+
+			if ($rtKeys) {
+				$ruby[$rtKeys[0]]['setXBefore'] = ($clusterW - $annW) / 2;
+				$ruby[$rtKeys[count($rtKeys) - 1]]['setXAfter'] = $clusterW;
+				foreach ($rtKeys as $rk) {
+					$ruby[$rk]['widthZero'] = true;
+					$ruby[$rk]['measuredWidth'] = $widths[$rk];
+				}
+			}
+			foreach ($rpKeys as $rk) {
+				$ruby[$rk]['hidden'] = true;
+				$ruby[$rk]['widthZero'] = true;
+				$ruby[$rk]['measuredWidth'] = $widths[$rk];
+			}
+
+			$i = $j;
+		}
+
+		return $ruby;
+	}
+
 	function finishFlowingBlock($endofblock = false, $next = '')
 	{
 		$currentx = $this->x;
@@ -7061,6 +7185,23 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$contentWidth += $this->objectbuffer[$k]['OUTER-WIDTH'] * Mpdf::SCALE;
 				}
 			}
+		}
+
+		// PDF/UA-1 C1b — ruby stacking. Pair <rb>/<rt>/<rp> runs into clusters and
+		// adjust the line's content width to the stacked advance (max of base and
+		// annotation) before alignment. Empty for non-ruby lines (no-op).
+		$rubyClusters = $this->_buildRubyClusters($content, $cOTLdata, $font);
+		if (!empty($rubyClusters)) {
+			$rubyDelta = 0;
+			foreach ($rubyClusters as $rd) {
+				if (isset($rd['measuredWidth'])) {
+					$rubyDelta -= $rd['measuredWidth'];
+				}
+				if (isset($rd['extraWidth'])) {
+					$rubyDelta += $rd['extraWidth'];
+				}
+			}
+			$contentWidth += $rubyDelta * Mpdf::SCALE;
 		}
 
 		if (isset($font[count($font) - 1])) {
@@ -7398,6 +7539,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} // mPDF 6
 			}
 
+			$rubyClusterX = 0;
 			foreach ($chunkorder as $aord => $k) { // mPDF 5.7
 				$chunk = $content[$aord];
 				if (isset($this->objectbuffer[$k]) && $this->objectbuffer[$k]) {
@@ -7423,6 +7565,21 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 				$this->restoreFont($font[$k]);  // mPDF 5.7
 
+				// PDF/UA-1 C1b — ruby cluster placement: capture the cluster origin and
+				// centre the base group within the stacked advance; skip suppressed rp runs.
+				if (!empty($rubyClusters) && isset($rubyClusters[$k])) {
+					$rd = $rubyClusters[$k];
+					if (!empty($rd['clusterStart'])) {
+						$rubyClusterX = $this->x;
+					}
+					if (isset($rd['setXBefore'])) {
+						$this->x = $rubyClusterX + $rd['setXBefore'];
+					}
+					if (!empty($rd['hidden'])) {
+						continue;
+					}
+				}
+
 				if ($is_table && substr($align, 0, 1) == 'D' && $aord == 0) {
 					$dp = $this->decimal_align[substr($align, 0, 2)];
 					$s = preg_split('/' . preg_quote($dp, '/') . '/', $content[0], 2);  // ? needs to be /u if not core
@@ -7433,6 +7590,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->SetSpacing(($this->fixedlSpacing * Mpdf::SCALE) + $jcharspacing, ($this->fixedlSpacing + $this->minwSpacing) * Mpdf::SCALE + $jws);
 				$this->fixedlSpacing = false;
 				$this->minwSpacing = 0;
+				// PDF/UA-1 C1b — ruby runs are not justification-stretched, so the painted
+				// base width matches the measured cluster advance (no overlap of following text).
+				if (!empty($rubyClusters) && isset($rubyClusters[$k])) {
+					$this->SetSpacing(0, 0);
+				}
 
 				$save_vis = $this->visibility;
 				if (isset($this->textparam['visibility']) && $this->textparam['visibility'] && $this->textparam['visibility'] != $this->visibility) {
@@ -7502,6 +7664,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->Cell($stringWidth, $stackHeight, $chunk, '', 0, '', $fill, $this->HREF, 0, 0, 0, 'M', $fill, true, (isset($cOTLdata[$aord]) ? $cOTLdata[$aord] : false), $this->textvar, (isset($lineBox[$k]) ? $lineBox[$k] : false)); // first or middle part	// mPDF 5.7.1
 				}
 
+				// PDF/UA-1 C1b — resume the pen at the cluster's stacked advance so the
+				// centred base and zero-advance annotation leave following text in place.
+				if (!empty($rubyClusters) && isset($rubyClusters[$k]['setXAfter'])) {
+					$this->x = $rubyClusterX + $rubyClusters[$k]['setXAfter'];
+				}
 
 				if (!empty($this->spanborddet)) {
 					if (strpos($contentB[$k], 'R') !== false && $aord != $arraysize - 1) {
@@ -9173,6 +9340,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					}
 				}
 
+				// PDF/UA-1 C1b — ruby stacking (see finishFlowingBlock). Pair ruby runs
+				// and adjust the wrapped line's content width to the stacked advance.
+				$rubyClusters = $this->_buildRubyClusters($content, $cOTLdata, $font);
+				if (!empty($rubyClusters)) {
+					$rubyDelta = 0;
+					foreach ($rubyClusters as $rd) {
+						if (isset($rd['measuredWidth'])) {
+							$rubyDelta -= $rd['measuredWidth'];
+						}
+						if (isset($rd['extraWidth'])) {
+							$rubyDelta += $rd['extraWidth'];
+						}
+					}
+					$contentWidth += $rubyDelta * Mpdf::SCALE;
+				}
+
 				$lastfontreqstyle = (isset($font[count($font) - 1]['ReqFontStyle']) ? $font[count($font) - 1]['ReqFontStyle'] : '');
 				$lastfontstyle = (isset($font[count($font) - 1]['style']) ? $font[count($font) - 1]['style'] : '');
 				if ($blockdir == 'ltr' && strpos($lastfontreqstyle, "I") !== false && strpos($lastfontstyle, "I") === false) { // Artificial italic
@@ -9384,6 +9567,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->ensureBlockBdcOpen();
 
 					// BIDI magic_reverse moved upwards from here
+					$rubyClusterX = 0;
 					foreach ($chunkorder as $aord => $k) { // mPDF 5.7
 
 						$chunk = isset($content[$aord]) ? $content[$aord] : '';
@@ -9411,10 +9595,28 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 						$this->restoreFont($font[$k]);  // mPDF 5.7
 
+						// PDF/UA-1 C1b — ruby cluster placement (rt stacked over base).
+						if (!empty($rubyClusters) && isset($rubyClusters[$k])) {
+							$rd = $rubyClusters[$k];
+							if (!empty($rd['clusterStart'])) {
+								$rubyClusterX = $this->x;
+							}
+							if (isset($rd['setXBefore'])) {
+								$this->x = $rubyClusterX + $rd['setXBefore'];
+							}
+							if (!empty($rd['hidden'])) {
+								continue;
+							}
+						}
+
 						$this->SetSpacing(($this->fixedlSpacing * Mpdf::SCALE) + $jcharspacing, ($this->fixedlSpacing + $this->minwSpacing) * Mpdf::SCALE + $jws);
 						// Now unset these values so they don't influence GetStringwidth below or in fn. Cell
 						$this->fixedlSpacing = false;
 						$this->minwSpacing = 0;
+						// PDF/UA-1 C1b — ruby runs are not justification-stretched (see finishFlowingBlock).
+						if (!empty($rubyClusters) && isset($rubyClusters[$k])) {
+							$this->SetSpacing(0, 0);
+						}
 
 						$save_vis = $this->visibility;
 						if (isset($this->textparam['visibility']) && $this->textparam['visibility'] && $this->textparam['visibility'] != $this->visibility) {
@@ -9479,6 +9681,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							}
 						} else {
 							$this->Cell($stringWidth, $stackHeight, $chunk, '', 0, '', $fill, $this->HREF, 0, 0, 0, 'M', $fill, true, (isset($cOTLdata[$aord]) ? $cOTLdata[$aord] : false), $this->textvar, (isset($lineBox[$k]) ? $lineBox[$k] : false)); // first or middle part
+						}
+
+						// PDF/UA-1 C1b — resume the pen at the cluster's stacked advance.
+						if (!empty($rubyClusters) && isset($rubyClusters[$k]['setXAfter'])) {
+							$this->x = $rubyClusterX + $rubyClusters[$k]['setXAfter'];
 						}
 
 						if (!empty($this->spanborddet)) {

@@ -26,5 +26,10 @@ class Rp extends InlineTag
 			$this->ua->getStructureTree()->open('RP');
 			$this->pushInlineUaStructDepth(1);
 		}
+
+		// The fallback parentheses are for user agents that cannot stack ruby.
+		// mPDF now stacks, so the layout engine suppresses rp runs visually while
+		// the RP struct element above keeps them in the tagged tree (C1a).
+		$this->mpdf->textparam['ruby'] = 'rp';
 	}
 }
