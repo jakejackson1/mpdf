@@ -654,13 +654,22 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// PDF/UA-1 §7.18.5 — wire the link annotation to its Link struct
 						// element via OBJR + /StructParent so AT can resolve the annotation
 						// to the surrounding Link tag. The 6th PageLinks element is the
-						// captured StructureElement reference from Tag\A::open(); absent for
-						// links emitted outside an <a href> scope (e.g. from a TOC entry,
-						// in which case the annotation is left untagged and verapdf will
-						// flag it — those call sites must be updated similarly).
-						if ($this->mpdf->PDFUA && isset($pl[5]) && $pl[5] !== null) {
-							$linkStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($pl[5]);
-							$pl[5]->addObjref($linkStructParent, $linkAnnotObjNum);
+						// captured StructureElement reference from Tag\A::open(); it is
+						// absent for links emitted outside an <a href> scope — direct
+						// Mpdf::Link() API calls, TOC entries, FPDI-imported page links.
+						// Every link annotation must be tagged (ISO 14289-1 §7.18.5), so
+						// synthesise a Link struct element for those. The annotation's
+						// /Contents (set above) supplies the accessible name; pruneEmptyLinks()
+						// keeps this element because it carries an OBJR ref.
+						if ($this->mpdf->PDFUA) {
+							$linkStructElem = isset($pl[5]) ? $pl[5] : null;
+							if ($linkStructElem === null) {
+								$this->ua->getStructureTree()->open('Link', []);
+								$linkStructElem = $this->ua->getStructureTree()->getCurrent();
+								$this->ua->getStructureTree()->close();
+							}
+							$linkStructParent = $this->ua->getStructureTree()->nextAnnotStructParent($linkStructElem);
+							$linkStructElem->addObjref($linkStructParent, $linkAnnotObjNum);
 							$annot .= ' /StructParent ' . $linkStructParent;
 						}
 

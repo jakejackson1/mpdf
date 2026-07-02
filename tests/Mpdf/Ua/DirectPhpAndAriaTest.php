@@ -254,6 +254,46 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A direct Mpdf::Link() PHP API call (no surrounding <a href>) must produce a
+	 * tagged Link struct element wired to the annotation via OBJR + /StructParent.
+	 *
+	 * Link annotations created outside a Tag\A scope carry no captured struct
+	 * element, so writeAnnotations() synthesises one. Without this the annotation
+	 * is untagged — veraPDF ISO 14289-1 §7.18.5 test 1 ("Links shall be tagged").
+	 * ISO 32000-1:2008 §14.7.4.4.2 Table 338 — OBJR; §14.8 Table 335 — Link.
+	 */
+	public function testDirectLinkApiProducesTaggedLinkStruct()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->WriteHTML('<h1>Doc</h1><p>Body paragraph text.</p>');
+		$mpdf->Link(20, 40, 60, 8, 'https://example.com/direct-api');
+		$output = $mpdf->Output(null, 'S');
+
+		$this->assertStringContainsString('/S /Link', $output);
+		$this->assertStringContainsString('/Type /OBJR', $output);
+		$this->assertStringContainsString('/StructParent', $output);
+	}
+
+	/**
+	 * A page mixing an <a href> link with a direct Mpdf::Link() call must produce
+	 * exactly two Link struct elements — one from Tag\A, one synthesised — and must
+	 * not double-tag the anchor link.
+	 *
+	 * writeAnnotations() only synthesises a Link struct element when the PageLinks
+	 * entry has no captured struct element (6th array slot); the anchor link keeps
+	 * using the element Tag\A::open() pushed.
+	 */
+	public function testDirectLinkAndAnchorDoNotDoubleTag()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->WriteHTML('<h1>Doc</h1><p>Visit <a href="https://anchor.test">the anchor</a> now.</p>');
+		$mpdf->Link(20, 60, 60, 8, 'https://direct.test');
+		$output = $mpdf->Output(null, 'S');
+
+		$this->assertSame(2, substr_count($output, '/S /Link'));
+	}
+
+	/**
 	 * Assert that the struct-type BDC/BMC count equals the EMC count in the PDF output.
 	 *
 	 * Scoped to known PDFUA struct operators to avoid counting OCG-layer BDC/EMC

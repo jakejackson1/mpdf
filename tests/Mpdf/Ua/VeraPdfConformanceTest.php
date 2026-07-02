@@ -200,6 +200,25 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that a direct Mpdf::Link() PHP API call passes ua1.
+	 *
+	 * Links drawn via the PHP API (not <a href>) have no captured Link struct
+	 * element, so writeAnnotations() synthesises one with an OBJR kid and
+	 * /StructParent. Without it the annotation is untagged — ISO 14289-1
+	 * §7.18.5 test 1. The annotation's /Contents supplies the accessible name.
+	 *
+	 * @return void
+	 */
+	public function testDirectPhpLinkApiPassesUa1()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->WriteHTML('<h1>Direct link</h1><p>Paragraph body text for the page.</p>');
+		$mpdf->Link(20, 40, 60, 8, 'https://example.com/direct-api');
+		$pdf = $mpdf->Output(null, 'S');
+		$this->assertVeraPdfCompliant($pdf, 'direct PHP Link() API');
+	}
+
+	/**
 	 * Test that a document with an HTML image map passes ua1.
 	 *
 	 * Each <area> with an href produces a Link annotation; each Link annotation
