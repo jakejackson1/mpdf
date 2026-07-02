@@ -4548,7 +4548,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->links[$link] = [$page, $y];
 	}
 
-	function Link($x, $y, $w, $h, $link)
+	function Link($x, $y, $w, $h, $link, $quadPoints = null)
 	{
 		$l = [$x * Mpdf::SCALE, $this->hPt - $y * Mpdf::SCALE, $w * Mpdf::SCALE, $h * Mpdf::SCALE, $link];
 		// PDF/UA-1 — extra 6th element captures the Link struct element pushed
@@ -4561,6 +4561,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($linkStructElem !== null) {
 				$l[5] = $linkStructElem;
 			}
+		}
+		// 7th element: device-space /QuadPoints for a non-axis-aligned hotspot
+		// (rotated/transformed image maps). writeAnnotations() emits it verbatim;
+		// /Rect stays the axis-aligned bounding box of the quad. ISO 32000-1 §12.5.6.5.
+		if ($quadPoints !== null) {
+			$l[6] = $quadPoints;
 		}
 		if ($this->keep_block_together) { // don't write yet
 			return;
@@ -8035,18 +8041,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// decorative image is a markup contradiction (a clickable region
 				// implies meaningful content). Warn-and-skip eagerly.
 				//
-				// Rotated/transformed case: warn-and-skip (geometry math out of
-				// scope for v1).
+				// Rotated/transformed case: the concatenated $tr (rotate) + $tr2
+				// (CSS transform) content-stream matrix is captured so drain() can
+				// replay the exact placement mPDF renders and emit each hotspot as
+				// /QuadPoints. An empty string means axis-aligned (plain /Rect).
 				if ($this->PDFUA
 					&& !empty($objattr['pdfua_image_map_name'])
 					&& $objattr['type'] == 'image'
 				) {
-					if (!empty($objattr['ROTATE']) || !empty($objattr['transform'])) {
-						$this->ua->addWarning(
-							'PDF/UA-1: image map on rotated/transformed <img> is not supported; '
-							. 'link annotations skipped. Remove rotate/transform or split into pre-rotated source.'
-						);
-					} elseif ($pdfuaImageMcid === -1 || $pdfuaImageMcid === null) {
+					if ($pdfuaImageMcid === -1 || $pdfuaImageMcid === null) {
 						// -1 = decorative (addArtifact returned the sentinel).
 						// null = struct tree was off-path (excluded by outer guard,
 						// but keep defensive).
@@ -8062,16 +8065,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// PHPStan can't see that. Fall back to null defensively
 						// (ImageMapRegistry::drain tolerates a null figure).
 						$this->ua->getImageMapRegistry()->queueDeferred([
-							'mapName' => $objattr['pdfua_image_map_name'],
-							'page'    => $this->page,
-							'pageHpt' => $this->hPt,
-							'imgX'    => $objattr['INNER-X'],
-							'imgY'    => $objattr['INNER-Y'],
-							'imgW'    => $obiw,
-							'imgH'    => $obih,
-							'origW'   => $objattr['orig_w'],
-							'origH'   => $objattr['orig_h'],
-							'figure'  => isset($figureElem) ? $figureElem : null,
+							'mapName'     => $objattr['pdfua_image_map_name'],
+							'page'        => $this->page,
+							'pageHpt'     => $this->hPt,
+							'imgX'        => $objattr['INNER-X'],
+							'imgY'        => $objattr['INNER-Y'],
+							'imgW'        => $obiw,
+							'imgH'        => $obih,
+							'origW'       => $objattr['orig_w'],
+							'origH'       => $objattr['orig_h'],
+							'transformCm' => trim($tr . $tr2),
+							'figure'      => isset($figureElem) ? $figureElem : null,
 						]);
 					}
 				}

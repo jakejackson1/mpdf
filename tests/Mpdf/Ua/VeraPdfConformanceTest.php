@@ -241,6 +241,31 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that an image map on a rotated <img> passes ua1.
+	 *
+	 * Each hotspot on a rotated/transformed host image is emitted as a Link
+	 * annotation with /QuadPoints (the rotated region), tagged via a Link
+	 * struct element + OBJR. ISO 32000-1 §12.5.6.5; ISO 14289-1 §7.18.
+	 *
+	 * @return void
+	 */
+	public function testRotatedImageMapPassesUa1()
+	{
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$html = '<h1>Rotated image map</h1>'
+			. '<p><img src="' . $png . '" alt="Floor plan" usemap="#rooms" '
+			. 'width="200" height="200" rotate="90"></p>'
+			. '<map name="rooms">'
+			. '<area shape="rect"   coords="10,10,100,100"        href="https://example.com/lobby"  alt="Lobby">'
+			. '<area shape="circle" coords="150,150,30"           href="https://example.com/atrium" alt="Atrium">'
+			. '<area shape="poly"   coords="50,50,150,50,100,150" href="https://example.com/garden" alt="Garden">'
+			. '</map>';
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'rotated image map');
+	}
+
+	/**
 	 * Test that a document with OTL-ligatured text passes ua1.
 	 *
 	 * DejaVuSerif ligates "fi", "ffi", and "ffl". Each ligature glyph cluster

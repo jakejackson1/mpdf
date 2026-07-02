@@ -459,4 +459,124 @@ class ImageMapTest extends PdfUaTestCase
 			'image-map hotspot /Rect yTop must be flipped with the host (portrait) page height'
 		);
 	}
+
+	/**
+	 * A rotated host image emits its hotspots as /QuadPoints (a non-axis-aligned
+	 * region) rather than the old warn-and-skip. The Link is tagged and no
+	 * "not supported" warning is recorded. ISO 32000-1 §12.5.6.5.
+	 */
+	public function testRotatedImageMapEmitsQuadPoints()
+	{
+		$mpdf = $this->makeMpdf();
+		$pdf = $this->getOutput(
+			$mpdf,
+			'<p>' . $this->imgUseMap('Floor plan', '#rooms', 'rotate="90"') . '</p>'
+			. '<map name="rooms">'
+			. '<area shape="rect" coords="10,10,100,100" href="https://example.com/lobby" alt="Lobby">'
+			. '</map>'
+		);
+		$this->assertStringContainsString('/Subtype /Link', $pdf);
+		$this->assertStringContainsString('/QuadPoints [', $pdf);
+		$this->assertStringContainsString('/S /Link', $pdf);
+		$this->assertStringNotContainsString('not supported', implode(' ', $mpdf->getPdfUaWarnings()));
+	}
+
+	/**
+	 * An axis-aligned host image keeps the plain /Rect hotspot with no
+	 * /QuadPoints — the rotated path must not change unrotated output.
+	 */
+	public function testAxisAlignedImageMapHasNoQuadPoints()
+	{
+		$mpdf = $this->makeMpdf();
+		$pdf = $this->getOutput(
+			$mpdf,
+			'<p>' . $this->imgUseMap() . '</p>'
+			. '<map name="rooms">'
+			. '<area shape="rect" coords="10,10,100,100" href="https://example.com/lobby" alt="Lobby">'
+			. '</map>'
+		);
+		$this->assertStringContainsString('/Subtype /Link', $pdf);
+		$this->assertStringNotContainsString('/QuadPoints', $pdf);
+	}
+
+	/**
+	 * The emitted /QuadPoints of a full-image hotspot must land exactly on the
+	 * four corners of the image as mPDF renders it. This composes the actual
+	 * placement matrices from the content stream independently of the production
+	 * code and compares — proving the hotspot tracks the rotation, which veraPDF
+	 * (structure-only) cannot verify.
+	 */
+	public function testRotatedImageMapQuadAlignsWithRenderedImage()
+	{
+		$mpdf = $this->makeMpdf();
+		$pdf = $this->getOutput(
+			$mpdf,
+			'<p><img src="' . $this->redPixelPng . '" alt="Photo" usemap="#m" width="120" height="60" rotate="90"></p>'
+			. '<map name="m"><area shape="default" href="https://example.com/full" alt="Whole"></map>'
+		);
+
+		// Compose the actual CTM from every cm operator preceding "/I{ID} Do".
+		$this->assertSame(1, preg_match('/\/I(\d+) Do/', $pdf, $idm));
+		$doPos = strpos($pdf, '/I' . $idm[1] . ' Do');
+		$seg   = substr($pdf, strrpos(substr($pdf, 0, $doPos), 'q'), $doPos);
+		preg_match_all(
+			'/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+cm/',
+			$seg,
+			$cms,
+			PREG_SET_ORDER
+		);
+		$ctm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+		foreach ($cms as $c) {
+			$ctm = $this->matmul(
+				[(float) $c[1], (float) $c[2], (float) $c[3], (float) $c[4], (float) $c[5], (float) $c[6]],
+				$ctm
+			);
+		}
+		// Image unit-square corners in the same order emitForImage walks the
+		// pixel corners: (0,0)->(0,1), (W,0)->(1,1), (W,H)->(1,0), (0,H)->(0,0).
+		$expected = array_merge(
+			$this->applyMatrix($ctm, 0.0, 1.0),
+			$this->applyMatrix($ctm, 1.0, 1.0),
+			$this->applyMatrix($ctm, 1.0, 0.0),
+			$this->applyMatrix($ctm, 0.0, 0.0)
+		);
+
+		$this->assertSame(1, preg_match('/\/QuadPoints \[([^\]]+)\]/', $pdf, $qm));
+		$quad = array_map('floatval', preg_split('/\s+/', trim($qm[1])));
+
+		$this->assertCount(8, $quad);
+		for ($i = 0; $i < 8; $i++) {
+			$this->assertEqualsWithDelta($expected[$i], $quad[$i], 0.05, "quad coord $i");
+		}
+	}
+
+	/**
+	 * Multiply two affine matrices [a b c d e f] (row-vector convention).
+	 *
+	 * @param  float[] $a
+	 * @param  float[] $b
+	 * @return float[]
+	 */
+	private function matmul(array $a, array $b)
+	{
+		return [
+			$a[0] * $b[0] + $a[1] * $b[2],
+			$a[0] * $b[1] + $a[1] * $b[3],
+			$a[2] * $b[0] + $a[3] * $b[2],
+			$a[2] * $b[1] + $a[3] * $b[3],
+			$a[4] * $b[0] + $a[5] * $b[2] + $b[4],
+			$a[4] * $b[1] + $a[5] * $b[3] + $b[5],
+		];
+	}
+
+	/**
+	 * @param  float[] $m
+	 * @param  float   $x
+	 * @param  float   $y
+	 * @return float[]  [x', y']
+	 */
+	private function applyMatrix(array $m, $x, $y)
+	{
+		return [$x * $m[0] + $y * $m[2] + $m[4], $x * $m[1] + $y * $m[3] + $m[5]];
+	}
 }

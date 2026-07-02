@@ -184,21 +184,29 @@ FAIL on common input · **P2** requirement-gap deferral · **P3** hygiene.
   be retained unchanged — stacking must not alter the tagged output.
 - **Size:** large — the one substantial layout-engine change in the plan.
 
-### C2. Rotated/transformed image maps warn-and-skip (even in strict mode)
-- **Files:** `src/Mpdf.php` (~8040–8076), `src/Ua/ImageMap/ImageMapRegistry.php`
-- **Root cause:** for rotated/transformed host images the link regions are dropped with
-  only a warning, and **strict mode does not throw** — inconsistent with every other
-  strict-mode violation, and a documented limitation.
-- **Fix:** compute the rotated hotspot geometry. Apply the image's rotation/transform
-  matrix to each area's shape, then emit the link region as `/QuadPoints` on the link
-  annotation (PDF link annotations support non-axis-aligned regions via `/QuadPoints`;
-  `/Rect` becomes the bounding box of the quad). Thread the transform matrix (already
-  known where `ROTATE`/`transform` are applied) into the queued image-map entry so
-  `drain()` can map coordinates. Remove the warn-and-skip branch entirely.
-- **Verify:** `<img usemap rotate="90">` fixture: assert a Link annotation exists with
-  `/QuadPoints` covering the rotated area, veraPDF PASS, and strict mode no longer
-  special-cases it. New `ImageMapTest` case.
-- **Size:** medium (matrix math + QuadPoints emission).
+### C2. Rotated/transformed image maps emit QuadPoints · SHIPPED (this branch)
+- **Files:** `src/Mpdf.php` (`printobjectbuffer()` image branch, `Link()`),
+  `src/Ua/ImageMap/ImageMapRegistry.php`, `src/Writer/MetadataWriter.php`
+  (`writeAnnotations()`), + tests below
+- **Root cause (fixed):** for rotated/transformed host images the link regions were
+  dropped with only a warning, and strict mode did not throw — inconsistent with every
+  other strict-mode violation, and a documented limitation.
+- **What shipped:**
+  - `printobjectbuffer()` captures the exact `$tr` (rotate) + `$tr2` (CSS transform)
+    content-stream matrix mPDF renders the image with into the queued entry
+    (`'transformCm'`); the warn-and-skip branch is removed.
+  - `ImageMapRegistry::buildHotspotMatrix()` replays that placement (image `cm` folded
+    with the captured matrices, ISO 32000-1 §8.3.4) to map each area's pixel-space
+    corners into device space; `emitForImage()` emits them as a `/QuadPoints` quad
+    (bounding box → `/Rect`). Axis-aligned images keep the plain `/Rect` path unchanged.
+  - `Mpdf::Link()` gained an optional device-space `$quadPoints` (7th PageLinks slot);
+    `writeAnnotations()` emits `/QuadPoints` when present.
+- **Verified:** hotspot quads land on the rendered image corners to <0.001pt (extracted
+  from the PDF's own `cm` operators, independent of the production code) for rotate
+  90/-90/180, CSS `rotate`, and CSS `skewX`. veraPDF ua1 PASS. Full suite 1387 green;
+  veraPDF gate 49 green (new `testRotatedImageMapPassesUa1`; new `ImageMapTest` cases
+  `testRotatedImageMapEmitsQuadPoints`, `testAxisAlignedImageMapHasNoQuadPoints`,
+  `testRotatedImageMapQuadAlignsWithRenderedImage`).
 
 ---
 

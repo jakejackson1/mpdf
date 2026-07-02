@@ -673,6 +673,17 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 							$annot .= ' /StructParent ' . $linkStructParent;
 						}
 
+						// PDF/UA-1 — a rotated/transformed image-map hotspot registers a
+						// non-axis-aligned region as /QuadPoints (device space, 8 floats
+						// per quad); /Rect above is its bounding box. ISO 32000-1 §12.5.6.5.
+						if ($this->mpdf->PDFUA && isset($pl[6])) {
+							$qp = '';
+							foreach ($pl[6] as $coord) {
+								$qp .= sprintf('%.3F ', $coord);
+							}
+							$annot .= ' /QuadPoints [' . rtrim($qp) . ']';
+						}
+
 						if (strpos($pl[4], '@') === 0) {
 
 							$p = substr($pl[4], 1);
