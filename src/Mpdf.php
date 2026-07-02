@@ -8107,11 +8107,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($objattr['type'] === 'barcode') {
 
 				// PDF/UA-1 — barcodes encode meaningful data; tag as Figure with Alt text.
-				// Respect artifact scope (running headers/footers, aria-hidden) and
-				// ColActive (columns may split content streams, suppressing BDC/EMC).
+				// Respect artifact scope (running headers/footers, aria-hidden). Column
+				// content is exempt: the column buffer replays each object's
+				// BDC…EMC pair intact, so tagging inside columns is conformant.
 				$pdfuaBarcodeTagOpened = false;
 				if ($this->PDFUA) {
-					$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
+					$inArtifactScope = $this->ua->getStructureTree()->isInArtifact();
 					if (!$inArtifactScope) {
 						$altText = isset($objattr['aria-label']) && $objattr['aria-label'] !== ''
 							? $objattr['aria-label']
@@ -8284,7 +8285,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// so the accessible text is available regardless of character stream order.
 				$pdfuaTextCircleTagOpened = false;
 				if ($this->PDFUA) {
-					$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
+					$inArtifactScope = $this->ua->getStructureTree()->isInArtifact();
 					if (!$inArtifactScope) {
 						$topText = isset($objattr['top-text']) ? $objattr['top-text'] : '';
 						$bottomText = isset($objattr['bottom-text']) ? $objattr['bottom-text'] : '';
@@ -9903,11 +9904,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if ($paint) {
 			// PDF/UA-1 — tag the image with Figure BDC/EMC or Artifact BMC/EMC.
 			// Watermarks are tagged separately by watermarkImg() — skip here.
-			// ColActive: column reordering can split BDC from EMC — suppress here,
-			// rely on column-level Artifact marking.
+			// Images inside columns are tagged too: the column buffer replays each
+			// object's BDC…EMC pair intact (verified by the barcode/image-in-columns
+			// veraPDF conformance case).
 			$pdfuaTagOpened = false;
 			if ($this->PDFUA && !$watermark) {
-				$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
+				$inArtifactScope = $this->ua->getStructureTree()->isInArtifact();
 				if (!$inArtifactScope) {
 					// PDF/UA-1 — SVG accessible-metadata fallback for /Alt.
 					// Mirror of the printobjectbuffer() insert: when the caller
@@ -26741,7 +26743,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// The text argument is the accessible representation — no ActualText needed.
 		$pdfuaTagOpened = false;
 		if ($this->PDFUA) {
-			$inArtifactScope = $this->ua->getStructureTree()->isInArtifact() || $this->ColActive;
+			$inArtifactScope = $this->ua->getStructureTree()->isInArtifact();
 			if (!$inArtifactScope) {
 				$structParents = isset($this->pageDim[$this->page]['structParents'])
 					? $this->pageDim[$this->page]['structParents'] : 0;

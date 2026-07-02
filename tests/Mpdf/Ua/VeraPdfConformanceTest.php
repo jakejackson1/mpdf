@@ -1106,6 +1106,35 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Graphical objects inside a multi-column layout must pass ua1. Barcodes and
+	 * images in columns were left untagged (clause 7.1 test 3) because the tagging
+	 * was suppressed while $ColActive was set; the column buffer actually replays
+	 * each object's BDC…EMC pair intact, so tagging them is conformant.
+	 *
+	 * @return void
+	 */
+	public function testColumnsWithGraphicsPassUa1()
+	{
+		$png = 'data:image/png;base64,'
+			. 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8'
+			. 'z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+
+		$html = '<h1>Columns with graphics</h1>'
+			. '<columns column-count="2" column-gap="5" />'
+			. '<p>First column paragraph to fill the left column with some text.</p>'
+			. '<barcode code="9780954224608" type="EAN13" />'
+			. '<p>Text after the barcode to continue the flow into the column.</p>'
+			. '<img src="' . $png . '" width="40" height="40" alt="A descriptive image">'
+			. '<p>More text to push content across both columns of the page.</p>'
+			. '<columns column-count="1" />'
+			. '<p>Back to a single column.</p>';
+
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'columns with barcode and image');
+	}
+
+	/**
 	 * Load an mpdf-example HTML fixture from tests/data/html/pdfua-examples/.
 	 *
 	 * The fixture must be a plain HTML file (no PHP tags). If the fixture file

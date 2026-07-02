@@ -173,6 +173,29 @@ class AnnotationsAndMiscTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A barcode inside a multi-column layout must still be tagged as a Figure.
+	 *
+	 * The guard used to suppress all graphical-object tagging while $ColActive was
+	 * set, leaving barcodes/images in columns as untagged real content (veraPDF
+	 * clause 7.1 test 3). The column buffer replays each object's BDC…EMC pair
+	 * intact, so the tag survives — assert /S /Figure appears and brackets balance.
+	 */
+	public function testBarcodeInsideColumnsProducesFigure()
+	{
+		$mpdf = $this->makeMpdf();
+		$output = $this->getOutput(
+			$mpdf,
+			'<columns column-count="2" column-gap="5" />'
+			. '<p>Left column text.</p>'
+			. '<barcode code="9780954224608" type="EAN13"/>'
+			. '<p>More column text to keep the flow going.</p>'
+			. '<columns column-count="1" />'
+		);
+		$this->assertStringContainsString('/S /Figure', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
 	 * A text watermark is tagged as an Artifact with /Type /Background.
 	 *
 	 * Watermarks are decorative repeating elements; they must be outside the
