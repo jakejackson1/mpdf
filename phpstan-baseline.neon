@@ -283,7 +283,19 @@ parameters:
 			path: src/Mpdf.php
 
 		-
+			message: '#^Binary operation "\+" between string and \(float\|int\) results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 2
+			path: src/Mpdf.php
+
+		-
 			message: '#^Binary operation "\-" between int\<0, max\> and string results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Mpdf.php
+
+		-
+			message: '#^Binary operation "\-" between string and \(float\|int\) results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
 			path: src/Mpdf.php
@@ -304,12 +316,6 @@ parameters:
 			message: '#^Call to sprintf contains 0 placeholders, 1 value given\.$#'
 			identifier: argument.sprintf
 			count: 1
-			path: src/Mpdf.php
-
-		-
-			message: '#^Comparison operation "\!\=" between \*NEVER\* and 2 results in an error\.$#'
-			identifier: notEqual.invalid
-			count: 2
 			path: src/Mpdf.php
 
 		-
@@ -1175,12 +1181,6 @@ parameters:
 			identifier: variable.undefined
 			count: 1
 			path: src/Tag/BlockTag.php
-
-		-
-			message: '#^Comparison operation "\>" between \*NEVER\* and \(float\|int\) results in an error\.$#'
-			identifier: greater.invalid
-			count: 1
-			path: src/Tag/Table.php
 
 		-
 			message: '#^Variable \$added_page might not be defined\.$#'
