@@ -6933,7 +6933,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 *   setXBefore   : set pen x = clusterOriginX + offset before painting
 	 *   setXAfter    : set pen x = clusterOriginX + offset after painting
 	 *   extraWidth   : padding added to contentWidth once per cluster
-	 *   widthZero    : this chunk contributes 0 to contentWidth (rt / rp)
+	 *   measuredWidth: this chunk's width, subtracted from contentWidth (rt / rp)
 	 *   hidden       : do not paint or advance (rp)
 	 *
 	 * @param  array $content   line chunks (text per run)
@@ -6979,14 +6979,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				continue;
 			}
 			// Maximal run of consecutive ruby chunks = one cluster.
+			$firstKey = $k;
 			$baseKeys = [];
 			$rtKeys = [];
 			$rpKeys = [];
-			$clusterKeys = [];
 			$j = $i;
 			while ($j < $n && $roles[$keys[$j]] !== null) {
 				$kk = $keys[$j];
-				$clusterKeys[] = $kk;
 				if ($roles[$kk] === 'rt') {
 					$rtKeys[] = $kk;
 				} elseif ($roles[$kk] === 'rp') {
@@ -7007,7 +7006,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 			$clusterW = max($baseW, $annW);
 
-			$ruby[$clusterKeys[0]]['clusterStart'] = true;
+			$ruby[$firstKey]['clusterStart'] = true;
 
 			if ($baseKeys) {
 				$ruby[$baseKeys[0]]['setXBefore'] = ($clusterW - $baseW) / 2;
@@ -7015,20 +7014,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$ruby[$baseKeys[0]]['extraWidth'] = $clusterW - $baseW;
 			} else {
 				// Annotation with no base run: the cluster still advances by clusterW.
-				$ruby[$clusterKeys[0]]['extraWidth'] = $clusterW;
+				$ruby[$firstKey]['extraWidth'] = $clusterW;
 			}
 
 			if ($rtKeys) {
 				$ruby[$rtKeys[0]]['setXBefore'] = ($clusterW - $annW) / 2;
 				$ruby[$rtKeys[count($rtKeys) - 1]]['setXAfter'] = $clusterW;
 				foreach ($rtKeys as $rk) {
-					$ruby[$rk]['widthZero'] = true;
 					$ruby[$rk]['measuredWidth'] = $widths[$rk];
 				}
 			}
 			foreach ($rpKeys as $rk) {
 				$ruby[$rk]['hidden'] = true;
-				$ruby[$rk]['widthZero'] = true;
 				$ruby[$rk]['measuredWidth'] = $widths[$rk];
 			}
 
