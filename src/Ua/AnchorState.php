@@ -53,6 +53,23 @@ class AnchorState
 	protected $anchorStructType = null;
 
 	/**
+	 * Innermost inline struct element (Link / Span / Ruby / RB / RT / RP) that
+	 * owns the content currently being emitted, or null when the content
+	 * belongs to the enclosing block.
+	 *
+	 * Captured per textbuffer entry from StructureTree::getCurrentInline()
+	 * during HTML parse, replayed by printbuffer() before each
+	 * WriteFlowingBlock() call and carried per chunk through
+	 * saveFont()/restoreFont() so the flowing-block emit loop can bracket the
+	 * chunk's marked content in the inline element's own BDC (UA1 audit E6).
+	 * Distinct from $linkStructElem, which the Link annotation OBJR wiring
+	 * needs even when the innermost inline element is a nested Span.
+	 *
+	 * @var \Mpdf\Ua\StructureElement|null
+	 */
+	protected $inlineContentElem = null;
+
+	/**
 	 * Set the current Link struct element. Called by Tag\A::open() when an
 	 * <a href> opens a Link, and by Mpdf::Cell() / printbuffer() when
 	 * restoring buffered cell entries that captured the element ref.
@@ -136,5 +153,29 @@ class AnchorState
 	public function getAnchorStructType()
 	{
 		return $this->anchorStructType;
+	}
+
+	/**
+	 * Set the innermost inline struct element owning the current content, or
+	 * null when the content belongs to the block. Called by printbuffer() for
+	 * each textbuffer entry and by Mpdf::restoreFont() for each chunk.
+	 *
+	 * @param  \Mpdf\Ua\StructureElement|null $elem
+	 * @return void
+	 */
+	public function setInlineContentElem($elem)
+	{
+		$this->inlineContentElem = $elem;
+	}
+
+	/**
+	 * Return the innermost inline struct element owning the current content, or
+	 * null when the content belongs to the block.
+	 *
+	 * @return \Mpdf\Ua\StructureElement|null
+	 */
+	public function getInlineContentElem()
+	{
+		return $this->inlineContentElem;
 	}
 }

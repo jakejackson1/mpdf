@@ -6697,6 +6697,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// only the LAST chunk's state and trailing non-link chunks erase the
 		// reference before the link annotation is created.
 		$saved['pdfuaLinkStructElem'] = $this->ua === null ? null : $this->ua->getAnchorState()->getLinkStructElem();
+		// UA1 audit E6 — capture the innermost inline struct element owning this
+		// chunk (Link / lang-Span / Abbr /E-Span / Ruby RB·RT·RP) so the emit
+		// loop can bracket the chunk's marked content in that element's own BDC.
+		// Restored per chunk by restoreFont(); distinct from the Link ref above,
+		// which the OBJR wiring needs even when the owner is a nested Span.
+		$saved['pdfuaInlineContentElem'] = $this->ua === null ? null : $this->ua->getAnchorState()->getInlineContentElem();
 		$saved['textvar'] = $this->textvar; // mPDF 5.7.1
 		$saved['textshadow'] = $this->textshadow;
 		$saved['linewidth'] = $this->LineWidth;
@@ -6732,6 +6738,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// the right reference even though the chunks were buffered earlier.
 		if (array_key_exists('pdfuaLinkStructElem', $saved) && $this->ua !== null) {
 			$this->ua->getAnchorState()->setLinkStructElem($saved['pdfuaLinkStructElem']);
+		}
+		// UA1 audit E6 — restore the chunk's innermost inline struct element so
+		// the flowing-block emit loop attributes its MCID to that element.
+		if (array_key_exists('pdfuaInlineContentElem', $saved) && $this->ua !== null) {
+			$this->ua->getAnchorState()->setInlineContentElem($saved['pdfuaInlineContentElem']);
 		}
 		$this->fixedlSpacing = $saved['fixedlSpacing'];
 		$this->minwSpacing = $saved['minwSpacing'];
@@ -6828,6 +6839,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// against the BLOCK element (not the StructureTree stack top, which may
 		// belong to a nested inline span/link).
 		$this->flowingBlockAttr['pdfua_struct_elem'] = null;
+		// UA1 audit E6 — the struct element the currently-open BDC belongs to:
+		// null for the block's (or an Artifact's) BDC, or a specific inline
+		// element (Link / lang-Span / Abbr / Ruby RB·RT) when the emit loop has
+		// bracketed a chunk's text in that inline element's own marked content.
+		// Lets ensureInlineBdcOpen()/ensureBlockBdcOpen() switch the active BDC
+		// only when the owning element changes between chunks.
+		$this->flowingBlockAttr['pdfua_bdc_elem'] = null;
 	}
 
 	/**
@@ -6852,12 +6870,21 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (!$this->PDFUA) {
 			return;
 		}
+		// UA1 audit E6 — if the active BDC belongs to an inline element (Link /
+		// Span / Ruby …), close it so block-owned content resumes in the
+		// block's own marked-content sequence. A BDC already targeting the block
+		// (pdfua_bdc_elem === null) is left open.
+		if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])
+			&& !empty($this->flowingBlockAttr['pdfua_bdc_elem'])) {
+			$this->closeBlockBdcIfOpen();
+		}
 		if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])) {
 			return;
 		}
 		if (!empty($this->flowingBlockAttr['pdfua_artifact_open'])) {
 			$this->ua->getMarkedContentHelper()->begin('Artifact', -1);
 			$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+			$this->flowingBlockAttr['pdfua_bdc_elem'] = null;
 			return;
 		}
 		if (empty($this->flowingBlockAttr['pdfua_struct_open'])) {
@@ -6875,6 +6902,63 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$mcid = $this->ua->getStructureTree()->addContentForElement($elem, $structParents);
 		$this->ua->getMarkedContentHelper()->begin($this->flowingBlockAttr['pdfua_type'], $mcid);
 		$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+		$this->flowingBlockAttr['pdfua_bdc_elem'] = null;
+	}
+
+	/**
+	 * PDF/UA-1 (audit E6) — Lazy per-page BDC opener for content owned by an
+	 * inline struct element (Link / lang-Span / Abbr /E-Span / Ruby RB·RT·RP).
+	 *
+	 * An MCID maps to exactly one struct element via the ParentTree, so text
+	 * flowing inside an inline element must carry its OWN MCID attributed to
+	 * that element — otherwise the enclosing Link owns only its OBJR and the
+	 * inline element's /Lang, /Alt or /E apply to no content (veraPDF flags an
+	 * empty Link/Span; ISO 14289-1 §7.18.5 / §7.2). This brackets the chunk's
+	 * marked content in the inline element's BDC, closing whatever BDC (block
+	 * or a different inline element) was previously open so the sequences stay
+	 * flat and balanced. The block's lazy opener resumes the block BDC once the
+	 * inline run ends.
+	 *
+	 * Mirrors ensureBlockBdcOpen(): idempotent within a run of same-element
+	 * chunks, re-emits a fresh MCID per page, and routes to /Artifact BMC when
+	 * the host block is itself an artifact (the inline open() was suppressed, so
+	 * no real inline element exists to attribute to).
+	 *
+	 * @param  \Mpdf\Ua\StructureElement $elem  the inline struct element owning this chunk
+	 * @return void
+	 */
+	private function ensureInlineBdcOpen($elem)
+	{
+		if (!$this->PDFUA || $elem === null) {
+			return;
+		}
+		// Already bracketing this exact element — nothing to do.
+		if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])
+			&& isset($this->flowingBlockAttr['pdfua_bdc_elem'])
+			&& $this->flowingBlockAttr['pdfua_bdc_elem'] === $elem) {
+			return;
+		}
+		// A BDC for a different owner (the block, or another inline element) is
+		// open: close it so this element's marked content is a separate,
+		// non-overlapping sequence.
+		if (!empty($this->flowingBlockAttr['pdfua_bdc_active'])) {
+			$this->closeBlockBdcIfOpen();
+		}
+		// An artifact host suppresses inline struct creation, so there is no
+		// element to attribute to — emit the chunk as Artifact content instead.
+		if (!empty($this->flowingBlockAttr['pdfua_artifact_open'])) {
+			$this->ua->getMarkedContentHelper()->begin('Artifact', -1);
+			$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+			$this->flowingBlockAttr['pdfua_bdc_elem'] = null;
+			return;
+		}
+		$structParents = isset($this->pageDim[$this->page]['structParents'])
+			? $this->pageDim[$this->page]['structParents']
+			: 0;
+		$mcid = $this->ua->getStructureTree()->addContentForElement($elem, $structParents);
+		$this->ua->getMarkedContentHelper()->begin($elem->getType(), $mcid);
+		$this->flowingBlockAttr['pdfua_bdc_active'] = true;
+		$this->flowingBlockAttr['pdfua_bdc_elem'] = $elem;
 	}
 
 	/**
@@ -6939,6 +7023,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		$this->ua->getMarkedContentHelper()->end();
 		$this->flowingBlockAttr['pdfua_bdc_active'] = false;
+		// UA1 audit E6 — the next opener re-decides the owner from scratch.
+		$this->flowingBlockAttr['pdfua_bdc_elem'] = null;
 	}
 
 	/**
@@ -7426,19 +7512,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		/* -- END CSS-IMAGE-FLOAT -- */
 
 
-		// PDF/UA-1 — Emit BDC/BMC lazily before content output begins.
-		// Routed through ensureBlockBdcOpen() so cross-page blocks reopen on each
-		// new page (one MCID per page → /K MCR dicts via StructureWriter rather
-		// than a bare integer collapsed by the singleSimpleMcid rule). The lazy
-		// helper attaches MCIDs to the captured BLOCK struct element via
-		// addContentForElement() — not the StructureTree stack top — because
-		// the stack top may belong to a nested inline. Empty blocks emit
-		// nothing because we gate on $content (not on $endofblock); empty
-		// $content means there is no Cell() about to fire.
+		// PDF/UA-1 — the per-page BDC is opened lazily per chunk inside the paint
+		// loop below (ensureBlockBdcOpen() / ensureInlineBdcOpen()) so each chunk
+		// is bracketed against the struct element that actually owns it — the
+		// block, or an enclosing inline Link / lang-Span / Abbr / Ruby (UA1 audit
+		// E6). Opening here instead would tag inline text against the block and
+		// leave the inline element with an empty /K. Cross-page blocks reopen on
+		// each new page (one MCID per page → /K MCR dicts). Empty blocks emit
+		// nothing because the paint loop only runs when $content is non-empty.
 		// ISO 32000-1 §14.7.4.4 — ParentTree dense array per /StructParents.
 		// ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no MCID).
 		if ($content) {
-			$this->ensureBlockBdcOpen();
 			// UA1 audit E8 — retain this (last) line's text on the block struct
 			// element so an aria-labelledby/-describedby reference can resolve to
 			// a real accessible name instead of an empty /Alt.
@@ -7644,6 +7728,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					}
 					if (!empty($rd['hidden'])) {
 						continue;
+					}
+				}
+
+				// PDF/UA-1 (audit E6) — bracket this chunk's marked content against
+				// the struct element that owns it. Text inside an inline element
+				// (restoreFont() above replayed its ref onto AnchorState) is tagged
+				// in that element's own BDC so the Link / lang-Span / Abbr / Ruby
+				// owns its MCID; block-owned text and object-buffer chunks (images,
+				// list markers — they carry their own Figure/Artifact handling)
+				// stay on the block's BDC. Table cells route through _tableWrite()
+				// (audit E9) and are excluded here.
+				if ($this->PDFUA && !$is_table) {
+					$pdfuaInlineElem = (!isset($this->objectbuffer[$k]) || !$this->objectbuffer[$k])
+						? $this->ua->getAnchorState()->getInlineContentElem()
+						: null;
+					if ($pdfuaInlineElem !== null) {
+						$this->ensureInlineBdcOpen($pdfuaInlineElem);
+					} else {
+						$this->ensureBlockBdcOpen();
 					}
 				}
 
@@ -9624,14 +9727,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->x += $ti;
 					}
 
-					// PDF/UA-1 — Lazy-open the per-page BDC just before the
-					// first Cell() emission of this completed line. Fixes the prior
-					// bug where only the FINAL line of a multi-line paragraph (the
-					// one reaching finishFlowingBlock(true)) was tagged; non-final
-					// lines emitted by WriteFlowingBlock here were untagged real
-					// content (Matterhorn 01-006, same-page case). Idempotent: a
-					// no-op when a BDC for the current page is already open.
-					$this->ensureBlockBdcOpen();
+					// PDF/UA-1 — the per-page BDC is opened lazily per chunk in the
+					// paint loop below (ensureBlockBdcOpen() / ensureInlineBdcOpen())
+					// so each chunk is bracketed against its owning struct element —
+					// the block, or an enclosing inline Link / lang-Span / Abbr /
+					// Ruby (UA1 audit E6). This also keeps every non-final line of a
+					// multi-line paragraph tagged (Matterhorn 01-006, same-page case).
 					// UA1 audit E8 — retain this completed line's text on the block
 					// struct element (see finishFlowingBlock) so the accumulated
 					// own-text feeds AriaIdResolver's accessible-name computation.
@@ -9677,6 +9778,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							}
 							if (!empty($rd['hidden'])) {
 								continue;
+							}
+						}
+
+						// PDF/UA-1 (audit E6) — bracket this chunk's marked content
+						// against its owning struct element (see finishFlowingBlock):
+						// inline text tags in the Link / lang-Span / Abbr / Ruby BDC,
+						// block-owned text and object-buffer chunks stay on the block's
+						// BDC. Table cells (audit E9) are excluded.
+						if ($this->PDFUA && !$is_table) {
+							$pdfuaInlineElem = (!isset($this->objectbuffer[$k]) || !$this->objectbuffer[$k])
+								? $this->ua->getAnchorState()->getInlineContentElem()
+								: null;
+							if ($pdfuaInlineElem !== null) {
+								$this->ensureInlineBdcOpen($pdfuaInlineElem);
+							} else {
+								$this->ensureBlockBdcOpen();
 							}
 						}
 
@@ -17185,6 +17302,16 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($linkElem !== null) {
 				$arr[19] = $linkElem;
 			}
+			// UA1 audit E6 — capture the innermost inline struct element owning
+			// this text so printbuffer() can replay it and the emit loop can
+			// attribute the text's MCID to that Link / lang-Span / Abbr /E-Span /
+			// Ruby element instead of the block (ISO 32000-1 §14.7.4.4). Unlike
+			// index 19 (always the Link, for OBJR wiring) this is the innermost
+			// inline — a nested lang-Span inside a Link resolves to the Span.
+			$inlineElem = $this->ua->getStructureTree()->getCurrentInline();
+			if ($inlineElem !== null) {
+				$arr[20] = $inlineElem;
+			}
 		}
 		// mPDF 6  Lists
 		if ($return) {
@@ -17569,6 +17696,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 			if (isset($vetor[12]) and $vetor[12] != '') { // Requested Bold,Italic
 				$this->ReqFontStyle = $vetor[12];
+			}
+			// UA1 audit E6 — replay the innermost inline struct element captured
+			// for this entry (Link / lang-Span / Abbr /E-Span / Ruby RB·RT·RP)
+			// onto AnchorState, so saveFont() carries it per chunk and the emit
+			// loop brackets the text's marked content in that element's own BDC.
+			// Set for every entry (not just links) so a bare lang-Span run also
+			// resolves; null clears any previous entry's inline owner.
+			if ($this->PDFUA) {
+				$this->ua->getAnchorState()->setInlineContentElem(
+					isset($vetor[20]) ? $vetor[20] : null
+				);
 			}
 			if (isset($vetor[1]) and $vetor[1] != '') { // LINK
 				if (strpos($vetor[1], ".") === false && strpos($vetor[1], "@") !== 0) { // assuming every external link has a dot indicating extension (e.g: .html .txt .zip www.somewhere.com etc.)

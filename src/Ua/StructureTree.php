@@ -132,6 +132,45 @@ class StructureTree
 	}
 
 	/**
+	 * Return the innermost open struct element when it is an inline text
+	 * wrapper (Link, Span, Ruby, RB, RT, RP), or null when the stack top is a
+	 * block-level element.
+	 *
+	 * An MCID maps to exactly one struct element via the ParentTree, so text
+	 * flowing inside a Link / lang-Span / Abbr /E-Span / Ruby RB·RT must have
+	 * its content item attributed to that inline element rather than the
+	 * enclosing block — otherwise the inline element owns no content and its
+	 * /Lang, /Alt, /E or (for Link) the text run is lost, and veraPDF flags an
+	 * empty Link/Span (ISO 14289-1 §7.18.5 / §7.2, Matterhorn 02-003 / 11-001).
+	 * The stack top IS the direct owner of any text buffered at this instant,
+	 * so only the top is inspected; block-owned text returns null and stays on
+	 * the block's marked-content sequence.
+	 *
+	 * Captured per textbuffer entry during HTML parse (Mpdf::_saveTextBuffer)
+	 * and replayed at emit time (UA1 audit E6). Reused by the deferred
+	 * cell / image content paths (E9, E11).
+	 *
+	 * @return StructureElement|null
+	 */
+	public function getCurrentInline()
+	{
+		$top = end($this->stack);
+		if ($top === false) {
+			return null;
+		}
+		return in_array($top->getType(), self::$inlineContentTypes, true) ? $top : null;
+	}
+
+	/**
+	 * Struct types that wrap flowing inline text and therefore own the MCID of
+	 * the text buffered while they are the stack top. ISO 32000-1 §14.8.5
+	 * inline-level structure types plus the Ruby group (§14.8.5.6 Table 337).
+	 *
+	 * @var string[]
+	 */
+	private static $inlineContentTypes = ['Link', 'Span', 'Ruby', 'RB', 'RT', 'RP'];
+
+	/**
 	 * Return ParentTree contents keyed by /StructParents integer, then by MCID.
 	 *
 	 * @return array<int, array<int, StructureElement>>

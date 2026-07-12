@@ -588,6 +588,32 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Inline struct elements must own their own content and still pass ua1
+	 * (audit E6).
+	 *
+	 * Text inside a Link / lang-Span / Abbr /E-Span / Ruby RB·RT is bracketed in
+	 * that element's own BDC and its MCID attributed to the element, so the Link
+	 * carries both its text MCID and the annotation OBJR and each inline element
+	 * owns a content item instead of being an empty Link/Span (ISO 14289-1
+	 * §7.18.5 / §7.2, Matterhorn 02-003 / 11-001).
+	 *
+	 * @return void
+	 */
+	public function testInlineStructContentPassesUa1()
+	{
+		$html = '<h1>Inline structure</h1>'
+			. '<p>see <a href="https://example.com">the report '
+			. '<span lang="fr">rapport</span></a> today</p>'
+			. '<p>The <abbr title="World Health Organization">WHO</abbr> reported it.</p>'
+			. '<p>Read <ruby><rb>KANJI</rb><rt>kan</rt></ruby> and '
+			. '<ruby>BASE<rt>note</rt></ruby> now.</p>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'inline struct content (link/span/abbr/ruby)');
+	}
+
+	/**
 	 * mpdf-examples coverage tests.
 	 *
 	 * Each test loads an mpdf-example HTML fixture from
