@@ -908,8 +908,9 @@ abstract class BlockTag extends Tag
 
 		// Push a struct element for this block onto the struct tree. The struct
 		// type is determined from the HTML tag and optional ROLE attribute.
-		// Float blocks default to Artifact (no accessible reading order); role or
-		// aria-label overrides this to produce a real struct element.
+		// A CSS float is a visual-positioning hint, not an accessibility one:
+		// floated content is real content and is tagged in reading order with its
+		// normal struct type. role="presentation" remains the explicit opt-out.
 		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
 			$structType = null;
 			// Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
@@ -973,13 +974,6 @@ abstract class BlockTag extends Tag
 						$structType = $ariaRoleMap[$role];
 					}
 				}
-			}
-
-			// Float blocks without explicit ARIA role → Artifact (reading order unknown)
-			$isFloat = isset($properties['FLOAT'])
-				&& in_array(strtoupper($properties['FLOAT']), ['LEFT', 'RIGHT']);
-			if ($isFloat && !isset($attr['ROLE']) && !isset($attr['ARIA-LABEL'])) {
-				$structType = '__artifact__';
 			}
 
 			// aria-hidden="true" → Artifact suppression context

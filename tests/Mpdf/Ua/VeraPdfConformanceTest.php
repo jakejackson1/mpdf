@@ -672,11 +672,13 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 
 	/**
 	 * mpdf-examples: example10_floating_and_fixed_position_elements.php —
-	 * Float and fixed-position rendering; both default to Artifact in PDFUA mode.
+	 * Float and fixed-position rendering. Floated content is real content and is
+	 * tagged in reading order with its normal struct type (audit E10); it is NOT
+	 * demoted to Artifact.
 	 *
 	 * The floating image (assets/tiger.wmf) in the original is omitted. The
-	 * fixture instead tests a text float — sufficient to exercise the Artifact
-	 * wrapping path for floated and positioned elements.
+	 * fixture instead tests text floats — sufficient to exercise tagging of
+	 * floated and positioned elements in the structure tree.
 	 *
 	 * @return void
 	 */

@@ -272,6 +272,42 @@ class StructureElementsTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A floated <div> carrying real text is tagged in reading order with its
+	 * normal struct type (Div), NOT demoted to Artifact.
+	 *
+	 * A CSS float is a visual-positioning hint, not an accessibility one — the
+	 * floated content is real content that assistive technology must reach
+	 * (Matterhorn 01-001). Before the E10 fix the whole subtree was marked
+	 * /Artifact and excluded from the structure tree, silently dropping it.
+	 */
+	public function testFloatedDivIsTaggedNotArtifact()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<div style="float:left; width:54%;">Real floated content.</div>'
+		);
+		// The floated block must produce a real Div struct element in reading order.
+		$this->assertStringContainsString('/S /Div', $output);
+		// Its content must be tagged (BDC), not wrapped as an artifact (BMC only).
+		$this->assertStringContainsString('/Div <</MCID', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A floated block with role="presentation" is still the explicit opt-out —
+	 * it is Artifact-wrapped (no Div struct element), unlike a plain float.
+	 */
+	public function testFloatedDivWithRolePresentationStaysArtifact()
+	{
+		$output = $this->getOutput(
+			$this->makeMpdf(),
+			'<div style="float:left; width:54%;" role="presentation">Decorative float.</div>'
+		);
+		$this->assertStringContainsString('BMC', $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
 	 * aria-hidden="true" on a block element produces Artifact wrap.
 	 */
 	public function testAriaHiddenProducesArtifactBmc()
