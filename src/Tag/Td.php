@@ -476,6 +476,12 @@ class Td extends Tag
 					$this->ua->getAriaIdResolver()->queue($tdElem, strtolower($ariaKey), $attr[$ariaKey]);
 				}
 			}
+
+			// PDF/UA-1 (audit E9) — open this cell's block-frame scope so any
+			// block tags (h1-6, ul/ol, li, p, div, …) that open inside the cell
+			// and are left un-closed by omitted HTML end tags are unwound in
+			// close() rather than leaking onto the struct stack.
+			$this->mpdf->pdfuaEnterCellFrameScope();
 		}
 
 		$cs = $rs = 1;
@@ -514,6 +520,10 @@ class Td extends Tag
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
 		if ($this->mpdf->PDFUA) {
+			// Audit E9 — first close any block struct element left open in the
+			// cell (HTML omits end tags mPDF does not replay inside tables), so
+			// this close() pops the TD/TH itself and not a leaked child frame.
+			$this->mpdf->pdfuaLeaveCellFrameScope();
 			$this->ua->getStructureTree()->close();
 		}
 

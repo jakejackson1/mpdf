@@ -423,6 +423,30 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $saveTableCounter;
 	var $cellBorderBuffer;
 
+	/**
+	 * PDF/UA-1 (audit E9) — balance stack for struct elements / artifact scopes
+	 * opened by block tags (h1-6, ul, ol, li, div, …) inside a table cell.
+	 * BlockTag::open() pushes one frame per block-tag open at tableLevel and
+	 * BlockTag::close() (or the cell-boundary unwind) pops it, so the deferred
+	 * cell render attributes MCIDs to the nested element rather than the whole TD.
+	 * Each frame is ['kind' => '__struct__'|'__artifact__'|null, 'tag' => HTML tag,
+	 * 'closes' => number of StructureTree::close() calls needed to undo it]. A
+	 * plain block is 1; a cell `<li>` opens LI + LBody so it is 2.
+	 *
+	 * @var array<int, array{kind: string|null, tag: string, closes: int}>
+	 */
+	var $cellBlockStructStack = [];
+
+	/**
+	 * PDF/UA-1 (audit E9) — per-cell baseline lengths of $cellBlockStructStack.
+	 * Td/Th open() records the length on entry; close() unwinds any block frames
+	 * left open in the cell (HTML omits many end tags, and mPDF does not replay
+	 * them inside tables) back down to that baseline. Nested tables stack.
+	 *
+	 * @var int[]
+	 */
+	var $cellFrameBaseStack = [];
+
 	var $saveHTMLFooter_height;
 	var $saveHTMLFooterE_height;
 
@@ -7028,6 +7052,81 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
+	 * PDF/UA-1 (audit E9) — enter a table cell's block-frame scope.
+	 *
+	 * Records the current $cellBlockStructStack length so pdfuaLeaveCellFrameScope()
+	 * can undo exactly the block struct elements opened inside this cell. Called
+	 * by Td/Th::open() after the TD/TH struct element itself has been pushed.
+	 *
+	 * @return void
+	 */
+	public function pdfuaEnterCellFrameScope()
+	{
+		if ($this->PDFUA) {
+			$this->cellFrameBaseStack[] = count($this->cellBlockStructStack);
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — leave a table cell's block-frame scope.
+	 *
+	 * Closes any block struct element / artifact scope still open in the cell
+	 * (HTML omits many block end tags — `<td><p>x</td>`, `<li>a<li>b` — and mPDF
+	 * does not replay them inside tables) back down to the baseline recorded by
+	 * pdfuaEnterCellFrameScope(). Must run BEFORE Td/Th::close() pops the TD/TH,
+	 * otherwise a leaked child frame would be popped in the TD's place and corrupt
+	 * the struct stack for the rest of the document.
+	 *
+	 * @return void
+	 */
+	public function pdfuaLeaveCellFrameScope()
+	{
+		if (!$this->PDFUA) {
+			return;
+		}
+		$base = array_pop($this->cellFrameBaseStack);
+		if ($base === null) {
+			$base = 0;
+		}
+		while (count($this->cellBlockStructStack) > $base) {
+			$this->pdfuaPopCellBlockStructFrame();
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — pop the top cell block frame and close whatever it
+	 * opened on the struct tree (a struct element, an artifact scope, or nothing).
+	 *
+	 * @return void
+	 */
+	public function pdfuaPopCellBlockStructFrame()
+	{
+		$frame = array_pop($this->cellBlockStructStack);
+		if ($frame === null) {
+			return;
+		}
+		if ($frame['kind'] === '__artifact__') {
+			$this->ua->getStructureTree()->closeArtifact();
+		} elseif ($frame['kind'] === '__struct__') {
+			$closes = isset($frame['closes']) ? $frame['closes'] : 1;
+			for ($i = 0; $i < $closes; $i++) {
+				$this->ua->getStructureTree()->close();
+			}
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — the current cell's block-frame baseline (0 when not
+	 * inside a cell). Frames at or above this index belong to the current cell.
+	 *
+	 * @return int
+	 */
+	public function pdfuaCurrentCellFrameBase()
+	{
+		return empty($this->cellFrameBaseStack) ? 0 : end($this->cellFrameBaseStack);
+	}
+
+	/**
 	 * PDF/UA-1 — Restore the per-block pdfua state onto $flowingBlockAttr.
 	 *
 	 * newFlowingBlock() unconditionally resets pdfua_struct_open / pdfua_type /
@@ -7737,15 +7836,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// in that element's own BDC so the Link / lang-Span / Abbr / Ruby
 				// owns its MCID; block-owned text and object-buffer chunks (images,
 				// list markers — they carry their own Figure/Artifact handling)
-				// stay on the block's BDC. Table cells route through _tableWrite()
-				// (audit E9) and are excluded here.
-				if ($this->PDFUA && !$is_table) {
+				// stay on the block's BDC.
+				//
+				// Table-cell text (audit E9) always carries an owner captured in
+				// _saveCellTextBuffer() — the TD/TH itself, or a block/inline
+				// element opened inside the cell (H2, L, LI, Link, lang-Span …) —
+				// so the same ensureInlineBdcOpen() attributes each chunk to the
+				// right cell descendant. A cell chunk with no owner is an
+				// object-buffer entry (image/widget) that keeps its own
+				// Figure/Artifact BDC in printobjectbuffer(), so nothing opens here.
+				if ($this->PDFUA) {
 					$pdfuaInlineElem = (!isset($this->objectbuffer[$k]) || !$this->objectbuffer[$k])
 						? $this->ua->getAnchorState()->getInlineContentElem()
 						: null;
 					if ($pdfuaInlineElem !== null) {
 						$this->ensureInlineBdcOpen($pdfuaInlineElem);
-					} else {
+					} elseif (!$is_table) {
 						$this->ensureBlockBdcOpen();
 					}
 				}
@@ -9785,14 +9891,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// against its owning struct element (see finishFlowingBlock):
 						// inline text tags in the Link / lang-Span / Abbr / Ruby BDC,
 						// block-owned text and object-buffer chunks stay on the block's
-						// BDC. Table cells (audit E9) are excluded.
-						if ($this->PDFUA && !$is_table) {
+						// BDC. Table-cell text (audit E9) carries a per-chunk owner
+						// captured in _saveCellTextBuffer() (the TD/TH or a nested cell
+						// block/inline element) and is bracketed the same way; a cell
+						// chunk with no owner is an object-buffer entry handled by
+						// printobjectbuffer(), so nothing opens here.
+						if ($this->PDFUA) {
 							$pdfuaInlineElem = (!isset($this->objectbuffer[$k]) || !$this->objectbuffer[$k])
 								? $this->ua->getAnchorState()->getInlineContentElem()
 								: null;
 							if ($pdfuaInlineElem !== null) {
 								$this->ensureInlineBdcOpen($pdfuaInlineElem);
-							} else {
+							} elseif (!$is_table) {
 								$this->ensureBlockBdcOpen();
 							}
 						}
@@ -17384,6 +17494,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($linkElem !== null) {
 				$arr[19] = $linkElem;
 			}
+			// UA1 audit E9 — capture the innermost open struct element owning
+			// this chunk: the TD/TH itself, or a block/inline element opened
+			// inside the cell (H2, L, LI, Link, lang-Span …). The deferred cell
+			// render (_tableWrite → printbuffer) replays it (index 20, like
+			// _saveTextBuffer) so each chunk's MCID is attributed to its true
+			// owner instead of the whole cell collapsing under one TD MCID
+			// (ISO 32000-1 §14.7.4.4). The Document root is never a content
+			// owner, so it is not captured.
+			$ownerElem = $this->ua->getStructureTree()->getCurrent();
+			if ($ownerElem !== null && $ownerElem !== $this->ua->getStructureTree()->getRoot()) {
+				$arr[20] = $ownerElem;
+			}
 		}
 		$this->cell[$this->row][$this->col]['textbuffer'][] = $arr;
 	}
@@ -24523,22 +24645,38 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// TEXT (and nested tables)
 
 					$this->divwidth = $w;
-					// PDF/UA-1 — emit BDC for the TD/TH struct element that was pushed
-					// during HTML parse and stored on $cell['pdfua_struct_elem']. We use
-					// addContentForElement() rather than addContent() because the struct element
-					// is no longer on the parse-time stack; it was already popped when </td>
-					// was processed during the table-collect phase.
+					// PDF/UA-1 — the TD/TH struct element pushed during HTML parse and
+					// stored on $cell['pdfua_struct_elem'].
 					//
-					// Repeated thead rows re-emitting on a continuation page: the struct element
-					// reference is the same object but the /StructParents integer for the new
-					// page is different, so the MCR dict correctly records the new page ref.
+					// It is no longer on the parse-time stack (it was popped when </td>
+					// was processed during the table-collect phase), so pushExisting()
+					// below makes it the render-time stack top. That way any struct
+					// element opened while the cell content renders (a Figure for an
+					// <img>, a Link, a deferred Span, …) attaches beneath the cell
+					// instead of the parse-time top (Document/Table); ISO 14289-1 §7.2
+					// test 3 otherwise fails with Table directly containing Figure
+					// children rather than going through TR > TD.
 					//
-					// ISO 32000-1:2008 §14.7.4.4 — addContentForElement builds an MCR dict
-					// with the correct /Pg reference for multi-page tables.
+					// The cell's text is NOT bracketed here as one blanket TD MCID:
+					// each textbuffer chunk carries its own owning struct element (the
+					// TD/TH itself, or a nested H2 / L / LI / Link / Span opened inside
+					// the cell — audit E9), and the printbuffer emit loop brackets it in
+					// that element's own marked content. The one exception is a rotated
+					// cell, which paints a single flattened string with Text() outside
+					// the emit loop, so its whole-cell TD MCID is emitted around that
+					// Text() call below. ISO 32000-1:2008 §14.7.4.4 — one MCID maps to
+					// exactly one struct element; multi-page cells re-emit a fresh MCID
+					// per /StructParents page key.
 					$pdfuaCellElem = (isset($cell['pdfua_struct_elem']) && $this->PDFUA)
 						? $cell['pdfua_struct_elem']
 						: null;
+					$pdfuaCellRotated = ($pdfuaCellElem !== null && !empty($cell['textbuffer']) && !empty($cell['R']));
 					if ($pdfuaCellElem !== null && !empty($cell['textbuffer'])) {
+						$this->ua->getStructureTree()->pushExisting($pdfuaCellElem);
+					}
+					if ($pdfuaCellRotated) {
+						// Rotated cell — bracket the single Text() string emitted below
+						// in the TD/TH's own marked content (audit E9).
 						$pdfuaCellStructParents = isset($this->pageDim[$this->page]['structParents'])
 							? $this->pageDim[$this->page]['structParents']
 							: 0;
@@ -24547,15 +24685,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							$pdfuaCellStructParents
 						);
 						$this->ua->getMarkedContentHelper()->begin($pdfuaCellElem->getType(), $pdfuaCellMcid);
-						// PDF/UA-1 — push the cell's struct element onto the
-						// open-element stack so that any nested struct opens
-						// during cell rendering (Figure for <img>, Span for
-						// inline elements, Link for <a>, etc.) attach as
-						// children of the TD/TH instead of the parse-time top
-						// (Document/Table). Without this, ISO 14289-1 §7.2 test
-						// 3 fails because Table directly contains Figure
-						// children rather than going through TR > TD.
-						$this->ua->getStructureTree()->pushExisting($pdfuaCellElem);
 					}
 					if (!empty($cell['textbuffer'])) {
 						$this->cellTextAlign = $align;
@@ -24718,12 +24847,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						}
 						$this->y = $opy;
 					}
-					// PDF/UA-1 — close the TD/TH BDC opened above.
-					if ($pdfuaCellElem !== null && !empty($cell['textbuffer'])) {
+					// PDF/UA-1 (audit E9) — close the rotated cell's whole-cell BDC.
+					// The non-rotated path opened no blanket BDC here: its per-chunk
+					// BDCs were balanced by the printbuffer emit loop /
+					// finishFlowingBlock(endofblock) close-fence, so no EMC is owed.
+					if ($pdfuaCellRotated) {
 						$this->ua->getMarkedContentHelper()->end();
-						// Pop the cell's struct element off the stack — it was
-						// pushed before printbuffer ran so deferred Figure /
-						// Span / Link opens used the right parent.
+					}
+					// Pop the cell's TD/TH struct element off the render-time stack —
+					// it was pushed before printbuffer ran so deferred Figure / Span /
+					// Link opens used the right parent.
+					if ($pdfuaCellElem !== null && !empty($cell['textbuffer'])) {
 						$this->ua->getStructureTree()->close();
 					}
 

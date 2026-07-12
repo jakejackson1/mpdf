@@ -152,6 +152,31 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that block-level content inside a table cell passes ua1 (audit E9).
+	 *
+	 * A heading and a list inside a `<td>` must open their real H2 and L/LI
+	 * struct elements beneath the TD, each owning its own marked content —
+	 * rather than the whole cell collapsing under one TD MCID with empty (or
+	 * absent) descendant elements. A heading directly under Table, or an H2/L/LI
+	 * that owns no content, fails veraPDF (ISO 14289-1 §7.2, Matterhorn 01-006).
+	 *
+	 * @return void
+	 */
+	public function testBlockContentInsideTableCellPassesUa1()
+	{
+		$html = '<h1>Cell block content</h1>'
+			. '<table border="1">'
+			. '<tr><td><h2>Cell heading</h2>'
+			. '<ul><li>Item one</li><li>Item two</li></ul></td>'
+			. '<td><p>Plain <a href="https://example.com">link</a> text</p></td></tr>'
+			. '</table>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'block content inside a table cell');
+	}
+
+	/**
 	 * Test that a document with images (descriptive and decorative) passes ua1.
 	 *
 	 * A descriptive image (non-empty alt) must produce a Figure struct element

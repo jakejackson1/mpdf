@@ -15,6 +15,287 @@ use Mpdf\Utils\UtfString;
 abstract class BlockTag extends Tag
 {
 
+	/**
+	 * PDF/UA-1 — resolve the struct type for a block-level tag.
+	 *
+	 * Determines the PDF struct type from the CSS class (ToC divs), the HTML
+	 * tag, and any ROLE / aria-hidden override, then enforces the §7.4.2
+	 * heading sequence (first heading must be H1; descending sequences must not
+	 * skip a level) — recording the assigned level on the heading tracker.
+	 *
+	 * Shared by the normal block path and the in-table-cell path (audit E9) so a
+	 * heading or list inside a `<td>`/`<th>` opens its real struct element and
+	 * its headings take part in the one document-wide sequence, rather than the
+	 * whole cell collapsing to direct TD content.
+	 *
+	 * @param  string $tag   the (upper-case) HTML tag name
+	 * @param  array  $attr  the tag's attributes
+	 * @return string|null   a PDF struct type, the '__artifact__' sentinel, or
+	 *                       null when the tag maps to no struct element
+	 */
+	private function resolveBlockStructType($tag, $attr)
+	{
+		$structType = null;
+		// Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
+		if (!empty($attr['CLASS'])) {
+			foreach (explode(' ', strtolower($attr['CLASS'])) as $cls) {
+				$tocType = \Mpdf\Ua\StructType::fromCssClass($cls);
+				if ($tocType !== null) {
+					$structType = $tocType;
+					break;
+				}
+			}
+		}
+		if ($structType === null) {
+			$structType = \Mpdf\Ua\StructType::fromHtmlTag($tag, $attr);
+		}
+
+		// ROLE attribute ARIA overrides for block elements
+		if (!empty($attr['ROLE'])) {
+			$role = strtolower($attr['ROLE']);
+			if ($role === 'none' || $role === 'presentation' || $role === 'separator') {
+				$structType = '__artifact__';
+			} elseif ($role === 'heading') {
+				$level = isset($attr['ARIA-LEVEL']) ? (int) $attr['ARIA-LEVEL'] : 2;
+				$structType = 'H' . max(1, min(6, $level));
+			} else {
+				$ariaRoleMap = [
+					'list'           => 'L',
+					'listitem'       => 'LI',
+					'table'          => 'Table',
+					'grid'           => 'Table',
+					'row'            => 'TR',
+					'columnheader'   => 'TH',
+					'rowheader'      => 'TH',
+					'cell'           => 'TD',
+					'gridcell'       => 'TD',
+					'figure'         => 'Figure',
+					'img'            => 'Figure',
+					'note'           => 'Note',
+					'doc-footnote'   => 'Note',
+					'link'           => 'Link',
+					'article'        => 'Art',
+					'doc-chapter'    => 'Sect',
+					'region'         => 'Sect',
+					'navigation'     => 'Sect',
+					'main'           => 'Div',
+					'banner'         => 'Sect',
+					'complementary'  => 'Sect',
+					'contentinfo'    => 'Sect',
+					'group'          => 'Div',
+					'paragraph'      => 'P',
+					'term'           => 'Span',
+					'definition'     => 'Span',
+					// 'doc-title' is the document's primary heading (DPUB-ARIA).
+					// Map to H1 — the standard PDF struct type for a top-level
+					// heading — rather than the literal 'Title' which is NOT in
+					// ISO 32000-1 §14.8 Tables 333–335 and would throw via
+					// StructType::isValid() at StructureTree::open().
+					'doc-title'      => 'H1',
+				];
+				if (isset($ariaRoleMap[$role])) {
+					$structType = $ariaRoleMap[$role];
+				}
+			}
+		}
+
+		// aria-hidden="true" → Artifact suppression context
+		if (isset($attr['ARIA-HIDDEN']) && strtolower($attr['ARIA-HIDDEN']) === 'true') {
+			$structType = '__artifact__';
+		}
+
+		// PDF/UA-1 §7.4.2 rule 1 — heading sequence enforcement.
+		// The first heading must be H1; descending sequences must not skip
+		// intervening levels (e.g. H1→H3 is invalid; auto-clamp to H1→H2).
+		// Applies to struct types H1-H6 wherever they occur — including headings
+		// inside table cells (audit E9), which now share this one tracker.
+		if ($structType !== null && $structType !== '__artifact__'
+			&& preg_match('/^H([1-6])$/', $structType, $hm)
+		) {
+			$requestedLevel = (int) $hm[1];
+			$lastLevel      = $this->ua->getLastHeadingLevel();
+
+			if ($lastLevel === 0 && $requestedLevel > 1) {
+				// First heading in the document is not H1 — violation.
+				if ($this->mpdf->PDFUAauto) {
+					$this->ua->addWarning(
+						'PDF/UA-1 §7.4.2: first heading must be H1; '
+						. $structType . ' auto-promoted to H1.'
+					);
+					$structType = 'H1';
+				} else {
+					throw new \Mpdf\MpdfException(
+						'PDF/UA-1 §7.4.2: first heading in the document must be H1; '
+						. $structType . ' found. Enable PDFUAauto to auto-correct.'
+					);
+				}
+			} elseif ($lastLevel > 0 && $requestedLevel > $lastLevel + 1) {
+				// Descending sequence skips a level — violation.
+				$clampedLevel = $lastLevel + 1;
+				if ($this->mpdf->PDFUAauto) {
+					$this->ua->addWarning(
+						'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+						. ' to ' . $structType . '; auto-clamped to H' . $clampedLevel . '.'
+					);
+					$structType = 'H' . $clampedLevel;
+				} else {
+					throw new \Mpdf\MpdfException(
+						'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
+						. ' to ' . $structType . ' (skips H' . $clampedLevel . '). '
+						. 'Enable PDFUAauto to auto-correct.'
+					);
+				}
+			}
+
+			// Record the final assigned level (after any clamping).
+			if (preg_match('/^H([1-6])$/', $structType, $fm)) {
+				$this->ua->setLastHeadingLevel((int) $fm[1]);
+			}
+		}
+
+		return $structType;
+	}
+
+	/**
+	 * HTML tags after which an open `<p>` end tag may be omitted (HTML5 §13.1.2).
+	 * Mirrors the set in Tag::OpenTag(); reused for table cells (audit E9) where
+	 * mPDF does not replay optional end tags.
+	 *
+	 * @var string[]
+	 */
+	private static $pClosingTags = [
+		'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'TABLE', 'PRE',
+		'FORM', 'ADDRESS', 'BLOCKQUOTE', 'CENTER', 'DL', 'HR', 'ARTICLE', 'ASIDE',
+		'FIELDSET', 'HGROUP', 'MAIN', 'NAV', 'SECTION',
+	];
+
+	/**
+	 * PDF/UA-1 (audit E9) — push a frame recording what a block tag opened on
+	 * the struct tree while inside a table cell, so it can be undone later.
+	 *
+	 * A frame is pushed for every BlockTag open() that occurs at tableLevel —
+	 * '__struct__' (a struct element was opened), '__artifact__' (an artifact
+	 * scope was opened) or null (nothing) — including the early bail-outs
+	 * (display:none, caption). The HTML tag is stored so close() and the
+	 * optional-end-tag logic can match a close to its open. Outside a table this
+	 * is a no-op; the normal block path tracks state on the block dict instead.
+	 *
+	 * @param  string|null $kind    '__struct__', '__artifact__' or null
+	 * @param  string      $tag     the HTML tag name
+	 * @param  int         $closes  StructureTree::close() calls needed to undo it
+	 * @return void
+	 */
+	private function pushCellBlockStructFrame($kind, $tag, $closes = 1)
+	{
+		if ($this->mpdf->PDFUA && $this->mpdf->tableLevel) {
+			$this->mpdf->cellBlockStructStack[] = ['kind' => $kind, 'tag' => $tag, 'closes' => $closes];
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — apply HTML's optional-end-tag rules before opening a
+	 * new block inside a table cell.
+	 *
+	 * HTML5 omits many block end tags (`<li>a<li>b`, `<p>x<h2>`), and mPDF does
+	 * not replay them inside tables — so without this the second sibling would
+	 * nest inside the first (getCurrent() still points at the un-closed sibling).
+	 * When the current cell's innermost open block is a sibling the new tag
+	 * implicitly closes (li▸li, dt▸dt/dd, dd▸dt/dd, p▸block), close it first so
+	 * the new element opens as a sibling. Mirrors Tag::OpenTag().
+	 *
+	 * @param  string $tag  the HTML tag about to open
+	 * @return void
+	 */
+	private function autoCloseCellSiblingFor($tag)
+	{
+		if (!$this->mpdf->PDFUA || !$this->mpdf->tableLevel) {
+			return;
+		}
+		if (count($this->mpdf->cellBlockStructStack) <= $this->mpdf->pdfuaCurrentCellFrameBase()) {
+			return;
+		}
+		$top = end($this->mpdf->cellBlockStructStack);
+		$topTag = $top['tag'];
+		$close = ($topTag === 'LI' && $tag === 'LI')
+			|| ($topTag === 'DT' && ($tag === 'DT' || $tag === 'DD'))
+			|| ($topTag === 'DD' && ($tag === 'DT' || $tag === 'DD'))
+			|| ($topTag === 'P' && in_array($tag, self::$pClosingTags, true));
+		if ($close) {
+			$this->mpdf->pdfuaPopCellBlockStructFrame();
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — wrap a `<dt>`/`<dd>` inside a table cell in an
+	 * implicit LI so the required L ▸ LI ▸ (Lbl | LBody) containment holds
+	 * (ISO 14289-1 §7.2 tests 18/19 — Lbl/LBody must be children of LI, and L
+	 * may contain only L/LI/Caption). Mirrors the non-table Dt/Dd handlers, whose
+	 * own logic is gated out inside tables.
+	 *
+	 * A `<dt>` starting a new item first closes the previous item's implicit LI;
+	 * a `<dd>` reuses the LI opened by its `<dt>`. The implicit LI is tracked as a
+	 * cell frame (tag '__implicitLI__') so it is closed with `</dl>`
+	 * (closeCellBlockStructFrame('DL') pops it above the L) or unwound at cell end.
+	 *
+	 * @param  string $tag  'DT' or 'DD'
+	 * @return void
+	 */
+	private function openImplicitCellListItem($tag)
+	{
+		$tree = $this->ua->getStructureTree();
+		// Implicitly end a preceding <dt>/<dd> whose end tag HTML omitted, so its
+		// Lbl/LBody is a sibling — not an ancestor — of this one.
+		if (count($this->mpdf->cellBlockStructStack) > $this->mpdf->pdfuaCurrentCellFrameBase()) {
+			$topTag = end($this->mpdf->cellBlockStructStack)['tag'];
+			if ($topTag === 'DT' || $topTag === 'DD') {
+				$this->mpdf->pdfuaPopCellBlockStructFrame();
+			}
+		}
+		$cur = $tree->getCurrent()->getType();
+		if ($tag === 'DT' && $cur === 'LI') {
+			// New term — close the previous item's implicit LI.
+			$this->closeCellBlockStructFrame('__implicitLI__');
+			$cur = $tree->getCurrent()->getType();
+		}
+		if ($cur === 'L') {
+			$tree->open('LI');
+			$this->pushCellBlockStructFrame('__struct__', '__implicitLI__');
+		}
+	}
+
+	/**
+	 * PDF/UA-1 (audit E9) — close the cell block frame this end tag matches.
+	 *
+	 * Scans the current cell's frames for one whose HTML tag equals $tag and, if
+	 * found, closes every frame above it (still-open children whose end tag HTML
+	 * omitted — e.g. the `<li>` inside `<ul><li>x</ul>`) and then the match
+	 * itself. A stray close with no matching open frame is ignored. No-op outside
+	 * a table.
+	 *
+	 * @param  string $tag  the HTML tag being closed
+	 * @return void
+	 */
+	private function closeCellBlockStructFrame($tag)
+	{
+		if (!$this->mpdf->PDFUA || !$this->mpdf->tableLevel) {
+			return;
+		}
+		$base = $this->mpdf->pdfuaCurrentCellFrameBase();
+		$matchIdx = -1;
+		for ($i = count($this->mpdf->cellBlockStructStack) - 1; $i >= $base; $i--) {
+			if ($this->mpdf->cellBlockStructStack[$i]['tag'] === $tag) {
+				$matchIdx = $i;
+				break;
+			}
+		}
+		if ($matchIdx < 0) {
+			return;
+		}
+		while (count($this->mpdf->cellBlockStructStack) > $matchIdx) {
+			$this->mpdf->pdfuaPopCellBlockStructFrame();
+		}
+	}
+
 	public function open($attr, &$ahtml, &$ihtml)
 	{
 		$tag = $this->getTagName();
@@ -40,6 +321,11 @@ abstract class BlockTag extends Tag
 
 		$p = $this->cssManager->PreviewBlockCSS($tag, $attr);
 		if (isset($p['DISPLAY']) && strtolower($p['DISPLAY']) === 'none') {
+			// PDF/UA-1 (audit E9) — this open() bails before the in-table struct
+			// point below, so push an empty frame (tag recorded) to keep the cell
+			// struct stack balanced against the matching close(). Non-table opens
+			// are unaffected.
+			$this->pushCellBlockStructFrame(null, $tag);
 			$this->mpdf->blklvl++;
 			$this->mpdf->blk[$this->mpdf->blklvl]['hide'] = true;
 			$this->mpdf->blk[$this->mpdf->blklvl]['tag'] = $tag;  // mPDF 6
@@ -62,6 +348,8 @@ abstract class BlockTag extends Tag
 				unset($attr['ALIGN']);
 			}
 			if ($cappos != $divpos) {
+				// PDF/UA-1 (audit E9) — see the display:none bail above.
+				$this->pushCellBlockStructFrame(null, $tag);
 				$this->mpdf->blklvl++;
 				$this->mpdf->blk[$this->mpdf->blklvl]['hide'] = true;
 				$this->mpdf->blk[$this->mpdf->blklvl]['tag'] = $tag;  // mPDF 6
@@ -137,6 +425,64 @@ abstract class BlockTag extends Tag
 			$properties = $this->cssManager->MergeCSS('', $tag, $attr);
 			if (!empty($properties)) {
 				$this->mpdf->setCSS($properties, 'INLINE');
+			}
+
+			// PDF/UA-1 (audit E9) — open this block tag's struct element beneath
+			// the current TD/TH so a heading or list inside a cell gets a real
+			// H2 / L / LI element (and its headings reach the sequence tracker)
+			// instead of the whole cell collapsing to direct TD content. The
+			// element is opened here — before the list-marker text below is
+			// buffered — so getCurrent() (captured per chunk in
+			// _saveCellTextBuffer) attributes the marker and text to it. The
+			// deferred cell render (_tableWrite → printbuffer) then brackets each
+			// chunk in its owner's marked content. ISO 32000-1 §14.8 / ISO
+			// 14289-1 §7.2 (empty structure elements). The frame stack pairs each
+			// open with the pop in close().
+			if ($this->mpdf->PDFUA) {
+				if ($tag === 'DT' || $tag === 'DD') {
+					// Definition lists need an implicit LI between L and Lbl/LBody.
+					$this->openImplicitCellListItem($tag);
+				} else {
+					// HTML omits many block end tags; close an implicitly-ended
+					// sibling (li▸li, p▸block …) so the new element opens as a
+					// sibling, not a child.
+					$this->autoCloseCellSiblingFor($tag);
+				}
+				$structType = $this->resolveBlockStructType($tag, $attr);
+				if ($structType === '__artifact__') {
+					$this->ua->getStructureTree()->openArtifact();
+					$this->pushCellBlockStructFrame('__artifact__', $tag);
+				} elseif ($structType !== null) {
+					$structAttrs = [];
+					if (isset($attr['LANG'])) {
+						$structAttrs['Lang'] = $attr['LANG'];
+					}
+					if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+						$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+					}
+					$this->ua->getStructureTree()->open($structType, $structAttrs);
+					$elem = $this->ua->getStructureTree()->getCurrent();
+					$closes = 1;
+					if ($structType === 'LI') {
+						// ISO 14289-1 §7.2 test 20 — an LI's content (and any nested
+						// list) must live in an LBody, not directly under LI. Open one
+						// so the marker/text and nested <ul>/<ol> attach beneath it.
+						$this->ua->getStructureTree()->open('LBody');
+						$closes = 2;
+					}
+					$this->pushCellBlockStructFrame('__struct__', $tag, $closes);
+					if (!empty($attr['ID'])) {
+						$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
+					}
+					foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+							  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
+						if (!empty($attr[$k])) {
+							$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
+						}
+					}
+				} else {
+					$this->pushCellBlockStructFrame(null, $tag);
+				}
 			}
 
 			// mPDF 6  Lists
@@ -912,123 +1258,7 @@ abstract class BlockTag extends Tag
 		// floated content is real content and is tagged in reading order with its
 		// normal struct type. role="presentation" remains the explicit opt-out.
 		if ($this->mpdf->PDFUA && !$this->mpdf->tableLevel) {
-			$structType = null;
-			// Check CSS class first (for ToC divs: mpdf_toc, mpdf_toc_level_N, etc.)
-			if (!empty($attr['CLASS'])) {
-				foreach (explode(' ', strtolower($attr['CLASS'])) as $cls) {
-					$tocType = \Mpdf\Ua\StructType::fromCssClass($cls);
-					if ($tocType !== null) {
-						$structType = $tocType;
-						break;
-					}
-				}
-			}
-			if ($structType === null) {
-				$structType = \Mpdf\Ua\StructType::fromHtmlTag($tag, $attr);
-			}
-
-			// ROLE attribute ARIA overrides for block elements
-			if (!empty($attr['ROLE'])) {
-				$role = strtolower($attr['ROLE']);
-				if ($role === 'none' || $role === 'presentation' || $role === 'separator') {
-					$structType = '__artifact__';
-				} elseif ($role === 'heading') {
-					$level = isset($attr['ARIA-LEVEL']) ? (int) $attr['ARIA-LEVEL'] : 2;
-					$structType = 'H' . max(1, min(6, $level));
-				} else {
-					$ariaRoleMap = [
-						'list'           => 'L',
-						'listitem'       => 'LI',
-						'table'          => 'Table',
-						'grid'           => 'Table',
-						'row'            => 'TR',
-						'columnheader'   => 'TH',
-						'rowheader'      => 'TH',
-						'cell'           => 'TD',
-						'gridcell'       => 'TD',
-						'figure'         => 'Figure',
-						'img'            => 'Figure',
-						'note'           => 'Note',
-						'doc-footnote'   => 'Note',
-						'link'           => 'Link',
-						'article'        => 'Art',
-						'doc-chapter'    => 'Sect',
-						'region'         => 'Sect',
-						'navigation'     => 'Sect',
-						'main'           => 'Div',
-						'banner'         => 'Sect',
-						'complementary'  => 'Sect',
-						'contentinfo'    => 'Sect',
-						'group'          => 'Div',
-						'paragraph'      => 'P',
-						'term'           => 'Span',
-						'definition'     => 'Span',
-						// 'doc-title' is the document's primary heading (DPUB-ARIA).
-						// Map to H1 — the standard PDF struct type for a top-level
-						// heading — rather than the literal 'Title' which is NOT in
-						// ISO 32000-1 §14.8 Tables 333–335 and would throw via
-						// StructType::isValid() at StructureTree::open().
-						'doc-title'      => 'H1',
-					];
-					if (isset($ariaRoleMap[$role])) {
-						$structType = $ariaRoleMap[$role];
-					}
-				}
-			}
-
-			// aria-hidden="true" → Artifact suppression context
-			if (isset($attr['ARIA-HIDDEN']) && strtolower($attr['ARIA-HIDDEN']) === 'true') {
-				$structType = '__artifact__';
-			}
-
-			// PDF/UA-1 §7.4.2 rule 1 — heading sequence enforcement.
-			// The first heading must be H1; descending sequences must not skip
-			// intervening levels (e.g. H1→H3 is invalid; auto-clamp to H1→H2).
-			// Only applies to struct types H1-H6 outside tables (tableLevel guard
-			// is already applied at the if ($this->mpdf->PDFUA …) gate above).
-			if ($structType !== null && $structType !== '__artifact__'
-				&& preg_match('/^H([1-6])$/', $structType, $hm)
-			) {
-				$requestedLevel = (int) $hm[1];
-				$lastLevel      = $this->ua->getLastHeadingLevel();
-
-				if ($lastLevel === 0 && $requestedLevel > 1) {
-					// First heading in the document is not H1 — violation.
-					if ($this->mpdf->PDFUAauto) {
-						$this->ua->addWarning(
-							'PDF/UA-1 §7.4.2: first heading must be H1; '
-							. $structType . ' auto-promoted to H1.'
-						);
-						$structType = 'H1';
-					} else {
-						throw new \Mpdf\MpdfException(
-							'PDF/UA-1 §7.4.2: first heading in the document must be H1; '
-							. $structType . ' found. Enable PDFUAauto to auto-correct.'
-						);
-					}
-				} elseif ($lastLevel > 0 && $requestedLevel > $lastLevel + 1) {
-					// Descending sequence skips a level — violation.
-					$clampedLevel = $lastLevel + 1;
-					if ($this->mpdf->PDFUAauto) {
-						$this->ua->addWarning(
-							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
-							. ' to ' . $structType . '; auto-clamped to H' . $clampedLevel . '.'
-						);
-						$structType = 'H' . $clampedLevel;
-					} else {
-						throw new \Mpdf\MpdfException(
-							'PDF/UA-1 §7.4.2: heading sequence skips from H' . $lastLevel
-							. ' to ' . $structType . ' (skips H' . $clampedLevel . '). '
-							. 'Enable PDFUAauto to auto-correct.'
-						);
-					}
-				}
-
-				// Record the final assigned level (after any clamping).
-				if (preg_match('/^H([1-6])$/', $structType, $fm)) {
-					$this->ua->setLastHeadingLevel((int) $fm[1]);
-				}
-			}
+			$structType = $this->resolveBlockStructType($tag, $attr);
 
 			if ($structType === '__artifact__') {
 				$this->ua->getStructureTree()->openArtifact();
@@ -1261,6 +1491,12 @@ abstract class BlockTag extends Tag
 	public function close(&$ahtml, &$ihtml)
 	{
 		$tag = $this->getTagName();
+
+		// PDF/UA-1 (audit E9) — close the struct element / artifact scope this
+		// block tag opened inside a table cell (and any children whose end tag
+		// HTML omitted). Done first so it runs on every close() path (the table
+		// branch below returns early), popping before the next sibling opens.
+		$this->closeCellBlockStructFrame($tag);
 
 		// mPDF 6 bidi
 		// Block
