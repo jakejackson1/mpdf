@@ -342,40 +342,60 @@ class FontWriter
 					}
 				}
 
-				// Encode each codepoint as a bfchar entry: CID (2-byte hex) -> Unicode (UTF-16BE).
-				// beginbfchar blocks are limited to 100 entries each (ISO 32000-1 §9.10.3).
-				$toUniBfcharChunks = '';
-				$toUniChunkLines = '';
-				$toUniChunkCount = 0;
+				// Build the bfchar source -> destination entries. With /Encoding /Identity-H the
+				// source token MUST be the 2-byte code the content stream actually shows for the
+				// glyph, not the raw Unicode scalar. For a BMP codepoint that code equals the
+				// codepoint; for a supplementary-plane codepoint the content stream
+				// (utf8ToUtf16BigEndian) emits a UTF-16BE *surrogate pair* — two 2-byte codes.
+				// The old code used sprintf('%04X', $toUniU) directly, so an astral scalar such
+				// as U+1F600 produced a 5-hex-digit token <1F600>: an odd-width source that
+				// violates the declared <0000> <FFFF> codespacerange and makes the ENTIRE
+				// ToUnicode stream unusable — breaking text extraction for every glyph in the
+				// font, in UA and non-UA output alike (ISO 32000-1 §9.10.3.1/§9.10.3.2).
+				//
+				// Each supplementary codepoint is therefore split into its two surrogate code
+				// units, and each unit is mapped to itself so the pair concatenates back to the
+				// original scalar on extraction (the surrogate-pair destination is preserved,
+				// just carried by the two 2-byte source codes the content stream really emits).
+				// Keying by source code de-duplicates surrogate units shared between astral
+				// codepoints (e.g. U+1F600 and U+1F601 both begin with the high surrogate D83D),
+				// which would otherwise emit a conflicting duplicate bfchar source.
+				$toUniEntries = [];
 				foreach ($toUniCids as $toUniU) {
-					if ($toUniU > 0xFFFF) {
-						// Supplementary plane: encode as UTF-16BE surrogate pair
-						$toUniUtf8 = chr(($toUniU >> 18) + 240)
-							. chr((($toUniU >> 12) & 63) + 128)
-							. chr((($toUniU >> 6) & 63) + 128)
-							. chr(($toUniU & 63) + 128);
-						$toUniUtf16 = mb_convert_encoding($toUniUtf8, 'UTF-16BE', 'UTF-8');
-						$toUniUHex = sprintf(
-							'%02X%02X%02X%02X',
-							ord($toUniUtf16[0]),
-							ord($toUniUtf16[1]),
-							ord($toUniUtf16[2]),
-							ord($toUniUtf16[3])
-						);
-					} else {
-						$toUniUHex = sprintf('%04X', $toUniU);
+					if ($toUniU > 0x10FFFF) {
+						// Not a valid Unicode scalar: it has no surrogate-pair form and cannot
+						// appear in the content stream, so it must not be mapped.
+						continue;
 					}
-					$toUniCidHex = sprintf('%04X', $toUniU);
-					$toUniChunkLines .= '<' . $toUniCidHex . '> <' . $toUniUHex . ">\n";
-					$toUniChunkCount++;
-					if ($toUniChunkCount === 100) {
-						$toUniBfcharChunks .= $toUniChunkCount . " beginbfchar\n" . $toUniChunkLines . "endbfchar\n";
-						$toUniChunkLines = '';
-						$toUniChunkCount = 0;
+					if ($toUniU > 0xFFFF) {
+						$hi = 0xD800 + (($toUniU - 0x10000) >> 10);
+						$lo = 0xDC00 + (($toUniU - 0x10000) & 0x3FF);
+						$toUniEntries[$hi] = sprintf('%04X', $hi);
+						$toUniEntries[$lo] = sprintf('%04X', $lo);
+					} else {
+						$toUniEntries[$toUniU] = sprintf('%04X', $toUniU);
 					}
 				}
-				if ($toUniChunkCount > 0) {
-					$toUniBfcharChunks .= $toUniChunkCount . " beginbfchar\n" . $toUniChunkLines . "endbfchar\n";
+
+				// Guard: every source token must fit the declared 2-byte codespace. The surrogate
+				// split above guarantees this, but assert it so no future change can silently
+				// re-introduce an out-of-range (odd-width) source token that invalidates the CMap.
+				$toUniLines = [];
+				foreach ($toUniEntries as $srcCode => $dstHex) {
+					if ($srcCode > 0xFFFF) {
+						throw new \Mpdf\Exception\FontException(sprintf(
+							'ToUnicode source code 0x%X exceeds the 2-byte Identity-H codespace',
+							$srcCode
+						));
+					}
+					$toUniLines[] = '<' . sprintf('%04X', $srcCode) . '> <' . $dstHex . ">\n";
+				}
+
+				// beginbfchar blocks are limited to 100 entries each (ISO 32000-1 §9.10.3).
+				$toUniBfcharChunks = '';
+				foreach (array_chunk($toUniLines, 100) as $toUniLineChunk) {
+					$toUniBfcharChunks .= count($toUniLineChunk) . " beginbfchar\n"
+						. implode('', $toUniLineChunk) . "endbfchar\n";
 				}
 
 				$toUni = "/CIDInit /ProcSet findresource begin\n";

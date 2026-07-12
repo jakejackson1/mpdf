@@ -286,6 +286,31 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that a document containing supplementary-plane codepoints passes ua1
+	 * (audit E4).
+	 *
+	 * The Aegean font is an SMP/SIP-capable subset, so a Linear B syllable
+	 * (U+10000, SMP) and an Old Italic letter (U+10300, SMP) render as real
+	 * glyphs. Their ToUnicode CMap must map every content code to a Unicode
+	 * value; the default DejaVuSans Identity-H font on the same document must
+	 * also emit a well-formed ToUnicode stream. Before the E4 fix any astral
+	 * codepoint that reached the Identity-H bfchar loop produced an odd-width
+	 * <1F600>-style source token that violated the <0000> <FFFF> codespacerange
+	 * and corrupted the whole stream. ISO 32000-1 §9.10.3; ISO 14289-1 §7.21.7.
+	 *
+	 * @return void
+	 */
+	public function testDocumentWithAstralCodepointsPassesUa1()
+	{
+		$html = '<h1>Astral codepoints</h1>'
+			. '<p style="font-family: aegean">Linear B &#65536; and Old Italic &#66304; glyphs.</p>';
+
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'document with astral codepoints');
+	}
+
+	/**
 	 * Test that an encrypted document with SetProtection passes ua1.
 	 *
 	 * PDF/UA-1 §7.6 requires that the accessibility-permission bit (bit 10,
