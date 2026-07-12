@@ -8365,7 +8365,30 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						}
 					}
 
-					if ($pdfuaImageAlt === '' || $pdfuaImageAlt === null) {
+					// PDF/UA-1 audit E11 — ARIA / title accessible-name fallback.
+					// A missing alt attribute (null) is not the same as "no accessible
+					// name": aria-label / title supply the name directly, and
+					// aria-labelledby supplies it by ID reference (resolved in the
+					// AriaIdResolver second pass at _enddoc). Promote a direct-string
+					// name into $pdfuaImageAlt so the Figure path below names the image,
+					// and flag a deferred (aria-labelledby) name so the null-alt branch
+					// opens a Figure instead of aborting/demoting a meaningful image.
+					// WAI-ARIA name computation precedence: aria-labelledby > aria-label
+					// > title. aria-describedby/-details are descriptions (/E), not a
+					// name, so they alone do not rescue the image from the missing-alt
+					// throw — the aria-* queue below still emits their /E and relations.
+					$pdfuaImageDeferredName = false;
+					if ($pdfuaImageAlt === null) {
+						if (!empty($objattr['pdfua_aria_label'])) {
+							$pdfuaImageAlt = $objattr['pdfua_aria_label'];
+						} elseif (!empty($objattr['pdfua_title'])) {
+							$pdfuaImageAlt = $objattr['pdfua_title'];
+						} elseif (!empty($objattr['pdfua_aria_labelledby'])) {
+							$pdfuaImageDeferredName = true;
+						}
+					}
+
+					if (($pdfuaImageAlt === '' || $pdfuaImageAlt === null) && !$pdfuaImageDeferredName) {
 						// Decorative image (empty or missing alt). The /Artifact BMC
 						// emitted below MUST NOT live inside a real-content BDC —
 						// ISO 14289-1 §7.1 / Matterhorn 01-001/002 forbid Artifact
@@ -8383,12 +8406,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// Explicitly declared decorative image — addArtifact() returns -1
 						// which causes begin() to emit /Artifact BMC (no property dict).
 						$pdfuaImageMcid = $this->ua->getStructureTree()->addArtifact();
-					} elseif ($pdfuaImageAlt === null) {
-						// alt attribute absent — intent unknown. ISO 14289-1:2014 §7.3
-						// (Matterhorn 13-004) — every non-decorative image must carry
-						// /Alt text. In PDFUAauto=true mode treat as decorative and
-						// record a warning so the author can correct it; in strict
-						// mode throw because the intent cannot be guessed safely.
+					} elseif ($pdfuaImageAlt === null && !$pdfuaImageDeferredName) {
+						// alt attribute absent AND no accessible name available from
+						// aria-label / title / aria-labelledby — intent unknown. ISO
+						// 14289-1:2014 §7.3 (Matterhorn 13-004) — every non-decorative
+						// image must carry /Alt text. In PDFUAauto=true mode treat as
+						// decorative and record a warning so the author can correct it;
+						// in strict mode throw because the intent cannot be guessed safely.
 						if (empty($this->PDFUAauto)) {
 							throw new \Mpdf\MpdfException(
 								'PDF/UA-1: <img> is missing the alt attribute. Provide alt="" '
@@ -8400,7 +8424,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						$this->ua->addWarning('Image is missing alt attribute; treating as decorative Artifact. Provide alt="" for decorative images or alt="description" for content images.');
 						$pdfuaImageMcid = $this->ua->getStructureTree()->addArtifact();
 					} else {
-						// Non-empty alt: open a Figure struct element with /Alt and /BBox.
+						// A named image (non-empty alt, an aria-label/title accessible
+						// name, or a deferred aria-labelledby reference): open a Figure
+						// struct element with /BBox and, when the name is known now, /Alt.
 						// ISO 32000-1 §14.7.2 Table 322 — /Alt on the StructElem dict.
 						// ISO 32000-1 Table 344 / Matterhorn 13-008 — /BBox in the /Layout
 						// attribute object locates the figure in page user space.
@@ -8411,7 +8437,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							round(($objattr['INNER-X'] + $obiw) * Mpdf::SCALE, 3),
 							round(($this->h - $objattr['INNER-Y']) * Mpdf::SCALE, 3),
 						];
-						$this->ua->getStructureTree()->open('Figure', ['Alt' => $pdfuaImageAlt, 'BBox' => $pdfuaFigBbox]);
+						// audit E11 — omit /Alt when the name is deferred to a
+						// aria-labelledby reference; AriaIdResolver fills it at _enddoc
+						// (and routes a missing/empty target to strict-throw / auto-warn),
+						// so the Figure never serialises without an accessible name.
+						$pdfuaFigAttrs = ['BBox' => $pdfuaFigBbox];
+						if ($pdfuaImageAlt !== null) {
+							$pdfuaFigAttrs['Alt'] = $pdfuaImageAlt;
+						}
+						$this->ua->getStructureTree()->open('Figure', $pdfuaFigAttrs);
 						// ARIA — register HTML id and queue aria-* cross-references now
 						// that the Figure struct element exists. Attrs were captured at
 						// parse time in Img::open() and carried through $objattr.

@@ -174,6 +174,70 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 	}
 
 	/**
+	 * An <img> with no alt but an aria-labelledby reference must open a Figure and
+	 * resolve its accessible name to /Alt — not abort (strict) or hide it (auto).
+	 *
+	 * Before audit E11 the alt-absent branch of printobjectbuffer() threw in strict
+	 * mode / demoted the image to a decorative Artifact in auto mode WITHOUT
+	 * consulting the ARIA naming attributes, so `<img aria-labelledby="figcap">`
+	 * (no alt) lost its accessible name even though one was available. The fix
+	 * derives the name through the same AriaIdResolver path the non-empty-alt branch
+	 * uses. ISO 32000-1:2008 §14.7.2 Table 322 — /Alt on the Figure struct element.
+	 */
+	public function testImageNoAltWithAriaLabelledbyResolvesToFigureAlt()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<p id="figcap">Q3 revenue chart</p>'
+			. '<img src="' . __DIR__ . '/../../data/img/issue1609.png" '
+			. 'aria-labelledby="figcap">';
+		// Strict mode (PDFUAauto defaults to false): must NOT throw.
+		$output = $this->getOutput($mpdf, $html);
+
+		// The image must be tagged as a Figure (not demoted to a decorative Artifact).
+		$this->assertStringContainsString('/S /Figure', $output);
+		// The Figure's /Alt must carry the referenced caption text, UTF-16BE with BOM.
+		$utf16BeAlt = "\xfe\xff" . mb_convert_encoding('Q3 revenue chart', 'UTF-16BE', 'UTF-8');
+		$this->assertStringContainsString($utf16BeAlt, $output);
+		// No unresolved-reference warning must be recorded.
+		$combined = implode(' ', $mpdf->getPdfUaWarnings());
+		$this->assertStringNotContainsString('Unresolved ARIA reference', $combined);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * An <img> with no alt but an aria-label string must open a Figure named by that
+	 * string (WAI-ARIA name computation: aria-label supplies the accessible name
+	 * directly). Guards the direct-string half of the audit E11 fallback.
+	 */
+	public function testImageNoAltWithAriaLabelResolvesToFigureAlt()
+	{
+		$mpdf = $this->makeMpdf();
+		$html = '<img src="' . __DIR__ . '/../../data/img/issue1609.png" '
+			. 'aria-label="Sales dashboard">';
+		$output = $this->getOutput($mpdf, $html);
+
+		$this->assertStringContainsString('/S /Figure', $output);
+		$utf16BeAlt = "\xfe\xff" . mb_convert_encoding('Sales dashboard', 'UTF-16BE', 'UTF-8');
+		$this->assertStringContainsString($utf16BeAlt, $output);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * An <img> with neither alt nor any accessible-name source must still throw in
+	 * strict mode — the audit E11 fallback must not swallow the genuine missing-alt
+	 * violation. ISO 14289-1:2014 §7.3 / Matterhorn 13-004.
+	 */
+	public function testImageNoAltNoNameStillThrowsInStrict()
+	{
+		$mpdf = $this->makeMpdf();
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->getOutput(
+			$mpdf,
+			'<img src="' . __DIR__ . '/../../data/img/issue1609.png">'
+		);
+	}
+
+	/**
 	 * A block element with a lang attribute must produce a /Lang entry on its struct element.
 	 *
 	 * ISO 14289-1:2014 §7.2 — language changes within a document are declared via

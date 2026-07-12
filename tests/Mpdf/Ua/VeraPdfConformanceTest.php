@@ -613,6 +613,29 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * An <img> that carries no alt attribute but an aria-labelledby reference must
+	 * pass ua1 (audit E11).
+	 *
+	 * The alt-absent image is named by resolving aria-labelledby to the caption's
+	 * text as /Alt on the Figure struct element, instead of aborting (strict) or
+	 * being demoted to a decorative Artifact (auto) — either of which loses the
+	 * accessible name. Matterhorn 13-004 fires when a Figure has no /Alt.
+	 *
+	 * @return void
+	 */
+	public function testImageNoAltAriaLabelledbyPassesUa1()
+	{
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$html = '<h1>ARIA-named image</h1>'
+			. '<p id="figcap">Q3 revenue chart</p>'
+			. '<img src="' . $png . '" aria-labelledby="figcap" width="20" height="20">';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'image with no alt named by aria-labelledby');
+	}
+
+	/**
 	 * Inline struct elements must own their own content and still pass ua1
 	 * (audit E6).
 	 *

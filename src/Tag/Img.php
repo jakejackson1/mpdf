@@ -433,6 +433,13 @@ class Img extends Tag
 					$objattr['pdfua_' . strtolower(str_replace('-', '_', $ariaKey))] = $attr[$ariaKey];
 				}
 			}
+			// PDF/UA-1 audit E11 — the direct-string accessible-name sources
+			// (WAI-ARIA name computation: aria-label, then the host-language
+			// title). Carried through so printobjectbuffer() can name an <img>
+			// that has no alt="" but does carry an accessible name, rather than
+			// aborting (strict) or hiding it as a decorative Artifact (auto).
+			$objattr['pdfua_aria_label'] = isset($attr['ARIA-LABEL']) ? $attr['ARIA-LABEL'] : null;
+			$objattr['pdfua_title'] = isset($attr['TITLE']) ? $attr['TITLE'] : null;
 
 			$e = Mpdf::OBJECT_IDENTIFIER . "type=image,objattr=" . serialize($objattr) . Mpdf::OBJECT_IDENTIFIER;
 
