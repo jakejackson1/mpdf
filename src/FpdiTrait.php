@@ -150,8 +150,9 @@ trait FpdiTrait
 	 *   - Strict mode (PDFUAauto=false): throws \Mpdf\MpdfException with a
 	 *     PDF/UA-1-aware citation; the caller must decrypt the source upstream.
 	 *   - Auto mode (PDFUAauto=true):   marks the file as encrypted in
-	 *     $encryptedSourceFiles, returns 1 (synthetic page count) so the caller
-	 *     can still call importPage(), which then returns a placeholder pageId.
+	 *     $encryptedSourceFiles and returns the source page count (recovered from
+	 *     the cleartext page tree; UA1 audit E2) so the caller's per-page loop
+	 *     reaches importPage() once per page, each returning a placeholder pageId.
 	 *
 	 * Other CrossReferenceException codes (XREF_MISSING, etc.) are re-thrown so
 	 * non-encryption parser failures continue to surface as before.
@@ -162,7 +163,7 @@ trait FpdiTrait
 	 * via §7.6.5 crypt filters).
 	 *
 	 * @param  string|resource|\setasign\Fpdi\PdfParser\StreamReader $file
-	 * @return int  page count, or 1 in auto mode for an encrypted source
+	 * @return int  page count (recovered source page count in auto mode for an encrypted source)
 	 * @throws \Mpdf\MpdfException             in strict mode for an encrypted source
 	 * @throws CrossReferenceException         for non-encryption parser failures
 	 */
@@ -192,7 +193,7 @@ trait FpdiTrait
 	 *
 	 * @param  string|resource|\setasign\Fpdi\PdfParser\StreamReader $file
 	 * @param  array $parserParams
-	 * @return int  page count, or 1 in auto mode for an encrypted source
+	 * @return int  page count (recovered source page count in auto mode for an encrypted source)
 	 * @throws \Mpdf\MpdfException
 	 * @throws CrossReferenceException
 	 */
@@ -224,7 +225,7 @@ trait FpdiTrait
 	 *
 	 * @param  mixed                    $file the original $file argument
 	 * @param  CrossReferenceException  $e    the underlying FPDI exception
-	 * @return int                            1 (synthetic page count) in auto mode
+	 * @return int                            recovered source page count in auto mode
 	 * @throws \Mpdf\MpdfException
 	 * @throws CrossReferenceException
 	 */
@@ -253,22 +254,116 @@ trait FpdiTrait
 		$this->encryptedSourceFiles[$key] = true;
 		$this->lastSetSourceKey = $key;
 
+		// UA1 audit E2 — recover the real page count so a multi-page encrypted
+		// source produces one placeholder per source page instead of collapsing
+		// to a single blank page. FPDI never wired up a parser (it threw), but
+		// encryption only enciphers strings and streams (ISO 32000-1:2008
+		// §7.6.2), so the page-tree root's /Type /Pages … /Count N stays in
+		// cleartext and can be scanned without the key.
+		$pageCount = $this->countEncryptedSourcePages($file);
+
 		// Surface a UA-aware warning at this stage so callers inspecting
 		// getPdfUaWarnings() after Output() see the encrypted-source diagnostic
 		// even if importPage() is not subsequently called for some reason.
 		if ($this->ua !== null) {
-			$this->ua->addWarning(
+			$this->ua->addWarning(sprintf(
 				'Imported PDF source is encrypted (ISO 32000-1:2008 §7.6) and cannot be parsed by '
 				. 'vendor/setasign/fpdi. Auto-mode fallback: importPage() will return a synthetic '
 				. 'pageId and useImportedPage() will draw a Tier 0 /Artifact <</Type /Layout>> '
-				. 'placeholder in place of the original page. Matterhorn 01-007.'
-			);
+				. 'visible placeholder (border + caption) for each of the %d source page(s) in place '
+				. 'of the original content. Matterhorn 01-007.',
+				$pageCount
+			));
 		}
 
-		// Return a synthetic page count so the caller's loop (typically
-		// `for ($i = 1; $i <= setSourceFile($file); $i++) importPage($i)`) still
-		// invokes importPage() at least once and reaches the Tier 0 path.
-		return 1;
+		// Return the (recovered) source page count so the caller's loop —
+		// typically `for ($i = 1; $i <= setSourceFile($file); $i++) importPage($i)` —
+		// visits every page and reaches the Tier 0 path once per page rather than
+		// silently discarding pages 2..N.
+		return $pageCount;
+	}
+
+	/**
+	 * Best-effort page count for an encrypted source that FPDI refused to parse.
+	 *
+	 * A standard-security-handler document (ISO 32000-1:2008 §7.6.4) enciphers
+	 * only string and stream objects; name tokens and integers — including the
+	 * page-tree root's `/Type /Pages … /Count N` — remain in cleartext. Scanning
+	 * the raw bytes for the largest `/Count` sitting in a `/Pages` dictionary
+	 * therefore recovers the total leaf-page count without the decryption key.
+	 *
+	 * Falls back to 1 when the bytes are unreadable (e.g. an opaque StreamReader
+	 * whose underlying resource cannot be rewound) or no page tree is found, so
+	 * at least one visible placeholder is still emitted.
+	 *
+	 * @param  mixed $file the original $file argument passed to setSourceFile()
+	 * @return int         source page count, clamped to a minimum of 1
+	 */
+	private function countEncryptedSourcePages($file)
+	{
+		$bytes = $this->readSourceBytes($file);
+		if ($bytes === null || $bytes === '') {
+			return 1;
+		}
+
+		// Match /Count and /Type /Pages in either order within a single dict.
+		// [^>]*? cannot cross the dict's closing `>>`, so a /Count from one
+		// object never binds to a /Pages in another. The tree root carries the
+		// total; nested /Pages nodes carry sub-counts, so take the maximum.
+		$max = 0;
+		if (preg_match_all(
+			'#/Type\s*/Pages\b[^>]*?/Count\s+(\d+)|/Count\s+(\d+)[^>]*?/Type\s*/Pages\b#s',
+			$bytes,
+			$matches,
+			PREG_SET_ORDER
+		)) {
+			foreach ($matches as $m) {
+				$n = max((int) ($m[1] ?? 0), (int) ($m[2] ?? 0));
+				if ($n > $max) {
+					$max = $n;
+				}
+			}
+		}
+
+		return $max > 0 ? $max : 1;
+	}
+
+	/**
+	 * Read the full byte content of a setSourceFile() argument for scanning.
+	 *
+	 * Handles the same input shapes FPDI accepts — a path string, a stream
+	 * resource, or an FPDI StreamReader wrapping one — restoring any stream
+	 * position it touches so a later (auto-mode) reader is unaffected. Returns
+	 * null when no bytes can be obtained.
+	 *
+	 * @param  mixed $file
+	 * @return string|null
+	 */
+	private function readSourceBytes($file)
+	{
+		if (is_string($file)) {
+			$bytes = @file_get_contents($file);
+			return $bytes !== false ? $bytes : null;
+		}
+
+		$stream = null;
+		if ($file instanceof \setasign\Fpdi\PdfParser\StreamReader) {
+			$stream = $file->getStream();
+		} elseif (is_resource($file)) {
+			$stream = $file;
+		}
+
+		if (is_resource($stream)) {
+			$pos   = @ftell($stream);
+			@rewind($stream);
+			$bytes = @stream_get_contents($stream);
+			if ($pos !== false) {
+				@fseek($stream, $pos);
+			}
+			return $bytes !== false ? $bytes : null;
+		}
+
+		return null;
 	}
 
 	/**
@@ -406,9 +501,9 @@ trait FpdiTrait
 		// $pageId comes from handleEncryptedImportInUaMode() and is NOT in
 		// $this->importedPages (no Form XObject was created). Draw an Artifact
 		// placeholder bracketed with BDC/EMC and return a size so the caller's
-		// downstream layout logic remains valid. ISO 32000-1:2008 §14.6 permits
-		// empty content between BMC/EMC, so the Artifact wraps nothing visible
-		// unless a placeholder rectangle is requested.
+		// downstream layout logic remains valid. UA1 audit E2 — the placeholder
+		// draws a visible border + caption naming the source so the content loss
+		// is not silent (it is an Artifact, so it needs no tagging).
 		if ($this->PDFUA && $this->isEncryptedPlaceholder($pageId)) {
 			$pdfuaMerger = $this->ua->getFpdiStructMerger();
 
@@ -419,7 +514,13 @@ trait FpdiTrait
 			$resolvedHeight = ($height !== null) ? $height : ($this->h - $this->tMargin - $this->bMargin);
 
 			$this->writer->write('/Artifact <</Type /Layout>> BDC');
-			$this->drawEncryptedSourcePlaceholder($x, $y, $resolvedWidth, $resolvedHeight);
+			$this->drawEncryptedSourcePlaceholder(
+				$x,
+				$y,
+				$resolvedWidth,
+				$resolvedHeight,
+				$this->encryptedPlaceholderCaption($pageId)
+			);
 			$this->writer->write('EMC');
 
 			$pdfuaMerger->addUntaggedWarning(
@@ -521,23 +622,99 @@ trait FpdiTrait
 	 * Draw the visible content of a Tier 0 (encrypted-source) placeholder.
 	 *
 	 * The Artifact wrap brackets are emitted by useImportedPage(); this method
-	 * is responsible only for what (if anything) appears between them. The
-	 * default implementation emits no marks — a zero-content BMC/EMC pair is
-	 * spec-legal under ISO 32000-1:2008 §14.6 and keeps the imported page
-	 * footprint visually invisible (matching the behaviour of an empty
-	 * page-template region). Subclasses may override to draw a faint outline
-	 * rectangle for debugging.
+	 * draws what appears between them. UA1 audit E2 — an encrypted source cannot
+	 * be parsed, so rather than an invisible zero-content BMC/EMC pair (which
+	 * loses the page silently) it strokes a faint border around the placeholder
+	 * footprint and prints a caption naming the source. The marks sit inside the
+	 * /Artifact <</Type /Layout>> wrap, so they are decorative (non-content) and
+	 * require no tagging, while making the omission visible to a sighted reader.
 	 *
-	 * @param  float|int $x       upper-left x in user units
-	 * @param  float|int $y       upper-left y in user units
-	 * @param  float|int $width   placeholder width in user units
-	 * @param  float|int $height  placeholder height in user units
+	 * Runs inside a q…Q graphics-state save so its colour/line-width changes do
+	 * not leak; the mPDF-side state trackers are realigned afterwards because
+	 * Q reverts the actual PDF state but not mPDF's cached model of it.
+	 *
+	 * @param  float|int $x        upper-left x in user units
+	 * @param  float|int $y        upper-left y in user units
+	 * @param  float|int $width    placeholder width in user units
+	 * @param  float|int $height   placeholder height in user units
+	 * @param  string    $caption  human-readable source label drawn top-left
 	 * @return void
 	 */
-	protected function drawEncryptedSourcePlaceholder($x, $y, $width, $height)
+	protected function drawEncryptedSourcePlaceholder($x, $y, $width, $height, $caption = '')
 	{
-		// Intentionally empty content stream — see method docblock.
-		unset($x, $y, $width, $height);
+		if ($width <= 0 || $height <= 0) {
+			return;
+		}
+
+		// Snapshot the mPDF-side drawing state so it can be realigned after the
+		// q…Q pair (Q restores the actual PDF state; these cached fields are not).
+		$prevLineWidth  = $this->LineWidth;
+		$prevDrawColor  = $this->DrawColor;
+		$prevFillColor  = $this->FillColor;
+		$prevTextColor  = $this->TextColor;
+		$prevColorFlag  = $this->ColorFlag;
+		$prevFontFamily = $this->FontFamily;
+		$prevFontStyle  = $this->FontStyle;
+		$prevFontSizePt = $this->FontSizePt;
+
+		$this->writer->write('q');
+
+		// Faint grey border tracing the lost page's footprint.
+		$this->SetDrawColor(128);
+		$this->SetLineWidth(0.2);
+		$this->Rect($x, $y, $width, $height, 'S');
+
+		// Caption naming the (redacted) source, in an embedded font so the
+		// document stays PDF/UA-1 conformant (ISO 14289-1:2014 §7.21).
+		if ($caption !== '') {
+			$this->SetFont($prevFontFamily !== '' ? $prevFontFamily : '', '', 8);
+			$this->SetTextColor(128);
+			$this->Text($x + 2, $y + $this->FontSize + 1, $caption);
+		}
+
+		$this->writer->write('Q');
+
+		// Realign mPDF's cached graphics state with the post-Q actual state.
+		$this->LineWidth = $prevLineWidth;
+		$this->DrawColor = $prevDrawColor;
+		$this->FillColor = $prevFillColor;
+		$this->TextColor = $prevTextColor;
+		$this->ColorFlag = $prevColorFlag;
+		if (isset($this->pageoutput[$this->page])) {
+			unset(
+				$this->pageoutput[$this->page]['LineWidth'],
+				$this->pageoutput[$this->page]['DrawColor'],
+				$this->pageoutput[$this->page]['FillColor']
+			);
+		}
+		if ($prevFontFamily !== '') {
+			$this->SetFont($prevFontFamily, $prevFontStyle, $prevFontSizePt);
+		}
+	}
+
+	/**
+	 * Build the caption drawn on a Tier 0 encrypted-source placeholder.
+	 *
+	 * Uses only the redacted diagnostics recorded in $encryptedPageIds (never a
+	 * full filesystem path — UA1 audit L-5 / I-6), reducing the stored source
+	 * key `file:<basename>@<digest>` back to its basename for a friendly label.
+	 *
+	 * @param  string $pageId  the synthetic placeholder pageId
+	 * @return string
+	 */
+	private function encryptedPlaceholderCaption($pageId)
+	{
+		$meta = isset($this->encryptedPageIds[$pageId]) ? $this->encryptedPageIds[$pageId] : [];
+		$label = (isset($meta['file']) && is_string($meta['file'])) ? $meta['file'] : '';
+		if (preg_match('/^file:(?P<name>.*)@[0-9a-f]+$/', $label, $m) && $m['name'] !== '') {
+			$label = $m['name'];
+		}
+		if ($label === '') {
+			$label = 'encrypted PDF';
+		}
+		$pageNumber = isset($meta['pageNumber']) ? (int) $meta['pageNumber'] : 0;
+
+		return sprintf('Encrypted PDF source omitted (page %d): %s', $pageNumber, $label);
 	}
 
 	/**

@@ -82,6 +82,32 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Generate a multi-page encrypted PDF on disk via mPDF + SetProtection().
+	 *
+	 * Same shape as makeEncryptedPdf() but with $pages leaf pages, so the page
+	 * tree root carries /Type /Pages /Count $pages in cleartext (encryption
+	 * enciphers only strings and streams — ISO 32000-1:2008 §7.6.2). Drives the
+	 * UA1 audit E2 page-count recovery path.
+	 *
+	 * @param  int $pages  number of pages to emit (>= 1)
+	 * @return string      absolute path to the generated encrypted PDF
+	 */
+	private function makeMultiPageEncryptedPdf($pages)
+	{
+		$src = new \Mpdf\Mpdf(['mode' => 'c']);
+		$src->SetProtection(['copy', 'print'], 'user', 'owner', 40);
+		for ($i = 1; $i <= $pages; $i++) {
+			if ($i > 1) {
+				$src->AddPage();
+			}
+			$src->WriteHTML('<p>Encrypted source page ' . $i . '</p>');
+		}
+		$tmp = tempnam(sys_get_temp_dir(), 'mpdf_encN_') . '.pdf';
+		$src->Output($tmp, 'F');
+		return $tmp;
+	}
+
+	/**
 	 * Generate a clean tagged PDF — used as the Tier 2 control fixture.
 	 *
 	 * @return string  absolute path
@@ -258,6 +284,90 @@ class FpdiEncryptedSourceTest extends PdfUaTestCase
 			$encMessages,
 			'getPdfUaWarnings() must contain at least one encrypted-source warning after Tier 0 fallback'
 		);
+	}
+
+	/**
+	 * UA1 audit E2 — a *multi-page* encrypted source must not collapse to a single
+	 * blank page. Auto-mode setSourceFile() recovers the real page count from the
+	 * cleartext page tree, so the caller's per-page loop reaches importPage() once
+	 * per page; each placement draws a *visible* placeholder (border + caption).
+	 * The output must therefore carry one Artifact placeholder per source page and
+	 * getPdfUaWarnings() must record the encrypted-source diagnostic.
+	 */
+	public function testMultiPageEncryptedSourceEmitsOnePlaceholderPerPageInAutoMode()
+	{
+		$this->encryptedPdf = $this->makeMultiPageEncryptedPdf(3);
+
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$count = $mpdf->setSourceFile($this->encryptedPdf);
+
+		// The synthetic page count must honour the real source (3), not fake 1.
+		$this->assertSame(
+			3,
+			$count,
+			'auto-mode setSourceFile() must recover the encrypted source page count, not return a fake 1'
+		);
+
+		$mpdf->AddPage();
+		for ($i = 1; $i <= $count; $i++) {
+			$pageId = $mpdf->importPage($i);
+			$this->assertTrue(
+				$mpdf->isEncryptedPlaceholder($pageId),
+				'every page of an encrypted source must yield a Tier 0 placeholder in auto mode'
+			);
+			$mpdf->useImportedPage($pageId, 0, ($i - 1) * 60, 100, 50);
+		}
+
+		$output = $mpdf->Output(null, 'S');
+
+		// One /Artifact <</Type /Layout>> BDC per source page (N visible placeholders).
+		$this->assertSame(
+			3,
+			substr_count($output, '/Artifact <</Type /Layout>> BDC'),
+			'a 3-page encrypted source must emit exactly 3 visible Artifact placeholders'
+		);
+
+		// The placeholder must be *visible*: a stroked border (re … S) is drawn.
+		$this->assertMatchesRegularExpression(
+			'/re\s+S/',
+			$output,
+			'each Tier 0 placeholder must stroke a visible border rectangle (re … S)'
+		);
+
+		$warnings = $mpdf->getPdfUaWarnings();
+		$found = false;
+		foreach ($warnings as $w) {
+			if (stripos($w, 'encrypted') !== false) {
+				$found = true;
+				break;
+			}
+		}
+		$this->assertTrue(
+			$found,
+			'a multi-page encrypted source must record an encrypted-source UA warning'
+		);
+	}
+
+	/**
+	 * UA1 audit E2 — strict mode (PDFUAauto=false) still refuses a multi-page
+	 * encrypted source outright: setSourceFile() throws \Mpdf\MpdfException before
+	 * any page is imported, because an encrypted source cannot be made accessible
+	 * without decryption. Shares the A3 encrypted-import policy.
+	 */
+	public function testMultiPageEncryptedSourceThrowsInStrictMode()
+	{
+		$this->encryptedPdf = $this->makeMultiPageEncryptedPdf(3);
+
+		$mpdf = $this->makeMpdf(['PDFUAauto' => false]);
+
+		try {
+			$mpdf->setSourceFile($this->encryptedPdf);
+			$this->fail('strict-mode setSourceFile() on a multi-page encrypted source must throw');
+		} catch (\Mpdf\MpdfException $e) {
+			$this->assertStringContainsString('encrypted', $e->getMessage());
+			$this->assertStringContainsString('Matterhorn 01-007', $e->getMessage());
+			$this->assertStringContainsString('7.6', $e->getMessage());
+		}
 	}
 
 	/**
