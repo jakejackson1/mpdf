@@ -109,6 +109,24 @@ class A extends Tag
 				return;
 			}
 
+			// PDF/UA-1 — a hyperlink opened inside an artifact scope (running
+			// header/footer or an aria-hidden subtree) has visible content that is
+			// itself an artifact, so it must NOT be wired into the structure tree.
+			// StructureTree::open('Link') is already a no-op here, but getCurrent()
+			// would return the artifact-scope stack top (the Document root at
+			// header-render time); capturing that via setLinkStructElem() makes
+			// writeAnnotations() hang the link annotation's OBJR / /StructParent off
+			// the Document root with no Link struct element — a silent 7.18.5 /
+			// Matterhorn 02-003 FAIL. Skip the struct wiring entirely; Mpdf::Link()
+			// drops the annotation altogether (artifact content cannot host a tagged
+			// link), leaving the visible text as artifact content. A balanced strip
+			// frame is still pushed so close() stays balanced.
+			if ($this->mpdf->PDFUA && $this->ua->getStructureTree()->isInArtifact()) {
+				$this->ua->getAnchorState()->pushStripFrame(false, 0);
+				$this->ua->getAnchorState()->setAnchorStructType(null);
+				return;
+			}
+
 			// PDF/UA-1 — push a Link struct element for hyperlinks.
 			// Destination anchors (<a name="...">) do not produce struct elements.
 			if ($this->mpdf->PDFUA) {

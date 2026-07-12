@@ -4550,6 +4550,27 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function Link($x, $y, $w, $h, $link, $quadPoints = null)
 	{
+		// PDF/UA-1 (audit E7) — a hyperlink whose visible content sits in an
+		// artifact scope (running header/footer or an aria-hidden subtree) cannot be
+		// a conformant tagged link: artifact content is excluded from the structure
+		// tree (ISO 32000-1 §14.8.2.2) yet every Link annotation MUST be nested in a
+		// Link struct element via OBJR (ISO 14289-1 §7.18.5 / Matterhorn 02-003).
+		// The old code captured the artifact-scope stack top (the Document root) as
+		// the link's struct element, so writeAnnotations() hung the OBJR / /StructParent
+		// off the Document root with no Link element — a silent §7.18.5 FAIL. The only
+		// conformant resolution is to drop the annotation: the visible text survives
+		// as artifact content, just not clickable. Body links are unaffected — they
+		// self-tag as before. Tag\A::open() likewise skips the struct wiring here.
+		if ($this->PDFUA && $this->ua->getStructureTree()->isInArtifact()) {
+			$this->ua->addWarning(
+				'PDF/UA-1: <a href="' . (is_string($link) ? $link : '') . '"> in a running '
+				. 'header/footer or aria-hidden subtree dropped (no Link annotation emitted) — '
+				. 'artifact content cannot host a tagged link (ISO 14289-1 §7.18.5). '
+				. 'The visible text is retained as an artifact.'
+			);
+			return;
+		}
+
 		$l = [$x * Mpdf::SCALE, $this->hPt - $y * Mpdf::SCALE, $w * Mpdf::SCALE, $h * Mpdf::SCALE, $link];
 		// PDF/UA-1 — extra 6th element captures the Link struct element pushed
 		// by Tag\A::open() so writeAnnotations() can wire OBJR + /StructParent

@@ -294,6 +294,63 @@ class DirectPhpAndAriaTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A hyperlink built inside a running header (an artifact scope) must NOT be
+	 * wired into the structure tree — its OBJR must never hang off the Document
+	 * root (audit E7).
+	 *
+	 * During header rendering StructureTree::open('Link') is a suppressed no-op,
+	 * but getCurrent() returns the Document root; the old code captured that as the
+	 * link's struct element and writeAnnotations() attached an OBJR + /StructParent
+	 * to the Document root with no Link struct element — a silent ISO 14289-1
+	 * §7.18.5 / Matterhorn 02-003 failure. Artifact content is excluded from the
+	 * structure tree (ISO 32000-1 §14.8.2.2) yet every Link annotation must be
+	 * nested in a Link struct element, so the only conformant resolution is to drop
+	 * the annotation: no /Subtype /Link, no OBJR, no Link struct element. The
+	 * visible header text survives as artifact content.
+	 */
+	public function testHeaderLinkIsArtifactNotOnDocumentRoot()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetHTMLHeader('<div>Header with <a href="https://example.com">a link</a></div>');
+		$output = $this->getOutput($mpdf, '<h1>Doc</h1><p>Body paragraph with no links.</p>');
+
+		// The header link annotation is dropped — no clickable Link annotation, no
+		// OBJR anywhere (the buggy code hung an OBJR off the Document root), and no
+		// Link struct element in the tree.
+		$this->assertStringNotContainsString('/Subtype /Link', $output);
+		$this->assertStringNotContainsString('/Type /OBJR', $output);
+		$this->assertStringNotContainsString('/S /Link', $output);
+		// The drop is surfaced as a warning, not silent.
+		$combined = implode(' ', $mpdf->getPdfUaWarnings());
+		$this->assertStringContainsString('running header/footer', $combined);
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
+	 * A body hyperlink must still self-tag (Link struct element + OBJR) even when a
+	 * header link in the same document is dropped as an artifact (audit E7).
+	 *
+	 * Exactly one Link annotation, one Link struct element, and one OBJR must
+	 * appear — the body link's — proving the artifact-scope drop is scoped to the
+	 * header and does not regress the normal B2 self-tagging path.
+	 */
+	public function testBodyLinkSelfTagsWhileHeaderLinkIsArtifact()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetHTMLHeader('<div>Header <a href="https://header.test">header link</a></div>');
+		$output = $this->getOutput(
+			$mpdf,
+			'<h1>Doc</h1><p>Body with <a href="https://body.test">a body link</a> here.</p>'
+		);
+
+		// Only the body link produces an annotation; the header link is dropped.
+		$this->assertSame(1, substr_count($output, '/Subtype /Link'));
+		$this->assertSame(1, substr_count($output, '/S /Link'));
+		$this->assertSame(1, substr_count($output, '/Type /OBJR'));
+		$this->assertBdcEmcBalanced($output);
+	}
+
+	/**
 	 * Assert that the struct-type BDC/BMC count equals the EMC count in the PDF output.
 	 *
 	 * Scoped to known PDFUA struct operators to avoid counting OCG-layer BDC/EMC

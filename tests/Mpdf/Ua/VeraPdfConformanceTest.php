@@ -200,6 +200,29 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that a hyperlink inside a running header passes ua1 (audit E7).
+	 *
+	 * A link built during header rendering is in an artifact scope; artifact
+	 * content cannot host a tagged link (ISO 14289-1 §7.18.5 requires every Link
+	 * annotation to be nested in a Link struct element, yet artifact content is
+	 * excluded from the tree), so the header link annotation is dropped rather than
+	 * being wired to the Document root — which would be a silent Matterhorn 02-003
+	 * failure. The body link in the same document must still self-tag with a Link
+	 * struct element + OBJR.
+	 *
+	 * @return void
+	 */
+	public function testDocumentWithHeaderLinkPassesUa1()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetHTMLHeader('<div style="font-size: 9pt;">Header with <a href="https://example.com">a header link</a></div>');
+		$html = '<h1>Header link test</h1>'
+			. '<p>Visit <a href="https://www.w3.org/">the W3C</a> in the body.</p>';
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'document with header link');
+	}
+
+	/**
 	 * Test that a direct Mpdf::Link() PHP API call passes ua1.
 	 *
 	 * Links drawn via the PHP API (not <a href>) have no captured Link struct
