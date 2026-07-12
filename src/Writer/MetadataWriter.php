@@ -169,7 +169,10 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$m .= '<?xpacket end="w"?>'; // "r" read only
 		// ISO 32000-1 §14.3.2 — XMP metadata stream must NOT be encrypted.
 		// ISO 14289-1:2014 §6.2 — pdfuaid:part must be readable by PDF/UA processors.
-		// The Identity crypt filter declares the intent; $encrypt=false delivers it.
+		// The Identity crypt filter declares the bypass and $encrypt=false delivers
+		// the plaintext bytes; SetProtection() switches the security handler to /V 4
+		// with /EncryptMetadata false (see writeEncryption()) so this Identity filter
+		// is a valid per-stream exemption rather than a no-op on an RC4 /V 1|2 handler.
 		if ($this->mpdf->PDFUA && $this->mpdf->encrypted) {
 			$this->writer->write('<</Type/Metadata/Subtype/XML'
 				. '/Filter[/Crypt]'
@@ -997,7 +1000,21 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	public function writeEncryption() // _putencryption
 	{
 		$this->writer->write('/Filter /Standard');
-		if ($this->protection->getUseRC128Encryption()) {
+		if ($this->protection->getUseV4Encryption()) {
+			// ISO 32000-1 §7.6.5 — /V 4 crypt-filter encryption. The document uses
+			// RC4 (CFM /V2) for its streams and strings via the StdCF filter, but
+			// /EncryptMetadata false plus the Identity crypt filter declared on the
+			// XMP metadata stream (writeMetadata()) leaves that one stream in
+			// plaintext. This is the only revision under which the Identity bypass is
+			// real, so PDF/UA processors can read pdfuaid:part without the file key.
+			$this->writer->write('/V 4');
+			$this->writer->write('/R 4');
+			$this->writer->write('/Length 128');
+			$this->writer->write('/CF <</StdCF <</Type /CryptFilter /CFM /V2 /AuthEvent /DocOpen /Length 16>>>>');
+			$this->writer->write('/StmF /StdCF');
+			$this->writer->write('/StrF /StdCF');
+			$this->writer->write('/EncryptMetadata false');
+		} elseif ($this->protection->getUseRC128Encryption()) {
 			$this->writer->write('/V 2');
 			$this->writer->write('/R 3');
 			$this->writer->write('/Length 128');

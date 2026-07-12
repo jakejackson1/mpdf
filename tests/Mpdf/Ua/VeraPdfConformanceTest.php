@@ -309,6 +309,32 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that an encrypted PDF/UA document keeps its XMP metadata readable and
+	 * still passes ua1 (audit E3).
+	 *
+	 * The metadata stream is left unencrypted via the Identity crypt filter, which
+	 * is only valid under a /V 4 handler with /EncryptMetadata false. Under the
+	 * previous /V 1|2 handler a conforming reader RC4-decrypted the plaintext XMP
+	 * into garbage, destroying pdfuaid:part and dc:title. veraPDF must recover both
+	 * (metadata unencrypted) while decrypting the rest of the document (RC4 StdCF).
+	 *
+	 * Compression is re-enabled for the same reason as
+	 * testExample64ProtectedDocumentPassesUa1: uncompressed RC4 content streams
+	 * trigger a veraPDF /Length segmentation quirk unrelated to mPDF tagging.
+	 *
+	 * @return void
+	 */
+	public function testEncryptedUaMetadataPassesUa1()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true, 'title' => 'Encrypted Metadata Document']);
+		$mpdf->compress = true;
+		// 'print' only — mPDF must auto-add the 'extract' accessibility bit.
+		$mpdf->SetProtection(['print']);
+		$pdf = $this->getOutput($mpdf, '<h1>Protected</h1><p>Encrypted PDF/UA-1 metadata test.</p>');
+		$this->assertVeraPdfCompliant($pdf, 'encrypted UA metadata');
+	}
+
+	/**
 	 * Test that an FPDI Tier 1 import (untagged source) passes ua1.
 	 *
 	 * An untagged source PDF is imported via SetPageTemplate(). The

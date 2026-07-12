@@ -24847,6 +24847,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				);
 			}
 		}
+		// PDF/UA-1: the XMP metadata stream must stay readable (pdfuaid:part,
+		// dc:title) without the file key. That requires a genuinely unencrypted
+		// stream declared via the Identity crypt filter, which is only valid under
+		// a /V 4 security handler. Switch to /V 4 with /EncryptMetadata false before
+		// the key is derived so generateEncryptionKey() folds in the metadata marker.
+		if ($this->PDFUA) {
+			$this->protection->useV4WithUnencryptedMetadata();
+		}
+
 		$this->encrypted = $this->protection->setProtection($permissions, $user_pass, $owner_pass, $length);
 	}
 
