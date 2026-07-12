@@ -61,7 +61,11 @@ class AriaDosTest extends PdfUaTestCase
 			$ids[] = 'i' . $i;
 		}
 		$value = implode(' ', $ids);
-		$mpdf = $this->makeMpdf();
+		// PDFUAauto: none of the synthetic ids resolve, and audit E8 makes a
+		// dangling aria-labelledby throw in strict mode. The token-cap behaviour
+		// under test lives in queue() and is mode-independent, so auto mode lets
+		// this DoS regression inspect the truncation warning without the throw.
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$this->getOutput($mpdf, '<p aria-labelledby="' . $value . '">x</p>');
 
 		$found = false;
@@ -76,7 +80,11 @@ class AriaDosTest extends PdfUaTestCase
 
 	public function testNormalAriaLabelledbyIsUnaffected()
 	{
-		$mpdf = $this->makeMpdf();
+		// PDFUAauto: the inline <span> targets do not register a struct-tree id,
+		// so the reference is unresolved and audit E8 makes that throw in strict
+		// mode. This test only asserts the M-1 cap did NOT fire (mode-independent),
+		// so auto mode is sufficient and avoids the unrelated strict throw.
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$output = $this->getOutput($mpdf, '<p aria-labelledby="a b">x</p><span id="a">A</span><span id="b">B</span>');
 
 		$truncationWarning = false;

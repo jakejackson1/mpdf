@@ -86,6 +86,19 @@ class AriaIdResolver
 	private $unresolvedWarnings = [];
 
 	/**
+	 * @var string[]  Name-resolution failures produced by resolveAll(): an
+	 *                aria-labelledby / aria-describedby / aria-details reference
+	 *                whose target is missing or carries no text. Emitting an /Alt
+	 *                or /E for these would write a BOM-only empty string that,
+	 *                per ISO 32000-1 Table 322, REPLACES the referring element's
+	 *                content for assistive technology and silently hides it
+	 *                (UA1 audit E8). The _enddoc() caller throws on these in
+	 *                strict mode and warns in PDFUAauto mode (Matterhorn
+	 *                13-004 / 28-002); resolveAll() never writes the empty value.
+	 */
+	private $nameResolutionErrors = [];
+
+	/**
 	 * @var int  Monotonic counter for synthesised TH /ID values.
 	 *           Two tables at the same nesting level on the same page would
 	 *           otherwise collide on `th-{tableLevel}-{row}-{col}` — the
@@ -211,14 +224,28 @@ class AriaIdResolver
 	 */
 	public function resolveAll()
 	{
+		// aria-labelledby → /Alt, aria-describedby / aria-details → /E. These are
+		// the "naming" attributes: an unresolved or empty target must NOT emit an
+		// /Alt or /E, because a BOM-only empty string replaces and hides the
+		// referring element's content (ISO 32000-1 Table 322, UA1 audit E8).
+		$namingAttrs = ['aria-labelledby', 'aria-describedby', 'aria-details'];
+
 		foreach ($this->pending as $pending) {
 			$elem = $pending[0];
 			$attr = $pending[1];
 			$id   = $pending[2];
 
 			if (!isset($this->idMap[$id])) {
-				$this->unresolvedWarnings[] = 'Unresolved ARIA reference: ' . $attr . '="' . $id
+				$msg = 'Unresolved ARIA reference: ' . $attr . '="' . $id
 					. '" has no matching id="' . $id . '" in the document';
+				// A naming attribute that resolves to nothing is a hard failure —
+				// route it so strict throws / auto warns rather than silently
+				// leaving the referring element unnamed.
+				if (in_array($attr, $namingAttrs, true)) {
+					$this->nameResolutionErrors[] = $msg;
+				} else {
+					$this->unresolvedWarnings[] = $msg;
+				}
 				continue;
 			}
 			$target = $this->idMap[$id];
@@ -229,13 +256,30 @@ class AriaIdResolver
 					// Alt from an explicit alt="" or aria-label="" source.
 					$existing = $elem->getAttributes();
 					if (!isset($existing['Alt'])) {
-						$elem->setAttribute('Alt', $this->collectText($target));
+						$text = $this->collectText($target);
+						if ($text === '') {
+							// E8 — never write an empty /Alt: the BOM-only string would
+							// REPLACE and hide $elem's content for AT (Matterhorn 13-004).
+							$this->nameResolutionErrors[] = 'ARIA reference resolved to empty text: '
+								. $attr . '="' . $id . '" target carries no text content; '
+								. 'refusing to emit an empty /Alt (Matterhorn 13-004)';
+						} else {
+							$elem->setAttribute('Alt', $text);
+						}
 					}
 					break;
 				case 'aria-describedby':
 				case 'aria-details':
 					// ISO 32000-1 §14.7.2 Table 322 — /E carries expansion / description text.
-					$elem->setAttribute('E', $this->collectText($target));
+					$text = $this->collectText($target);
+					if ($text === '') {
+						// E8 — never write an empty /E (Matterhorn 28-002).
+						$this->nameResolutionErrors[] = 'ARIA reference resolved to empty text: '
+							. $attr . '="' . $id . '" target carries no text content; '
+							. 'refusing to emit an empty /E (Matterhorn 28-002)';
+					} else {
+						$elem->setAttribute('E', $text);
+					}
 					break;
 				case 'aria-controls':
 				case 'aria-owns':
@@ -249,20 +293,25 @@ class AriaIdResolver
 	}
 
 	/**
-	 * Gather concatenated descendant text from a struct element for use as
-	 * /Alt or /E content.
+	 * Gather the accessible-name text of a struct element for use as /Alt or /E.
 	 *
-	 * Recursively walks the target's children and concatenates every text
-	 * content item. Produces plain UTF-8 text suitable for passing to
-	 * StructureElement::setAttribute().
+	 * Resolution order (first non-empty wins, matching the WAI-ARIA name
+	 * computation's preference for an explicit accessible name):
+	 *   1. the element's own /ActualText, then /Alt (an explicit accessible name);
+	 *   2. otherwise the element's own captured text plus every descendant's
+	 *      collected text, in document order, joined by single spaces.
 	 *
-	 * For the current stub implementation the tree does not store separate
-	 * text-node children — the element's /ActualText or its text attributes
-	 * are used when present. A full text-walk would require the struct tree
-	 * to track text runs per element.
+	 * The captured own-text comes from StructureElement::getOwnText(), which the
+	 * layout engine populates as it emits each line of the element's marked
+	 * content (UA1 audit E8). This replaces the former stub that returned only
+	 * the target's own ActualText/Alt and, for an ordinary text target, an empty
+	 * string — which resolveAll() then wrote as a content-hiding empty /Alt.
+	 *
+	 * Produces plain UTF-8 text suitable for StructureElement::setAttribute();
+	 * StructureWriter encodes it to a UTF-16BE PDF string at emit time.
 	 *
 	 * @param  StructureElement $elem
-	 * @return string  concatenated descendant text (may be empty)
+	 * @return string  concatenated accessible-name text (may be empty)
 	 */
 	private function collectText(StructureElement $elem)
 	{
@@ -273,11 +322,18 @@ class AriaIdResolver
 		if (isset($attrs['Alt']) && $attrs['Alt'] !== '') {
 			return $attrs['Alt'];
 		}
-		$text = '';
-		foreach ($elem->getChildren() as $child) {
-			$text .= $this->collectText($child);
+		$parts = [];
+		$own = $elem->getOwnText();
+		if ($own !== '') {
+			$parts[] = $own;
 		}
-		return $text;
+		foreach ($elem->getChildren() as $child) {
+			$childText = $this->collectText($child);
+			if ($childText !== '') {
+				$parts[] = $childText;
+			}
+		}
+		return implode(' ', $parts);
 	}
 
 	/**
@@ -291,5 +347,22 @@ class AriaIdResolver
 	public function getUnresolvedWarnings()
 	{
 		return $this->unresolvedWarnings;
+	}
+
+	/**
+	 * Name-resolution failures collected by resolveAll(): an aria-labelledby /
+	 * aria-describedby / aria-details reference whose target is missing or holds
+	 * no text.
+	 *
+	 * resolveAll() never emits an /Alt or /E for these (that would write a
+	 * content-hiding empty string — UA1 audit E8). The _enddoc() caller throws on
+	 * a non-empty list in strict mode and flushes the messages into
+	 * UaState::addWarning() in PDFUAauto mode (Matterhorn 13-004 / 28-002).
+	 *
+	 * @return string[]
+	 */
+	public function getNameResolutionErrors()
+	{
+		return $this->nameResolutionErrors;
 	}
 }

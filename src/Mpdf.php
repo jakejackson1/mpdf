@@ -6878,6 +6878,51 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
+	 * PDF/UA-1 — Retain a block line's plain text on its struct element.
+	 *
+	 * Called alongside ensureBlockBdcOpen() as each line of a block is emitted, so
+	 * the block struct element keeps the text it writes as MCIDs. AriaIdResolver
+	 * reads it back via StructureElement::getOwnText() to build the accessible
+	 * name for an aria-labelledby / aria-describedby reference; without it the
+	 * resolver would write an empty /Alt that hides the referring element's
+	 * content (UA1 audit E8, ISO 32000-1 Table 322).
+	 *
+	 * Object-buffer entries (images, list markers) are skipped — only real text
+	 * chunks contribute to the accessible name. Artifact blocks and blocks with no
+	 * captured struct element (the same cases ensureBlockBdcOpen() bails on) are
+	 * ignored so no text is retained on a non-existent element.
+	 *
+	 * @param  array $content  the line's $flowingBlockAttr['content'] chunk array
+	 * @return void
+	 */
+	private function captureBlockStructText($content)
+	{
+		if (!$this->PDFUA) {
+			return;
+		}
+		if (empty($this->flowingBlockAttr['pdfua_struct_open'])) {
+			return;
+		}
+		if (!empty($this->flowingBlockAttr['pdfua_artifact_open'])) {
+			return;
+		}
+		$elem = isset($this->flowingBlockAttr['pdfua_struct_elem'])
+			? $this->flowingBlockAttr['pdfua_struct_elem']
+			: null;
+		if ($elem === null) {
+			return;
+		}
+		$text = '';
+		foreach ($content as $k => $chunk) {
+			if (isset($this->objectbuffer[$k]) && $this->objectbuffer[$k]) {
+				continue; // image / list-marker object, not accessible-name text
+			}
+			$text .= $chunk;
+		}
+		$elem->appendText($text);
+	}
+
+	/**
 	 * PDF/UA-1 — Close the open per-page BDC for a block, if any. Idempotent.
 	 *
 	 * ISO 32000-1 §14.6 — BDC and matching EMC must occupy the same content stream.
@@ -7394,6 +7439,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// ISO 32000-1 §14.8.2.2 — Artifact sequences use BMC (no MCID).
 		if ($content) {
 			$this->ensureBlockBdcOpen();
+			// UA1 audit E8 — retain this (last) line's text on the block struct
+			// element so an aria-labelledby/-describedby reference can resolve to
+			// a real accessible name instead of an empty /Alt.
+			$this->captureBlockStructText($content);
 		}
 
 		if ($content) {
@@ -9583,6 +9632,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// content (Matterhorn 01-006, same-page case). Idempotent: a
 					// no-op when a BDC for the current page is already open.
 					$this->ensureBlockBdcOpen();
+					// UA1 audit E8 — retain this completed line's text on the block
+					// struct element (see finishFlowingBlock) so the accumulated
+					// own-text feeds AriaIdResolver's accessible-name computation.
+					$this->captureBlockStructText($content);
 
 					// BIDI magic_reverse moved upwards from here
 					$rubyClusterX = 0;
@@ -11252,6 +11305,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$resolver->resolveAll();
 			foreach ($resolver->getUnresolvedWarnings() as $w) {
 				$this->ua->addWarning($w);
+			}
+			// PDF/UA-1 audit E8 — an aria-labelledby / aria-describedby reference
+			// that resolves to a missing or empty target must never emit an /Alt
+			// or /E: a BOM-only empty string replaces and hides the referring
+			// element's content for AT (ISO 32000-1 Table 322, Matterhorn
+			// 13-004 / 28-002). resolveAll() has already refused to write the
+			// empty value; here strict mode throws and auto mode warns.
+			$nameErrors = $resolver->getNameResolutionErrors();
+			if (!empty($nameErrors)) {
+				if ($this->PDFUAauto) {
+					foreach ($nameErrors as $w) {
+						$this->ua->addWarning($w);
+					}
+				} else {
+					throw new \Mpdf\MpdfException('PDF/UA-1: ' . $nameErrors[0]);
+				}
 			}
 		}
 

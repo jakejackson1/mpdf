@@ -63,6 +63,17 @@ class StructureElement
 	protected $attributes;
 
 	/**
+	 * @var string[]  Plain-text runs written under this element's own marked
+	 *   content, captured line-by-line as the block is laid out. One entry per
+	 *   emitted line. AriaIdResolver::collectText() concatenates these (and the
+	 *   descendants' runs) to build an accessible name for an aria-labelledby /
+	 *   aria-describedby reference — so a resolved /Alt or /E carries the target's
+	 *   real text instead of the empty BOM-only string that used to hide the
+	 *   referring element's content (UA1 audit E8, ISO 32000-1 Table 322).
+	 */
+	protected $textRuns;
+
+	/**
 	 * @var string|null  Globally unique /ID string, required for Note elements
 	 *   (Matterhorn 09-002) and for TH cells referenced by TD /Headers.
 	 */
@@ -98,6 +109,7 @@ class StructureElement
 		$this->children   = [];
 		$this->mcids      = [];
 		$this->objrefs    = [];
+		$this->textRuns   = [];
 		$this->id         = null;
 		$this->objNum     = 0;
 	}
@@ -317,6 +329,52 @@ class StructureElement
 	public function addMcid($page, $mcid, $pageRef = 0, $stm = 0)
 	{
 		$this->mcids[] = ['page' => $page, 'mcid' => $mcid, 'pageRef' => $pageRef, 'stm' => $stm];
+	}
+
+	/**
+	 * Record one plain-text line written under this element's marked content.
+	 *
+	 * Called by Mpdf as each line of a block is laid out, so the element retains
+	 * the text it emits as MCIDs. AriaIdResolver::collectText() reads it back to
+	 * build the accessible name for an aria-labelledby / aria-describedby target
+	 * (UA1 audit E8) — without it the resolver would write an empty /Alt that
+	 * replaces and hides the referring element's content (ISO 32000-1 Table 322).
+	 *
+	 * One entry per line; getOwnText() joins them with a single space so words at
+	 * a wrap boundary are not run together.
+	 *
+	 * @param  string $text  the line's concatenated plain text (UTF-8)
+	 * @return void
+	 */
+	public function appendText($text)
+	{
+		$text = (string) $text;
+		if ($text !== '') {
+			$this->textRuns[] = $text;
+		}
+	}
+
+	/**
+	 * Return this element's own captured text, lines joined by single spaces.
+	 *
+	 * Only the text written directly under this element is returned — descendant
+	 * text lives on the child elements and is gathered separately by
+	 * AriaIdResolver::collectText(). Leading/trailing whitespace on each line is
+	 * trimmed and empty lines are dropped so the joined result has no runs of
+	 * spaces at line boundaries.
+	 *
+	 * @return string  concatenated own text (may be empty)
+	 */
+	public function getOwnText()
+	{
+		$parts = [];
+		foreach ($this->textRuns as $run) {
+			$run = trim($run);
+			if ($run !== '') {
+				$parts[] = $run;
+			}
+		}
+		return implode(' ', $parts);
 	}
 
 	/**

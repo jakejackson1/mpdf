@@ -563,6 +563,31 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A resolved aria-labelledby / aria-describedby reference must pass ua1
+	 * (audit E8).
+	 *
+	 * The referenced caption/description text is written onto the referring
+	 * element as /Alt and /E. Before the E8 fix the resolver wrote a BOM-only
+	 * empty /Alt (\376\377) that, per ISO 32000-1 Table 322, replaced and hid
+	 * the referring element's content — a silent accessibility defect. A
+	 * non-empty /Alt built from the target's real text is conformant.
+	 *
+	 * @return void
+	 */
+	public function testAriaNameResolutionPassesUa1()
+	{
+		$html = '<h1>ARIA naming</h1>'
+			. '<p id="cap">The quarterly revenue caption</p>'
+			. '<div aria-labelledby="cap">Region referenced by the caption above.</div>'
+			. '<p id="desc">A longer description of the following section.</p>'
+			. '<p aria-describedby="desc">Body paragraph with an associated description.</p>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'ARIA accessible-name resolution');
+	}
+
+	/**
 	 * mpdf-examples coverage tests.
 	 *
 	 * Each test loads an mpdf-example HTML fixture from
