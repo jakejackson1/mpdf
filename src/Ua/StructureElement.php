@@ -234,13 +234,31 @@ class StructureElement
 			}
 		}
 
-		// Length cap: keep the first $truncTo bytes and append a #xx-escaped
-		// '-' + first $hashChars hex characters of sha1($id) so that two
-		// distinct overlong inputs that share a long common prefix still
-		// produce distinct sanitised ids. '#2D' is the escape for '-' so the
-		// joiner is byte-safe in both the byte-string and PDF-name forms.
+		// Length cap: keep the leading tokens that fit inside $truncTo and
+		// append a #xx-escaped '-' + first $hashChars hex characters of
+		// sha1($id) so that two distinct overlong inputs that share a long
+		// common prefix still produce distinct sanitised ids. '#2D' is the
+		// escape for '-' so the joiner is byte-safe in both the byte-string
+		// and PDF-name forms.
+		//
+		// UA1 audit E14 — the prefix must be cut on a token boundary, never
+		// mid-`#xx` sequence. A blind substr($out, 0, $truncTo) can land
+		// between the '#' and its two hex digits, producing a '#' not
+		// followed by two hex digits and violating the ISO 32000-1 §7.3.5
+		// name production. Every '#' in $out begins a 3-byte #xx token (the
+		// safe set [a-z0-9_.-] contains no '#'), so walk token-by-token and
+		// stop before the first token that would overflow $truncTo.
 		if (strlen($out) > $maxBytes) {
-			$prefix = substr($out, 0, $truncTo);
+			$prefixLen = 0;
+			$outLen    = strlen($out);
+			while ($prefixLen < $outLen) {
+				$tokenLen = ($out[$prefixLen] === '#') ? 3 : 1;
+				if ($prefixLen + $tokenLen > $truncTo) {
+					break;
+				}
+				$prefixLen += $tokenLen;
+			}
+			$prefix = substr($out, 0, $prefixLen);
 			$suffix = '#2D' . substr(sha1($id), 0, $hashChars);
 			$out    = $prefix . $suffix;
 		}
