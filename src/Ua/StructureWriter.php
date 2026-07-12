@@ -389,14 +389,25 @@ class StructureWriter
 			// the MCID back to the correct page's content stream. Without /Pg,
 			// veraPDF reports the contentItem as "neither marked as Artifact nor
 			// tagged as real content" (ISO 14289-1 §7.1 test 3 / Matterhorn 01-006).
-			$singlePageObjNum = isset($pageRefs[$mcids[0]['page']]) ? $pageRefs[$mcids[0]['page']] : 0;
+			// Prefer the patched pageRef written by FpdiStructMerger for imported
+			// MCRs — the Form XObject's structParents key is absent from the page
+			// ref map, so buildPageRefMap() alone resolves to 0 (UA1 audit E5).
+			$singlePageObjNum = (isset($mcids[0]['pageRef']) && $mcids[0]['pageRef'] > 0)
+				? $mcids[0]['pageRef']
+				: (isset($pageRefs[$mcids[0]['page']]) ? $pageRefs[$mcids[0]['page']] : 0);
 			if ($singlePageObjNum > 0) {
 				$this->writer->write('/Pg ' . $singlePageObjNum . ' 0 R');
 			}
 			$kParts[] = (string) $mcids[0]['mcid'];
 		} else {
 			foreach ($mcids as $mcr) {
-				$pageObjNum = isset($pageRefs[$mcr['page']]) ? $pageRefs[$mcr['page']] : 0;
+				// Prefer the patched pageRef written by FpdiStructMerger for imported
+				// Form-XObject MCRs — their structParents key lives on the XObject,
+				// not in the page ref map, so buildPageRefMap() resolves to 0 and the
+				// entry would drop /Pg + /Stm to the bare-integer fallback (UA1 audit E5).
+				$pageObjNum = (isset($mcr['pageRef']) && $mcr['pageRef'] > 0)
+					? $mcr['pageRef']
+					: (isset($pageRefs[$mcr['page']]) ? $pageRefs[$mcr['page']] : 0);
 				$stm = isset($mcr['stm']) ? (int) $mcr['stm'] : 0;
 				if ($pageObjNum > 0) {
 					if ($stm > 0) {

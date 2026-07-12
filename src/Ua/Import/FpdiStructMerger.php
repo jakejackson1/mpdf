@@ -1049,6 +1049,15 @@ class FpdiStructMerger
 			return [$resolved];
 		}
 
+		if ($resolved instanceof PdfNumeric) {
+			// Bare-integer /K — a single-MCID struct element serialises its /K as
+			// a bare integer (`/K 5`), the shape mPDF's own writer prefers and most
+			// producers emit. Wrap it so the per-kid PdfNumeric handler below runs
+			// and the MCID reaches addMcid(); otherwise the cloned element owns no
+			// content reference at all (UA1 audit E1).
+			return [$resolved];
+		}
+
 		return [];
 	}
 

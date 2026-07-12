@@ -359,6 +359,55 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that an FPDI Tier 2 import (tagged source) passes ua1.
+	 *
+	 * A tagged PDF/UA source is imported via useImportedPage(). FpdiStructMerger
+	 * Tier 2 clones its struct subtree into the host tree. mPDF's own single-MCID
+	 * struct elements serialise /K as a bare integer (audit E1) and their marked
+	 * content lives in the imported Form XObject, so the merged MCRs must carry
+	 * /Pg + /Stm (audit E5). Without both fixes the merged subtree is a skeleton
+	 * of empty StructElems and veraPDF flags §7.1 test 3 (real content neither
+	 * tagged nor marked Artifact).
+	 *
+	 * @return void
+	 */
+	public function testFpdiTier2TaggedImportPassesUa1()
+	{
+		$sourceFixture = $this->makeTaggedSourceFixture();
+
+		$mpdf = $this->makeMpdf(['enableImports' => true, 'PDFUAauto' => true]);
+		$mpdf->setSourceFile($sourceFixture);
+		$pageId = $mpdf->importPage(1);
+		$mpdf->AddPage();
+		$mpdf->useImportedPage($pageId);
+		$pdf = $mpdf->Output(null, 'S');
+		@unlink($sourceFixture);
+		$this->assertVeraPdfCompliant($pdf, 'FPDI Tier 2 tagged import');
+	}
+
+	/**
+	 * Generate a tagged PDF/UA source whose fonts are embedded.
+	 *
+	 * Used by testFpdiTier2TaggedImportPassesUa1. PDFUA=true (inherited from
+	 * makeMpdf) forces font embedding and writes a /StructTreeRoot, so the source
+	 * is a valid Tier 2 tagged import. The leading <h1> satisfies the heading
+	 * sequence rule (ISO 14289-1:2014 §7.4.2) once merged into the host tree.
+	 *
+	 * @return string  absolute path to the generated source PDF
+	 */
+	private function makeTaggedSourceFixture()
+	{
+		$source = $this->makeMpdf();
+		$source->WriteHTML(
+			'<h1>Tagged source heading</h1>'
+			. '<p>Tagged source body paragraph generated for FPDI Tier 2 import testing.</p>'
+		);
+		$path = tempnam(sys_get_temp_dir(), 'mpdf_ua_fpdi_tagged_') . '.pdf';
+		$source->Output($path, 'F');
+		return $path;
+	}
+
+	/**
 	 * Test that a document with AcroForm widget annotations passes ua1.
 	 *
 	 * Form widgets must be tagged as Form struct elements with OBJR kids and

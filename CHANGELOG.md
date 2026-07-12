@@ -32,6 +32,7 @@ New features
 
 Bugfixes
 --------
+* PDF/UA-1: FPDI Tier 2 tagged-source import no longer drops the imported struct subtree's content (audit E1+E5). `FpdiStructMerger::normaliseKidsToArray()` now handles a bare-integer `/K` (the single-MCID shape mPDF's own writer prefers and most producers emit), so the MCID reaches the per-kid handler instead of the cloned element being an empty `StructElem` skeleton; and `StructureWriter::writeElement()` now prefers the patched `$mcr['pageRef']` (written by `patchMergedSubtreeObjectNumbers()`, previously dead) before the `buildPageRefMap()` fallback, so imported Form-XObject MCRs — whose `/StructParents` key lives on the XObject, not the page map — emit `<</Type /MCR /Pg … /Stm … /MCID …>>` (ISO 32000-1 §14.7.4.4 Table 324) instead of a bare integer that drops `/Pg` + `/Stm`. Neither fix is sufficient alone. Two new `FpdiStructMergerTest` cases and a `testFpdiTier2TaggedImportPassesUa1` veraPDF conformance case (@jakejackson1)
 * Fix `TypeError` in `transformRotate` for non-numeric CSS transform values (#2056)
 * Fix `TypeError` with non-numeric `rotate` values like `none` or `90deg` on tables (@derrabus, #2178)
 * Small change to better support list-style-type on list items within tables

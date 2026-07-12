@@ -489,4 +489,114 @@ class FpdiStructMergerTest extends PdfUaTestCase
 			'/S /H3 from merged source subtree must coexist with host /S /P'
 		);
 	}
+
+	/**
+	 * A tagged source whose /K is a bare integer merges its MCID and resolves /Pg.
+	 *
+	 * mPDF's own single-MCID struct element serialises /K as a bare integer
+	 * (`/K 5` — StructureWriter's "bare integer is allowed and preferred" path),
+	 * so round-tripping mPDF's own output exercises the bare-integer /K case.
+	 * Before UA1 audit E1, FpdiStructMerger::normaliseKidsToArray() returned []
+	 * for a bare PdfNumeric /K, so the cloned element carried no content reference
+	 * at all — an empty StructElem skeleton. After E1 the MCID reaches addMcid(),
+	 * and after E5 StructureWriter emits the MCR dict with a resolvable /Pg.
+	 *
+	 * The host document writes only /P, so /S /H2 is unambiguously the merged
+	 * source element. Its /K must be an MCR dict whose /Pg resolves to a non-zero
+	 * host page object number.
+	 *
+	 * ISO 32000-1:2008 §14.7.2 Table 322 — /Pg / §14.7.4.4 Table 324 — MCR dict.
+	 */
+	public function testBareIntegerKMergesMcidAndResolvesPg()
+	{
+		$this->taggedPdf = $this->makeTaggedPdf();
+
+		$mpdf = $this->makeMpdf();
+		$mpdf->setSourceFile($this->taggedPdf);
+		$pageId = $mpdf->importPage(1);
+		$mpdf->AddPage();
+		$mpdf->useImportedPage($pageId);
+		$output = $mpdf->Output(null, 'S');
+
+		// The merged /S /H2 element (host writes only /P) must carry an MCR content
+		// reference — proving the bare-integer /K reached the per-kid handler (E1).
+		$this->assertMatchesRegularExpression(
+			'#/S /H2\s*/P \d+ 0 R\s*/K <</Type /MCR /Pg \d+ 0 R#',
+			$output,
+			'Bare-integer /K source element must merge with an MCR content reference (audit E1)'
+		);
+
+		// /Pg on that MCR must resolve to a real (non-zero) page object number (E5).
+		$this->assertSame(
+			1,
+			preg_match('#/S /H2\s*/P \d+ 0 R\s*/K <</Type /MCR /Pg (\d+) 0 R#', $output, $m),
+			'Merged H2 element must carry exactly one MCR content reference'
+		);
+		$this->assertGreaterThan(
+			0,
+			(int) $m[1],
+			'/Pg on the merged MCR must resolve to a non-zero host page object'
+		);
+	}
+
+	/**
+	 * A source whose content lives in a Form XObject: merged MCRs carry /Pg + /Stm
+	 * and the ParentTree contains the XObject's /StructParents key.
+	 *
+	 * FPDI imports each source page as a Form XObject, so the merged struct
+	 * elements' content lives in that XObject's stream. Before UA1 audit E5,
+	 * StructureWriter resolved the page object only via buildPageRefMap() keyed on
+	 * the page-level /StructParents; the Form XObject's own /StructParents key is
+	 * absent from that map, so the MCR fell to the bare-integer fallback and lost
+	 * both /Pg and /Stm. After E5 the patched pageRef is preferred and the MCR
+	 * emits `<</Type /MCR /Pg .. /Stm .. /MCID ..>>` per Table 324.
+	 *
+	 * ISO 32000-1:2008 §14.7.4.4 Table 324 — /Stm references the Form XObject whose
+	 * content stream contains the marked content.
+	 */
+	public function testFormXObjectMcrsCarryPgAndStmAndParentTreeKey()
+	{
+		$this->taggedPdf = $this->makeTaggedPdf();
+
+		$mpdf = $this->makeMpdf();
+		$mpdf->setSourceFile($this->taggedPdf);
+		$pageId = $mpdf->importPage(1);
+		$mpdf->AddPage();
+		$mpdf->useImportedPage($pageId);
+		$output = $mpdf->Output(null, 'S');
+
+		// Every merged MCR must be a full dict carrying both /Pg and /Stm — a
+		// Form-XObject content item cannot be a bare integer (audit E5).
+		$this->assertMatchesRegularExpression(
+			'#<</Type /MCR /Pg \d+ 0 R /Stm \d+ 0 R /MCID \d+>>#',
+			$output,
+			'Merged Form-XObject MCRs must carry /Pg and /Stm (audit E5)'
+		);
+
+		// Read the Form XObject's /StructParents key (injected into the XObject
+		// stream dict just after /Subtype /Form; search forward so a neighbouring
+		// page dict's /StructParents 0 is not picked up by mistake).
+		$foPos = strpos($output, '/Subtype /Form');
+		$this->assertNotFalse($foPos, 'Output must contain the FPDI Form XObject');
+		$this->assertSame(
+			1,
+			preg_match('#/Subtype /Form.{0,2000}?/StructParents (\d+)#s', substr($output, $foPos, 2100), $spMatch),
+			'Form XObject dict must declare a /StructParents key'
+		);
+		$xobjKey = (int) $spMatch[1];
+
+		// The ParentTree /Nums must contain an entry for that XObject key so the
+		// back-reference from the XObject content stream to the struct elements
+		// resolves (ISO 32000-1:2008 §14.7.4.4).
+		$this->assertSame(
+			1,
+			preg_match('#/Nums \[(.*?)\]>>#s', $output, $numsMatch),
+			'StructTreeRoot ParentTree must expose a /Nums array'
+		);
+		$this->assertMatchesRegularExpression(
+			'#(?:^|\s)' . $xobjKey . ' \[#',
+			$numsMatch[1],
+			'ParentTree /Nums must contain the Form XObject /StructParents key ' . $xobjKey
+		);
+	}
 }
