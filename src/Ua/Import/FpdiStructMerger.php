@@ -171,7 +171,7 @@ class FpdiStructMerger
 	 * Per-import cycle/depth/budget tracking state for cloneElement().
 	 *
 	 * Reset at the top of mergePageStructSubtree(). $cloneVisited is a
-	 * path-based ancestor set keyed on spl_object_id() of the resolved struct
+	 * path-based ancestor set keyed on spl_object_hash() of the resolved struct
 	 * dict — entries are pushed on recursion enter and popped on return so
 	 * legitimate DAG sharing is preserved. $cloneAborted is sticky once a
 	 * cycle / depth / budget violation is reported, to avoid duplicate
@@ -788,7 +788,7 @@ class FpdiStructMerger
 
 		// Cycle detection — same indirect-object-number strategy as
 		// cloneElement() (FPDI does not cache resolved indirect objects, so
-		// spl_object_id of the resolved dict is unstable across calls).
+		// spl_object_hash of the resolved dict is unstable across calls).
 		$refKey = null;
 		if ($node instanceof PdfIndirectObjectReference) {
 			$refKey = 'ref:' . (int) $node->value;
@@ -821,7 +821,7 @@ class FpdiStructMerger
 
 			$inlineKey = null;
 			if ($refKey === null) {
-				$inlineKey = 'obj:' . spl_object_id($resolved);
+				$inlineKey = 'obj:' . spl_object_hash($resolved);
 				if (isset($this->sanityVisited[$inlineKey])) {
 					return;
 				}
@@ -1113,10 +1113,10 @@ class FpdiStructMerger
 		}
 
 		// Cycle detection key — prefer the indirect-object number when we have
-		// one, falling back to spl_object_id of the resolved dict otherwise.
+		// one, falling back to spl_object_hash of the resolved dict otherwise.
 		// FPDI's PdfParser::getIndirectObject() does NOT cache by default, so
 		// the same indirect ref produces a fresh PdfDictionary on each call;
-		// tracking by spl_object_id alone fails the cycle case (UA1 audit H-2).
+		// tracking by spl_object_hash alone fails the cycle case (UA1 audit H-2).
 		$visitedKey = null;
 		if ($sourceElem instanceof PdfIndirectObjectReference) {
 			$visitedKey = 'ref:' . (int) $sourceElem->value;
@@ -1148,7 +1148,7 @@ class FpdiStructMerger
 			// hand-crafted adversarial input.
 			$inlineKey = null;
 			if ($visitedKey === null) {
-				$inlineKey = 'obj:' . spl_object_id($resolved);
+				$inlineKey = 'obj:' . spl_object_hash($resolved);
 				if (isset($this->cloneVisited[$inlineKey])) {
 					$this->addUntaggedWarning(
 						'Cycle detected in imported PDF struct subtree; subtree truncated (UA1 audit H-2).'

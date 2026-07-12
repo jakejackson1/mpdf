@@ -599,4 +599,49 @@ class FpdiStructMergerTest extends PdfUaTestCase
 			'ParentTree /Nums must contain the Form XObject /StructParents key ' . $xobjKey
 		);
 	}
+
+	/**
+	 * A tagged import completes without a fatal on the minimum supported PHP.
+	 *
+	 * The struct-merge cycle/identity keys in cloneElement() and
+	 * collectSanityCandidates() must not depend on spl_object_id() — that
+	 * function only exists on PHP 7.2+, but composer.json still advertises
+	 * PHP 5.6/7.0/7.1, on which a tagged import would fatal with
+	 * "Call to undefined function spl_object_id()" (UA1 audit E13). The
+	 * inline-dict identity keys use spl_object_hash() (available since PHP 5.x)
+	 * instead, so this tagged import — which drives both the clone and sanity
+	 * walk cycle-key paths — must run to completion and emit the struct tree.
+	 */
+	public function testTaggedImportUsesPhp56CompatibleObjectKeys()
+	{
+		// Guard against reintroducing the PHP 7.2+ only spl_object_id() at
+		// either cycle-key call site: the whole class must stay 5.6-safe.
+		$src = file_get_contents(
+			__DIR__ . '/../../../src/Ua/Import/FpdiStructMerger.php'
+		);
+		$this->assertStringNotContainsString(
+			'spl_object_id(',
+			$src,
+			'FpdiStructMerger must not call spl_object_id() — it fatals on PHP < 7.2 (audit E13)'
+		);
+		$this->assertSame(
+			2,
+			substr_count($src, "'obj:' . spl_object_hash("),
+			'Both cycle/identity keys must use spl_object_hash() (audit E13)'
+		);
+
+		// Functional check: a tagged import exercises the cycle-key paths and
+		// must complete without a fatal, emitting the merged struct tree.
+		$this->taggedPdf = $this->makeTaggedPdf();
+
+		$mpdf = $this->makeMpdf();
+		$mpdf->setSourceFile($this->taggedPdf);
+		$pageId = $mpdf->importPage(1);
+		$mpdf->AddPage();
+		$mpdf->useImportedPage($pageId);
+		$output = $mpdf->Output(null, 'S');
+
+		$this->assertNotEmpty($output, 'Tagged import must produce output without a fatal');
+		$this->assertStringContainsString('/Type /StructTreeRoot', $output);
+	}
 }
