@@ -107,6 +107,32 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Ordered lists with every /ListNumbering marker style pass ua1 (audit E17).
+	 *
+	 * Each <ol type> / list-style-type resolves to a /ListNumbering value on the
+	 * L element's /A <</O /List …>> attribute object (ISO 32000-1 §14.8.5.3.3
+	 * Table 347) — decimal, upper/lower roman and upper/lower alpha — while an
+	 * unordered list carries the Disc glyph. veraPDF must accept every emitted
+	 * /ListNumbering name.
+	 *
+	 * @return void
+	 */
+	public function testOrderedListNumberingPassesUa1()
+	{
+		$html = '<h1>Numbered lists</h1>'
+			. '<ol type="1"><li>Decimal one</li><li>Decimal two</li></ol>'
+			. '<ol type="I"><li>Upper roman one</li><li>Upper roman two</li></ol>'
+			. '<ol type="i"><li>Lower roman one</li><li>Lower roman two</li></ol>'
+			. '<ol type="A"><li>Upper alpha one</li><li>Upper alpha two</li></ol>'
+			. '<ol type="a"><li>Lower alpha one</li><li>Lower alpha two</li></ol>'
+			. '<ul><li>Disc one</li><li>Disc two</li></ul>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'ordered list numbering styles');
+	}
+
+	/**
 	 * A <dl> nested inside a <dd> must pass ua1. Each <dl> level owns its own
 	 * implicit-LI frame, so the inner definition pair nests under its own LI
 	 * rather than leaking Lbl/LBody as bare children of L (which veraPDF flags

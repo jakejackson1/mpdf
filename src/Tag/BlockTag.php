@@ -157,6 +157,48 @@ abstract class BlockTag extends Tag
 	}
 
 	/**
+	 * PDF/UA-1 (audit E17) — map a resolved CSS `list-style-type` to the PDF
+	 * `/ListNumbering` name carried by an `L` element's `/A <</O /List …>>`
+	 * attribute object.
+	 *
+	 * ISO 32000-1:2008 §14.8.5.3.3 Table 347 enumerates the ordered-marker
+	 * styles (Decimal / UpperRoman / LowerRoman / UpperAlpha / LowerAlpha) and
+	 * the unordered glyphs (Disc / Circle / Square). mPDF's `upper-latin` /
+	 * `lower-latin` aliases (from `<ol type="A|a">`) fold onto the alpha names.
+	 * Marker styles outside the enumeration (greek, hebrew, cjk-decimal, the
+	 * arabic-indic family, U+… glyphs) and `none` map to null, so no
+	 * `/ListNumbering` — and thus no `/List` attribute object — is emitted.
+	 *
+	 * @param  string|null $listStyleType  the resolved CSS list-style-type
+	 * @return string|null                 the /ListNumbering name, or null
+	 */
+	private static function listNumberingFromCssType($listStyleType)
+	{
+		switch (strtolower((string) $listStyleType)) {
+			case 'decimal':
+				return 'Decimal';
+			case 'upper-roman':
+				return 'UpperRoman';
+			case 'lower-roman':
+				return 'LowerRoman';
+			case 'upper-alpha':
+			case 'upper-latin':
+				return 'UpperAlpha';
+			case 'lower-alpha':
+			case 'lower-latin':
+				return 'LowerAlpha';
+			case 'disc':
+				return 'Disc';
+			case 'circle':
+				return 'Circle';
+			case 'square':
+				return 'Square';
+			default:
+				return null;
+		}
+	}
+
+	/**
 	 * HTML tags after which an open `<p>` end tag may be omitted (HTML5 §13.1.2).
 	 * Mirrors the set in Tag::OpenTag(); reused for table cells (audit E9) where
 	 * mPDF does not replay optional end tags.
@@ -532,6 +574,16 @@ abstract class BlockTag extends Tag
 				// Override with CSS list-style-type if specified (highest specificity)
 				if (!empty($properties['LIST-STYLE-TYPE'])) {
 					$this->mpdf->listtype[$this->mpdf->listlvl] = strtolower($properties['LIST-STYLE-TYPE']);
+				}
+
+				// PDF/UA-1 (audit E17) — record the resolved marker style on the
+				// in-cell L element as /ListNumbering so the writer emits its
+				// /A <</O /List /ListNumbering …>> attribute object (Table 347).
+				if ($this->mpdf->PDFUA && isset($elem) && $structType === 'L') {
+					$numbering = self::listNumberingFromCssType($this->mpdf->listtype[$this->mpdf->listlvl]);
+					if ($numbering !== null) {
+						$elem->setAttribute('ListNumbering', $numbering);
+					}
 				}
 			}
 
@@ -1360,6 +1412,18 @@ abstract class BlockTag extends Tag
 					} else {
 						$currblk['list_style_type'] = 'square';
 					}
+				}
+			}
+
+			// PDF/UA-1 (audit E17) — record the resolved marker style on the L
+			// struct element as /ListNumbering so the writer emits its
+			// /A <</O /List /ListNumbering …>> attribute object (ISO 32000-1
+			// §14.8.5.3.3 Table 347). Set after the default marker above so an
+			// unstyled <ol>/<ul> still carries the right value (Decimal / Disc …).
+			if ($this->mpdf->PDFUA && !empty($currblk['pdfua_struct_elem'])) {
+				$numbering = self::listNumberingFromCssType($currblk['list_style_type']);
+				if ($numbering !== null) {
+					$currblk['pdfua_struct_elem']->setAttribute('ListNumbering', $numbering);
 				}
 			}
 
