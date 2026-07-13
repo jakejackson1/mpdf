@@ -59,6 +59,19 @@ class CustomPropertyInjectionTest extends PdfUaTestCase
 		$mpdf->AddCustomProperty(str_repeat('A', 128), 'v');
 	}
 
+	/**
+	 * The empty/over-127-byte key rejection is scoped to PDFUA documents (audit
+	 * E-P3a): a non-UA document keeps the pre-UA "accept any key" behaviour, so
+	 * neither an empty nor an oversized key throws there.
+	 */
+	public function testKeyValidationIsScopedToPdfUa()
+	{
+		$mpdf = new \Mpdf\Mpdf();
+		$mpdf->AddCustomProperty('', 'v');
+		$mpdf->AddCustomProperty(str_repeat('A', 200), 'v');
+		$this->assertTrue(true, 'Non-UA AddCustomProperty accepts empty/oversized keys.');
+	}
+
 	public function testBenignKeyPassesThrough()
 	{
 		$mpdf = $this->makeMpdf();

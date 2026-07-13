@@ -25,6 +25,12 @@ class Area extends Tag
 		if (!$this->mpdf->PDFUA) {
 			return;
 		}
+		if ($this->ua === null) {
+			// Guard the UaState dereference to match the null-checks used at the
+			// map-name and href-policy branches below; a PDFUA document with no
+			// UaState wired up has no image-map registry to append to.
+			return;
+		}
 		$registry = $this->ua->getImageMapRegistry();
 		$mapName  = $registry->getCurrentMapName();
 		if ($mapName === null) {

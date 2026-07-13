@@ -1999,14 +1999,20 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// PDF 1.7 implementation limit on Name length is 127 bytes; the
 		// MetadataWriter.escapeName() pass below will encode each unsafe
 		// byte as `#XX`, so we measure against the post-escape length.
+		//
+		// Scoped to PDFUA: for non-UA documents this validation is a behaviour
+		// change (previously any key was accepted), so it only fires when the
+		// document is being produced in PDF/UA-1 mode.
 		$key = (string) $key;
-		if ($key === '') {
-			throw new \Mpdf\MpdfException('AddCustomProperty: key must not be empty.');
-		}
-		if (strlen($key) > 127) {
-			throw new \Mpdf\MpdfException(
-				'AddCustomProperty: key length exceeds the PDF 1.7 Name production limit (127 bytes).'
-			);
+		if ($this->PDFUA) {
+			if ($key === '') {
+				throw new \Mpdf\MpdfException('AddCustomProperty: key must not be empty.');
+			}
+			if (strlen($key) > 127) {
+				throw new \Mpdf\MpdfException(
+					'AddCustomProperty: key length exceeds the PDF 1.7 Name production limit (127 bytes).'
+				);
+			}
 		}
 		$this->customProperties[$key] = $value;
 	}

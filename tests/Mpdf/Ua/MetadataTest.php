@@ -115,6 +115,26 @@ class MetadataTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A literal title of "0" is a real title, not a missing one (audit E-P3a).
+	 * The title guards previously used empty()/!empty(), which treat "0" as
+	 * missing — so strict mode threw the 06-003 "requires a document title"
+	 * error and the emitters dropped dc:title / /Title. The guards now use
+	 * === '' || === null, so a "0" title is emitted and does not throw.
+	 */
+	public function testZeroTitleIsNotTreatedAsMissing()
+	{
+		$mpdf = new \Mpdf\Mpdf(['PDFUA' => true, 'PDFUAauto' => false, 'mode' => 'en-GB']);
+		$mpdf->compress = false;
+		$mpdf->SetTitle('0');
+		$mpdf->WriteHTML('<p>zero title</p>');
+		$output = $mpdf->Output(null, 'S');
+
+		// dc:title (XMP) and /Title (Info dict) must both carry the "0" title.
+		$this->assertStringContainsString('<dc:title>', $output);
+		$this->assertStringContainsString('/Title ', $output);
+	}
+
+	/**
 	 * ISO 14289-1:2014 §7.21 (Matterhorn 14-002) — core Type 1 fonts cannot be
 	 * embedded and must be rejected when PDFUA is active.
 	 *

@@ -117,7 +117,7 @@ class UaPolicy
 	 *      Browsers and PDF readers do not double-decode; we don't either.
 	 *   3. Strip leading invisible bytes — ASCII whitespace, NBSP, ZWSP,
 	 *      ZWJ/ZWNJ, BOM, and C0/C1 controls.
-	 *   4. Lowercase (ASCII) for case-insensitive scheme comparison.
+	 *   4. Lowercase (ASCII, byte-safe) for case-insensitive scheme comparison.
 	 *
 	 * @param  string $href
 	 * @return string
@@ -145,7 +145,16 @@ class UaPolicy
 			$stripped = ltrim($decoded, " \t\r\n\v\f\0");
 		}
 
-		return strtolower($stripped);
+		// Byte-safe ASCII fold. PHP < 8's strtolower() is locale-dependent: under
+		// certain locales (e.g. tr_TR) it can map bytes unexpectedly, which could
+		// let a crafted scheme dodge the lowercase javascript:/vbscript: deny-list.
+		// strtr() over the fixed A-Z → a-z table is locale-independent on every
+		// PHP version, so the scheme comparison below can't be evaded.
+		return strtr(
+			$stripped,
+			'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+			'abcdefghijklmnopqrstuvwxyz'
+		);
 	}
 
 	/**

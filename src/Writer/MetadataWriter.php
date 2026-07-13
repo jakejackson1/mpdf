@@ -87,7 +87,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		// DC elements
 		$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:dc="http://purl.org/dc/elements/1.1/">' . "\n";
 		$m .= '    <dc:format>application/pdf</dc:format>' . "\n";
-		if (!empty($this->mpdf->title)) {
+		if ($this->mpdf->title !== '' && $this->mpdf->title !== null) {
 			$m .= '    <dc:title>
 	 <rdf:Alt>
 	  <rdf:li xml:lang="x-default">' . htmlspecialchars($this->mpdf->title, ENT_QUOTES | ENT_XML1) . '</rdf:li>
@@ -147,7 +147,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		// ISO 14289-1:2014 §7.1 (Matterhorn Protocol 1.1 condition 06-003) requires
 		// a non-empty document title in the XMP dc:title element.
 		if ($this->mpdf->PDFUA) {
-			if (empty($this->mpdf->title)) {
+			if ($this->mpdf->title === '' || $this->mpdf->title === null) {
 				if ($this->mpdf->PDFUAauto) {
 					$this->ua->addWarning('PDF/UA-1 requires a document title. Set the \'title\' config option.');
 				} else {
@@ -190,7 +190,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	{
 		$this->writer->write('/Producer ' . $this->writer->utf16BigEndianTextString($this->getProducerString()));
 
-		if (!empty($this->mpdf->title)) {
+		if ($this->mpdf->title !== '' && $this->mpdf->title !== null) {
 			$this->writer->write('/Title ' . $this->writer->utf16BigEndianTextString($this->mpdf->title));
 		}
 

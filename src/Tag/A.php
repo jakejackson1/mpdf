@@ -208,6 +208,20 @@ class A extends Tag
 			// off the struct tree — without it, close() would pop a frame belonging
 			// to a different anchor, or leak this branch's Span onto the stack.
 			$this->ua->getAnchorState()->pushStripFrame(true, $spanDepth);
+		} elseif (isset($attr['HREF'])) {
+			// Non-hyperlink <a href> with PDFUA off (empty/whitespace href). The
+			// isHyperlink gate above only governs Link-annotation / struct-element
+			// creation — it must not suppress anchor styling. Restore the pre-UA
+			// behaviour (which keyed purely on isset($attr['HREF'])) so anchor CSS
+			// still applies for e.g. <a href="" class="x">…</a>. HREF is set from
+			// the raw (empty) value, matching the original: Mpdf::Link() is a no-op
+			// on an empty HREF so no annotation is registered.
+			$this->mpdf->InlineProperties['A'] = $this->mpdf->saveInlineProperties();
+			$properties = $this->cssManager->MergeCSS('INLINE', 'A', $attr);
+			if (!empty($properties)) {
+				$this->mpdf->setCSS($properties, 'INLINE');
+			}
+			$this->mpdf->HREF = $attr['HREF'];
 		}
 	}
 

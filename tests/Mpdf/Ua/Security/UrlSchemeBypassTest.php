@@ -70,6 +70,14 @@ class UrlSchemeBypassTest extends PdfUaTestCase
 			'tab-in-scheme'     => ["java\tscript:alert(1.0)"],
 			'nul-in-scheme'     => ["java\x00script:alert(1.0)"],
 
+			// --- Case folding (must survive a byte-safe A-Z→a-z fold, no
+			//     locale-dependent strtolower(); the `I` bytes below are what a
+			//     Turkish-locale strtolower() on PHP < 8 would have mangled) ---
+			'upper-scheme'     => ['JAVASCRIPT:alert(1.0)'],
+			'mixed-scheme'     => ['JaVaScRiPt:alert(1.0)'],
+			'upper-vbscript'   => ['VBSCRIPT:msgbox(1)'],
+			'upper-livescript' => ['LIVESCRIPT:alert(1.0)'],
+
 			// --- Extra schemes ---
 			'livescript'       => ['livescript:alert(1.0)'],
 			'mocha'            => ['mocha:alert(1.0)'],
@@ -85,6 +93,28 @@ class UrlSchemeBypassTest extends PdfUaTestCase
 			'data-svg'         => ['data:image/svg+xml,<svg></svg>'],
 			'data-html-mixed'  => ['DATA:Text/HTML,foo'],
 		];
+	}
+
+	/**
+	 * Defence-in-depth: the case fold in UaPolicy::normaliseHref() must be
+	 * byte-safe (strtr A-Z→a-z), not the locale-dependent strtolower(). Under a
+	 * Turkish locale, PHP < 8's strtolower() mapped `I` to a dotless `ı`, which
+	 * could stop `JAVASCRIPT:` matching the lowercase deny-list. Pin the locale
+	 * to tr_TR (when available) and assert the uppercase scheme is still blocked.
+	 */
+	public function testUppercaseSchemeBlockedUnderTurkishLocale()
+	{
+		$saved = setlocale(LC_CTYPE, '0');
+		$applied = setlocale(LC_CTYPE, 'tr_TR.UTF-8', 'tr_TR', 'turkish');
+		try {
+			$this->assertTrue(UaPolicy::isPolicyBlockedHref('JAVASCRIPT:alert(1)'));
+			$this->assertTrue(UaPolicy::isPolicyBlockedHref('VBSCRIPT:msgbox(1)'));
+			$this->assertTrue(UaPolicy::isPolicyBlockedHref('LiveScript:alert(1)'));
+		} finally {
+			if ($applied !== false && $saved !== false) {
+				setlocale(LC_CTYPE, $saved);
+			}
+		}
 	}
 
 	/**
