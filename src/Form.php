@@ -460,7 +460,7 @@ class Form
 			$save_currentfont = $this->mpdf->currentfontfamily;
 			if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
 				if (($this->mpdf->PDFA && !$this->mpdf->PDFAauto) || ($this->mpdf->PDFX && !$this->mpdf->PDFXauto)) {
-					$this->mpdf->PDFAXwarnings[] = 'Core Adobe font Zapfdingbats cannot be embedded in mPDF - used in Form element: Select - which is required for PDFA1-b or PDFX/1-a. (Different character/font will be substituted.)';
+					$this->mpdf->PDFAXwarnings[] = 'Core Adobe font Zapfdingbats cannot be embedded in mPDF - used in Form element: Select - which is required for PDFA1-b or ' . $this->mpdf->pdfxVersionLabel() . '. (Different character/font will be substituted.)';
 				}
 				$this->mpdf->SetFont('sans');
 				if ($this->mpdf->_charDefined($this->mpdf->CurrentFont['cw'], 9660)) {
@@ -830,8 +830,82 @@ class Form
 		}
 	}
 
+	/**
+	 * PDF/X (all parts) prohibits JavaScript. When a PDF/X profile is active, form
+	 * field JavaScript is not registered, so no /AA action dictionary or JavaScript
+	 * object is emitted for the field. Strict mode records a warning that makes
+	 * Output() throw; auto mode drops the script silently. Returns true when the
+	 * caller must abort registration.
+	 *
+	 * @return bool
+	 */
+	private function rejectFormJavascriptForPdfx()
+	{
+		if (!$this->mpdf->PDFX) {
+			return false;
+		}
+		if (!$this->mpdf->PDFXauto) {
+			$this->mpdf->PDFAXwarnings[] = 'JavaScript is not permitted in ' . $this->mpdf->pdfxVersionLabel() . ' files. (Form JavaScript removed)';
+		}
+		return true;
+	}
+
+	/**
+	 * PDF/X (all parts) prohibits additional-action (/AA) dictionaries such as the
+	 * Reset/Submit form actions. Returns true when the /AA must be suppressed (a PDF/X
+	 * profile is active). Strict mode records a warning that makes Output() throw; auto
+	 * mode drops the action silently.
+	 *
+	 * @return bool
+	 */
+	private function rejectFormActionForPdfx()
+	{
+		if (!$this->mpdf->PDFX) {
+			return false;
+		}
+		if (!$this->mpdf->PDFXauto) {
+			$this->mpdf->PDFAXwarnings[] = 'Form actions are not permitted in ' . $this->mpdf->pdfxVersionLabel() . ' files. (Form action removed)';
+		}
+		return true;
+	}
+
+	/**
+	 * PDF/X (all parts) prohibits interactive form fields and the /AcroForm dictionary.
+	 * When a PDF/X profile is active, discard all active-form fields (text, choice, button
+	 * and radio-button groups) before PageWriter::writePages() counts and numbers their
+	 * /Widget annotation objects, so neither a /Widget annotation nor an /AcroForm is
+	 * emitted. Clearing the source arrays keeps the object numbering consistent (no field
+	 * objects are reserved) and leaves $pdf_acro_array unset, so _putFormsCatalog() writes
+	 * no /AcroForm. Strict mode records a warning that makes Output() throw; auto mode drops
+	 * the fields silently.
+	 *
+	 * @return void
+	 */
+	public function stripActiveFormsForPdfx()
+	{
+		if (!$this->mpdf->PDFX) {
+			return;
+		}
+
+		if (count($this->forms) === 0 && count($this->form_radio_groups) === 0) {
+			return;
+		}
+
+		if (!$this->mpdf->PDFXauto) {
+			$this->mpdf->PDFAXwarnings[] = 'Interactive form fields are not permitted in ' . $this->mpdf->pdfxVersionLabel() . ' files. (Form fields removed)';
+		}
+
+		$this->forms = [];
+		$this->form_radio_groups = [];
+		$this->pdf_array_co = '';
+		unset($this->pdf_acro_array);
+	}
+
 	function SetFormButtonJS($name, $js)
 	{
+		if ($this->rejectFormJavascriptForPdfx()) {
+			return;
+		}
 		$js = str_replace("\t", ' ', trim($js));
 		if (isset($name) && isset($js)) {
 			$this->array_form_button_js[$this->writer->escape($name)] = [
@@ -842,6 +916,9 @@ class Form
 
 	function SetFormChoiceJS($name, $js)
 	{
+		if ($this->rejectFormJavascriptForPdfx()) {
+			return;
+		}
 		$js = str_replace("\t", ' ', trim($js));
 		if (isset($name) && isset($js)) {
 			$this->array_form_choice_js[$this->writer->escape($name)] = [
@@ -852,6 +929,9 @@ class Form
 
 	function SetFormTextJS($name, $js)
 	{
+		if ($this->rejectFormJavascriptForPdfx()) {
+			return;
+		}
 		for ($i = 0; $i < count($js); $i++) {
 			$j = str_replace("\t", ' ', trim($js[$i][1]));
 			$format = $js[$i][0];
@@ -1537,7 +1617,9 @@ class Form
 			$this->writer->write("/BS << $bstemp >>");
 			$this->writer->write('/MK << ' . $temp . ' >>');
 			$this->writer->write('/DA (/F' . $this->mpdf->fonts[$form['style']['font']]['i'] . ' ' . $form['style']['fontsize'] . ' Tf ' . $form['style']['fontcolor'] . ')');
-			$this->writer->write('/AA << /D << /S /ResetForm /Flags 1 >> >>');
+			if (!$this->rejectFormActionForPdfx()) {
+				$this->writer->write('/AA << /D << /S /ResetForm /Flags 1 >> >>');
+			}
 			$form['FF'][] = 17;
 			$this->writer->write('/Ff ' . $this->_setflag($form['FF']));
 		}
@@ -1567,7 +1649,9 @@ class Form
 			}
 			// To submit a value, needs to be in /AP dictionary, AND this object must contain a /Fields entry
 			// listing all fields to output
-			$this->writer->write('/AA << /D << /S /SubmitForm /F (' . $form['URL'] . ') /Flags ' . $flag . ' >> >>');
+			if (!$this->rejectFormActionForPdfx()) {
+				$this->writer->write('/AA << /D << /S /SubmitForm /F (' . $form['URL'] . ') /Flags ' . $flag . ' >> >>');
+			}
 			$form['FF'][] = 17;
 			$this->writer->write('/Ff ' . $this->_setflag($form['FF']));
 		}

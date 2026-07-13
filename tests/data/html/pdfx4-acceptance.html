@@ -1,0 +1,24 @@
+<html>
+<head>
+<style>
+	body { font-family: sans-serif; color: #202020; }
+	.semi { opacity: 0.5; background: #ffcc00; padding: 4px; }
+	.layer { z-index: 1; position: absolute; top: 6cm; left: 2cm; color: #333333; }
+	h1 { font-size: 18pt; }
+</style>
+</head>
+<body>
+	<h1>PDF/X-4 acceptance fixture</h1>
+	<p>This document exercises the features that distinguish PDF/X-4 from PDF/X-1a:
+	live transparency, an optional-content layer and an embedded raster image, all
+	rendered with an embedded font.</p>
+
+	<p class="semi">This paragraph is drawn at 50% opacity (live transparency).</p>
+
+	<div class="layer">This text lives on a named optional-content layer.</div>
+
+	<p><img src="__ALPHA_IMAGE__" width="60" height="60" alt="alpha raster"></p>
+
+	<p>Regular body copy in the embedded sans-serif font.</p>
+</body>
+</html>

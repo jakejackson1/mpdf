@@ -42,6 +42,17 @@ final class PageWriter
 	public function writePages() // _putpages
 	{
 		$nb = $this->mpdf->page;
+
+		// PDF/X: drop prohibited annotations (file attachments) and any annotation whose
+		// /Rect intersects the printable area (BleedBox, or TrimBox where there is no bleed)
+		// before they are counted below, so annotation object numbering stays consistent.
+		$this->filterPdfxAnnotations();
+
+		// PDF/X (all parts) prohibits interactive form fields and the /AcroForm dictionary.
+		// Drop any active-forms fields before they are counted/numbered below, so no
+		// /Widget annotation or AcroForm is emitted.
+		$this->form->stripActiveFormsForPdfx();
+
 		$filter = $this->mpdf->compress ? '/Filter /FlateDecode ' : '';
 
 		if ($this->mpdf->DefOrientation === 'P') {
@@ -91,6 +102,18 @@ final class PageWriter
 		}
 		/* -- END FORMS -- */
 
+		// PDF/X-4: reserve the object id for the ICC-based transparency-group blending
+		// colour space. mPDF numbers the page/content objects 3..(2 + 2 * nb), then the
+		// annotation/form-field objects, then the radio-button groups; the next free
+		// object number is therefore ($annotid + $totaladdnum + $ctr) at this point
+		// ($annotid is still the base 3 + 2 * nb here). The colour space is written by
+		// writeTransparencyGroupColorSpace() immediately after writePages(), so reserving
+		// its id here lets the page /Group dictionaries below forward-reference it (PDF
+		// permits forward references) without disturbing the hardcoded page numbering.
+		if ($this->mpdf->pdfxAllowsTransparency()) {
+			$this->mpdf->transparencyGroupCsObjId = $annotid + $totaladdnum + $ctr;
+		}
+
 		// Select unused fonts (usually default font)
 		$unused = [];
 		foreach ($this->mpdf->fonts as $fk => $font) {
@@ -102,18 +125,6 @@ final class PageWriter
 		for ($n = 1; $n <= $nb; $n++) {
 
 			$thispage = $this->mpdf->pages[$n];
-
-			if (isset($this->mpdf->OrientationChanges[$n])) {
-				$hPt = $this->mpdf->pageDim[$n]['w'] * Mpdf::SCALE;
-				$wPt = $this->mpdf->pageDim[$n]['h'] * Mpdf::SCALE;
-				$owidthPt_LR = $this->mpdf->pageDim[$n]['outer_width_TB'] * Mpdf::SCALE;
-				$owidthPt_TB = $this->mpdf->pageDim[$n]['outer_width_LR'] * Mpdf::SCALE;
-			} else {
-				$wPt = $this->mpdf->pageDim[$n]['w'] * Mpdf::SCALE;
-				$hPt = $this->mpdf->pageDim[$n]['h'] * Mpdf::SCALE;
-				$owidthPt_LR = $this->mpdf->pageDim[$n]['outer_width_LR'] * Mpdf::SCALE;
-				$owidthPt_TB = $this->mpdf->pageDim[$n]['outer_width_TB'] * Mpdf::SCALE;
-			}
 
 			// Remove references to unused fonts (usually default font)
 			foreach ($unused as $fk) {
@@ -145,46 +156,27 @@ final class PageWriter
 			$this->writer->write('<</Type /Page');
 			$this->writer->write('/Parent 1 0 R');
 
-			if (isset($this->mpdf->OrientationChanges[$n])) {
+			// Single source of truth for the MediaBox/BleedBox/TrimBox geometry, shared
+			// with the PDF/X annotation exclusion box (see getPageBoxesPt()).
+			$boxes = $this->getPageBoxesPt($n);
 
-				$this->writer->write(sprintf('/MediaBox [0 0 %.3F %.3F]', $hPt, $wPt));
+			$this->writer->write(sprintf('/MediaBox [0 0 %.3F %.3F]', $boxes['media'][0], $boxes['media'][1]));
 
-				// If BleedBox is defined, it must be larger than the TrimBox, but smaller than the MediaBox
-				$bleedMargin = $this->mpdf->pageDim[$n]['bleedMargin'] * Mpdf::SCALE;
-
-				if ($bleedMargin && ($owidthPt_TB || $owidthPt_LR)) {
-					$x0 = $owidthPt_TB - $bleedMargin;
-					$y0 = $owidthPt_LR - $bleedMargin;
-					$x1 = $hPt - $owidthPt_TB + $bleedMargin;
-					$y1 = $wPt - $owidthPt_LR + $bleedMargin;
-					$this->writer->write(sprintf('/BleedBox [%.3F %.3F %.3F %.3F]', $x0, $y0, $x1, $y1));
-				}
-
-				$this->writer->write(sprintf('/TrimBox [%.3F %.3F %.3F %.3F]', $owidthPt_TB, $owidthPt_LR, $hPt - $owidthPt_TB, $wPt - $owidthPt_LR));
-
-				if ($this->mpdf->displayDefaultOrientation) {
-					if ($this->mpdf->DefOrientation === 'P') {
-						$this->writer->write('/Rotate 270');
-					} else {
-						$this->writer->write('/Rotate 90');
-					}
-				}
-
-			} else { // elseif($wPt != $defwPt || $hPt != $defhPt) {
-
-				$this->writer->write(sprintf('/MediaBox [0 0 %.3F %.3F]', $wPt, $hPt));
-				$bleedMargin = $this->mpdf->pageDim[$n]['bleedMargin'] * Mpdf::SCALE;
-
-				if ($bleedMargin && ($owidthPt_TB || $owidthPt_LR)) {
-					$x0 = $owidthPt_LR - $bleedMargin;
-					$y0 = $owidthPt_TB - $bleedMargin;
-					$x1 = $wPt - $owidthPt_LR + $bleedMargin;
-					$y1 = $hPt - $owidthPt_TB + $bleedMargin;
-					$this->writer->write(sprintf('/BleedBox [%.3F %.3F %.3F %.3F]', $x0, $y0, $x1, $y1));
-				}
-
-				$this->writer->write(sprintf('/TrimBox [%.3F %.3F %.3F %.3F]', $owidthPt_LR, $owidthPt_TB, $wPt - $owidthPt_LR, $hPt - $owidthPt_TB));
+			// If a BleedBox is defined, it must be larger than the TrimBox, but smaller than the MediaBox
+			if ($boxes['bleed'] !== null) {
+				$this->writer->write(sprintf('/BleedBox [%.3F %.3F %.3F %.3F]', $boxes['bleed'][0], $boxes['bleed'][1], $boxes['bleed'][2], $boxes['bleed'][3]));
 			}
+
+			$this->writer->write(sprintf('/TrimBox [%.3F %.3F %.3F %.3F]', $boxes['trim'][0], $boxes['trim'][1], $boxes['trim'][2], $boxes['trim'][3]));
+
+			if (isset($this->mpdf->OrientationChanges[$n]) && $this->mpdf->displayDefaultOrientation) {
+				if ($this->mpdf->DefOrientation === 'P') {
+					$this->writer->write('/Rotate 270');
+				} else {
+					$this->writer->write('/Rotate 90');
+				}
+			}
+
 			$this->writer->write('/Resources 2 0 R');
 
 			// Important to keep in RGB colorSpace when using transparency
@@ -195,6 +187,14 @@ final class PageWriter
 					$this->writer->write('/Group << /Type /Group /S /Transparency /CS /DeviceGray >> ');
 				} else {
 					$this->writer->write('/Group << /Type /Group /S /Transparency /CS /DeviceRGB >> ');
+				}
+			} elseif ($this->mpdf->pdfxAllowsTransparency()) {
+				// PDF/X-4 permits transparency, but the page blending space must be
+				// device-independent; use the ICC-based space backing the output intent.
+				if ($this->mpdf->transparencyGroupCsObjId) {
+					$this->writer->write('/Group << /Type /Group /S /Transparency /CS [/ICCBased ' . $this->mpdf->transparencyGroupCsObjId . ' 0 R] >> ');
+				} else {
+					$this->writer->write('/Group << /Type /Group /S /Transparency /CS /DeviceCMYK >> ');
 				}
 			}
 
@@ -280,6 +280,164 @@ final class PageWriter
 		$this->writer->write(sprintf('/MediaBox [0 0 %.3F %.3F]', $defwPt, $defhPt));
 		$this->writer->write('>>');
 		$this->writer->write('endobj');
+	}
+
+	/**
+	 * PDF/X (all parts) requires every annotation to lie wholly outside the BleedBox (or
+	 * TrimBox where there is no bleed) and forbids the /FileAttachment, /Sound, /Movie and
+	 * /Screen subtypes. mPDF can emit /Link, /Text, /FileAttachment, /Popup and (for active
+	 * forms) /Widget annotations; the interactive /Widget annotations and the /AcroForm are
+	 * removed separately by Form::stripActiveFormsForPdfx(). This method removes any file
+	 * attachment and any link/text annotation whose /Rect intersects the printable area from
+	 * the source arrays before writePages() counts them (keeping the /Annots object
+	 * references consistent). Strict mode records a warning that makes Output() throw; auto
+	 * mode drops the annotation silently.
+	 *
+	 * @return void
+	 */
+	private function filterPdfxAnnotations()
+	{
+		if (!$this->mpdf->PDFX) {
+			return;
+		}
+
+		$label = $this->mpdf->pdfxVersionLabel();
+		$strict = !$this->mpdf->PDFXauto;
+		$nb = $this->mpdf->page;
+
+		for ($n = 1; $n <= $nb; $n++) {
+
+			if (!isset($this->mpdf->pageDim[$n])) {
+				continue;
+			}
+
+			$box = $this->getPdfxAnnotationExclusionBox($n);
+
+			// Link annotations - /Rect is [x, top, x+w, top-h] in absolute page points
+			if (isset($this->mpdf->PageLinks[$n])) {
+				foreach ($this->mpdf->PageLinks[$n] as $key => $pl) {
+					if (!isset($pl[0], $pl[1], $pl[2], $pl[3])) {
+						continue;
+					}
+					$rect = [$pl[0], $pl[1] - $pl[3], $pl[0] + $pl[2], $pl[1]];
+					if ($this->pdfxRectIntersectsBox($rect, $box)) {
+						if ($strict) {
+							$this->mpdf->PDFAXwarnings[] = 'Annotations must lie outside the TrimBox/BleedBox in ' . $label . ' files. (Link annotation removed)';
+						}
+						unset($this->mpdf->PageLinks[$n][$key]);
+					}
+				}
+			}
+
+			// Text / file-attachment annotations
+			if (isset($this->mpdf->PageAnnots[$n])) {
+
+				$wPt = $this->mpdf->pageDim[$n]['w'] * Mpdf::SCALE;
+				$hPt = $this->mpdf->pageDim[$n]['h'] * Mpdf::SCALE;
+
+				foreach ($this->mpdf->PageAnnots[$n] as $key => $pl) {
+
+					// Prohibited subtype: /FileAttachment (only emitted when files are allowed)
+					if (!empty($pl['opt']['file']) && $this->mpdf->allowAnnotationFiles) {
+						if ($strict) {
+							$this->mpdf->PDFAXwarnings[] = 'File attachment annotations are not permitted in ' . $label . ' files. (Annotation removed)';
+						}
+						unset($this->mpdf->PageAnnots[$n][$key]);
+						continue;
+					}
+
+					// Text marker - mirror the /Rect math in MetadataWriter::writeAnnotations()
+					$x = $pl['x'];
+					if ($this->mpdf->annotMargin != 0 || $x == 0 || $x < 0) {
+						$x = ($wPt / Mpdf::SCALE) - $this->mpdf->annotMargin;
+					}
+					$a = $x * Mpdf::SCALE;
+					$b = $hPt - ($pl['y'] * Mpdf::SCALE);
+					$rect = [$a, $b - 20, $a + 20, $b]; // text annotation marker is 20 x 20 pt
+
+					if ($this->pdfxRectIntersectsBox($rect, $box)) {
+						if ($strict) {
+							$this->mpdf->PDFAXwarnings[] = 'Annotations must lie outside the TrimBox/BleedBox in ' . $label . ' files. (Annotation removed)';
+						}
+						unset($this->mpdf->PageAnnots[$n][$key]);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Computes the PDF page boxes for page $n (all values in absolute page points): the
+	 * MediaBox width/height, the BleedBox (null when the page carries no bleed) and the
+	 * TrimBox. This is the single source of truth for the box geometry, consumed by both
+	 * writePages() (which serialises the boxes) and getPdfxAnnotationExclusionBox().
+	 *
+	 * @param int $n Page number
+	 * @return array Keys: 'media' => [w, h], 'bleed' => [x0, y0, x1, y1]|null, 'trim' => [x0, y0, x1, y1]
+	 */
+	private function getPageBoxesPt($n)
+	{
+		if (isset($this->mpdf->OrientationChanges[$n])) {
+			$hPt = $this->mpdf->pageDim[$n]['w'] * Mpdf::SCALE;
+			$wPt = $this->mpdf->pageDim[$n]['h'] * Mpdf::SCALE;
+			$owidthPt_LR = $this->mpdf->pageDim[$n]['outer_width_TB'] * Mpdf::SCALE;
+			$owidthPt_TB = $this->mpdf->pageDim[$n]['outer_width_LR'] * Mpdf::SCALE;
+
+			$media = [$hPt, $wPt];
+			$trim = [$owidthPt_TB, $owidthPt_LR, $hPt - $owidthPt_TB, $wPt - $owidthPt_LR];
+		} else {
+			$wPt = $this->mpdf->pageDim[$n]['w'] * Mpdf::SCALE;
+			$hPt = $this->mpdf->pageDim[$n]['h'] * Mpdf::SCALE;
+			$owidthPt_LR = $this->mpdf->pageDim[$n]['outer_width_LR'] * Mpdf::SCALE;
+			$owidthPt_TB = $this->mpdf->pageDim[$n]['outer_width_TB'] * Mpdf::SCALE;
+
+			$media = [$wPt, $hPt];
+			$trim = [$owidthPt_LR, $owidthPt_TB, $wPt - $owidthPt_LR, $hPt - $owidthPt_TB];
+		}
+
+		// A BleedBox is emitted only when a bleed margin is set and outer widths exist; it
+		// is the TrimBox grown outwards by the bleed margin on every edge.
+		$bleed = null;
+		$bleedMargin = $this->mpdf->pageDim[$n]['bleedMargin'] * Mpdf::SCALE;
+		if ($bleedMargin && ($owidthPt_TB || $owidthPt_LR)) {
+			$bleed = [
+				$trim[0] - $bleedMargin,
+				$trim[1] - $bleedMargin,
+				$trim[2] + $bleedMargin,
+				$trim[3] + $bleedMargin,
+			];
+		}
+
+		return ['media' => $media, 'bleed' => $bleed, 'trim' => $trim];
+	}
+
+	/**
+	 * Returns the printable-area box [x0, y0, x1, y1] (in absolute page points) that PDF/X
+	 * annotations must lie outside of: the BleedBox when a bleed is defined for the page,
+	 * otherwise the TrimBox. Uses the shared geometry from getPageBoxesPt() so it can never
+	 * drift from the boxes writePages() actually emits.
+	 *
+	 * @param int $n Page number
+	 * @return float[]
+	 */
+	private function getPdfxAnnotationExclusionBox($n)
+	{
+		$boxes = $this->getPageBoxesPt($n);
+
+		return $boxes['bleed'] !== null ? $boxes['bleed'] : $boxes['trim'];
+	}
+
+	/**
+	 * True when the normalized annotation rect [x0, y0, x1, y1] overlaps the printable box.
+	 *
+	 * @param float[] $rect [x0, y0, x1, y1] with x0 <= x1 and y0 <= y1
+	 * @param float[] $box  [x0, y0, x1, y1] with x0 <= x1 and y0 <= y1
+	 * @return bool
+	 */
+	private function pdfxRectIntersectsBox($rect, $box)
+	{
+		return $rect[0] < $box[2] && $rect[2] > $box[0]
+			&& $rect[1] < $box[3] && $rect[3] > $box[1];
 	}
 
 }

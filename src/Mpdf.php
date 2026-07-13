@@ -75,6 +75,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	var $PDFX;
 	var $PDFXauto;
+	var $pdfxVersion;
+	var $pdfxIntentColorSpaceCache; // cached ICC data-colour-space signature of the X-4 output intent (item E1)
 
 	var $PDFA;
 	var $PDFAversion;
@@ -280,6 +282,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $OutputIntentRoot;
 	var $InfoRoot;
 	var $associatedFilesRoot;
+
+	// Single document timestamp shared by the Info dictionary and the XMP packet so
+	// they report an identical CreationDate/ModDate (item E2); null until first used.
+	var $documentTime;
+
+	// Object id of the ICC-based colour space that backs PDF/X-4 transparency-group
+	// blending (see MetadataWriter::writeTransparencyGroupColorSpace()); null when unused.
+	var $transparencyGroupCsObjId;
 
 	var $pdf_version;
 
@@ -1071,6 +1081,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$originalConfig = $config;
 		$config = $this->initConfig($originalConfig);
 
+		// PDF/X version normalization (item A1). The raw PDFX config value may be a
+		// bool or a version token; derive $this->pdfxVersion ('1a'|'4'|null) and
+		// coerce $this->PDFX back to a strict boolean so the shared PDFA||PDFX
+		// gates stay simple truthy checks.
+		$this->normalizePdfxVersion();
+
+		// PDF/X-4 is built on PDF 1.6 (item A2). Assert that feature base in the
+		// header version when X-4 is active; X-1a keeps the configured default.
+		if ($this->pdfxAllowsTransparency() && version_compare($this->pdf_version, '1.6', '<')) {
+			$this->pdf_version = '1.6';
+		}
+
 		$serviceFactory = new ServiceFactory($container);
 		$services = $serviceFactory->getServices(
 			$this,
@@ -1590,6 +1612,156 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		return $config;
 	}
 
+	/**
+	 * Normalize the raw PDFX config value (bool or version token) into a strict
+	 * boolean $this->PDFX plus a $this->pdfxVersion of '1a', '4' or null. (Item A1.)
+	 *
+	 * Accepted: false/''/'0'/0/null (off); true/'1'/'1a'/'x-1a'/'pdf/x-1a'/
+	 * 'pdf/x-1a:2003' (PDF/X-1a:2003); '4'/'x-4'/'pdf/x-4' (PDF/X-4). Anything
+	 * else throws.
+	 */
+	private function normalizePdfxVersion()
+	{
+		$raw = $this->PDFX;
+
+		// "Off" values.
+		if ($raw === false || $raw === null || $raw === 0 || $raw === '' || $raw === '0') {
+			$this->PDFX = false;
+			$this->pdfxVersion = null;
+			return;
+		}
+
+		// Boolean true is the historical "PDF/X-1a:2003" switch.
+		if ($raw === true) {
+			$this->PDFX = true;
+			$this->pdfxVersion = '1a';
+			return;
+		}
+
+		$token = strtolower(trim((string) $raw));
+
+		// Tolerate a leading "pdf/" prefix (e.g. "pdf/x-4").
+		if (strpos($token, 'pdf/') === 0) {
+			$token = substr($token, 4);
+		}
+
+		if ($token === '1' || $token === '1a' || $token === 'x-1a' || $token === 'x-1a:2003') {
+			$this->PDFX = true;
+			$this->pdfxVersion = '1a';
+			return;
+		}
+
+		if ($token === '4' || $token === 'x-4') {
+			$this->PDFX = true;
+			$this->pdfxVersion = '4';
+			return;
+		}
+
+		throw new \Mpdf\MpdfException(sprintf(
+			'Invalid PDFX value "%s"; use false, \'1a\' (or true), or \'4\'.',
+			(string) $raw
+		));
+	}
+
+	/**
+	 * Whether the active PDF/X profile permits live transparency, layers and
+	 * ICC-based colour (i.e. is PDF/X-4). The canonical "is PDF/X-4" predicate.
+	 *
+	 * @return bool
+	 */
+	public function pdfxAllowsTransparency()
+	{
+		return $this->PDFX && $this->pdfxVersion === '4';
+	}
+
+	/**
+	 * Human-readable label for the active PDF/X profile.
+	 *
+	 * @return string
+	 */
+	public function pdfxVersionLabel()
+	{
+		return $this->pdfxVersion === '4' ? 'PDF/X-4' : 'PDF/X-1a:2003';
+	}
+
+	/**
+	 * ICC data-colour-space signature of the active PDF/X output intent (item E1).
+	 *
+	 * PDF/X-1a and the PDF/X-4 no-profile fallback always use a CMYK intent. Only
+	 * PDF/X-4 with a user-supplied ICC profile can carry a different intent, in which
+	 * case the profile's data colour space (bytes 16-19 of the ICC header) decides it.
+	 * The result is cached because the colour restrictor calls this once per colour
+	 * during content rendering, long before the profile is embedded at document close.
+	 *
+	 * @return string One of 'CMYK', 'RGB ', 'GRAY', 'Lab ' (raw ICC signature).
+	 */
+	private function pdfxIntentColorSpace()
+	{
+		if (!$this->pdfxAllowsTransparency() || !$this->ICCProfile) {
+			return 'CMYK';
+		}
+
+		if ($this->pdfxIntentColorSpaceCache === null) {
+			$this->pdfxIntentColorSpaceCache = $this->readIccColorSpaceSignature($this->ICCProfile);
+		}
+
+		return $this->pdfxIntentColorSpaceCache;
+	}
+
+	/**
+	 * Read the 4-byte data-colour-space signature from an ICC profile header.
+	 * Falls back to 'CMYK' when the file cannot be read (writeOutputIntent() then
+	 * throws for a genuinely missing profile at document close, as before).
+	 *
+	 * @param string $path
+	 * @return string
+	 */
+	private function readIccColorSpaceSignature($path)
+	{
+		if (!is_readable($path)) {
+			return 'CMYK';
+		}
+
+		$header = @file_get_contents($path, false, null, 0, 20);
+		if ($header === false || strlen($header) < 20) {
+			return 'CMYK';
+		}
+
+		return substr($header, 16, 4);
+	}
+
+	/**
+	 * Number of colour components of the active PDF/X output intent, i.e. the /N value
+	 * written for the embedded DestOutputProfile (item E1). GRAY=1, RGB/Lab=3, CMYK=4.
+	 *
+	 * @return int
+	 */
+	public function pdfxOutputIntentComponentCount()
+	{
+		switch ($this->pdfxIntentColorSpace()) {
+			case 'GRAY':
+				return 1;
+			case 'RGB ':
+			case 'Lab ':
+				return 3;
+			default: // 'CMYK' and anything unrecognised
+				return 4;
+		}
+	}
+
+	/**
+	 * Whether the active PDF/X output intent forces CMYK colour (item E1). Colour and
+	 * images are only allowed to stay RGB when the intent is a genuine RGB profile
+	 * (PDF/X-4 with a user-supplied RGB ICC profile); every other case — X-1a, the CMYK
+	 * default, a CMYK/Gray profile — keeps today's CMYK forcing.
+	 *
+	 * @return bool
+	 */
+	public function pdfxOutputIntentIsCmyk()
+	{
+		return $this->pdfxIntentColorSpace() !== 'RGB ';
+	}
+
 	private function initConstructorParams(array $config)
 	{
 		$constructor = [
@@ -1889,7 +2061,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		//          HardLight, SoftLight, Difference, Exclusion, Hue, Saturation, Color, Luminosity
 		// set alpha for stroking (CA) and non-stroking (ca) operations
 		// mode determines F (fill) S (stroke) B (both)
-		if (($this->PDFA || $this->PDFX) && $alpha != 1) {
+		if (($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency())) && $alpha != 1) {
 			if (($this->PDFA && !$this->PDFAauto) || ($this->PDFX && !$this->PDFXauto)) {
 				$this->PDFAXwarnings[] = "Image opacity must be 100% (Opacity changed to 100%)";
 			}
@@ -1941,7 +2113,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function SetVisibility($v)
 	{
-		if (($this->PDFA || $this->PDFX) && $this->visibility != 'visible') {
+		if (($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency())) && $this->visibility != 'visible') {
 			$this->PDFAXwarnings[] = "Cannot set visibility to anything other than full when using PDFA or PDFX";
 			return '';
 		} elseif (!$this->PDFA && !$this->PDFX) {
@@ -2766,7 +2938,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		if (!isset($this->layers[$id])) {
 			$this->layers[$id] = ['name' => 'Layer ' . ($id)];
-			if (($this->PDFA || $this->PDFX)) {
+			if (($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency()))) {
 				$this->PDFAXwarnings[] = "Cannot use layers when using PDFA or PDFX";
 				return '';
 			} elseif (!$this->PDFA && !$this->PDFX) {
@@ -4055,11 +4227,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (($family == 'csymbol') || ($family == 'czapfdingbats') || ($family == 'ctimes') || ($family == 'ccourier') || ($family == 'chelvetica')) {
 			if ($this->PDFA || $this->PDFX) {
 				if ($family == 'csymbol' || $family == 'czapfdingbats') {
-					throw new \Mpdf\MpdfException("Symbol and Zapfdingbats cannot be embedded in mPDF (required for PDFA1-b or PDFX/1-a).");
+					throw new \Mpdf\MpdfException("Symbol and Zapfdingbats cannot be embedded in mPDF (required for PDFA1-b or " . $this->pdfxVersionLabel() . ").");
 				}
 				if ($family == 'ctimes' || $family == 'ccourier' || $family == 'chelvetica') {
 					if (($this->PDFA && !$this->PDFAauto) || ($this->PDFX && !$this->PDFXauto)) {
-						$this->PDFAXwarnings[] = "Core Adobe font " . ucfirst($family) . " cannot be embedded in mPDF, which is required for PDFA1-b or PDFX/1-a. (Embedded font will be substituted.)";
+						$this->PDFAXwarnings[] = "Core Adobe font " . ucfirst($family) . " cannot be embedded in mPDF, which is required for PDFA1-b or " . $this->pdfxVersionLabel() . ". (Embedded font will be substituted.)";
 					}
 					if ($family == 'chelvetica') {
 						$family = 'sans';
@@ -4215,7 +4387,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->setMBencoding('UTF-8');
 		} else {  // if using core fonts
 			if ($this->PDFA || $this->PDFX) {
-				throw new \Mpdf\MpdfException('Core Adobe fonts cannot be embedded in mPDF (required for PDFA1-b or PDFX/1-a) - cannot use option to use core fonts.');
+				throw new \Mpdf\MpdfException('Core Adobe fonts cannot be embedded in mPDF (required for PDFA1-b or ' . $this->pdfxVersionLabel() . ') - cannot use option to use core fonts.');
 			}
 			$this->setMBencoding('windows-1252');
 
@@ -9527,7 +9699,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 
 		if (($this->PDFA || $this->PDFX) && $this->encrypted) {
-			throw new \Mpdf\MpdfException('PDF/A1-b or PDF/X1-a does not permit encryption of documents.');
+			$standard = $this->PDFA ? 'PDF/A1-b' : $this->pdfxVersionLabel();
+			throw new \Mpdf\MpdfException(sprintf('%s does not permit encryption of documents.', $standard));
 		}
 
 		if (count($this->PDFAXwarnings) && (($this->PDFA && !$this->PDFAauto) || ($this->PDFX && !$this->PDFXauto))) {
@@ -9535,7 +9708,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$standard = 'PDFA/1-b';
 				$option = '$mpdf->PDFAauto';
 			} else {
-				$standard = 'PDFX/1-a ';
+				$standard = $this->pdfxVersionLabel() . ' ';
 				$option = '$mpdf->PDFXauto';
 			}
 
@@ -9955,9 +10128,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			}
 		}
 
-		if ($this->PDFA || $this->PDFX) {
+		if ($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency())) {
 			if (($this->PDFA && !$this->PDFAauto) || ($this->PDFX && !$this->PDFXauto)) {
-				$this->PDFAXwarnings[] = "Annotation markers cannot be semi-transparent in PDFA1-b or PDFX/1-a, so they may make underlying text unreadable. (Annotation markers moved to right margin)";
+				$this->PDFAXwarnings[] = "Annotation markers cannot be semi-transparent in PDFA1-b or " . $this->pdfxVersionLabel() . ", so they may make underlying text unreadable. (Annotation markers moved to right margin)";
 			}
 			$x = ($this->w) - $this->rMargin * 0.66;
 		}
@@ -10002,6 +10175,17 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function _enddoc()
 	{
+		// PDF/X (all parts) prohibits JavaScript actions. Drop any document-level
+		// JavaScript before resources/catalog are written so neither the /JavaScript
+		// object nor the catalog /Names entry is emitted. Strict mode records a
+		// warning that makes Output() throw; auto mode drops it silently.
+		if ($this->PDFX && $this->js !== null) {
+			if (!$this->PDFXauto) {
+				$this->PDFAXwarnings[] = 'JavaScript is not permitted in ' . $this->pdfxVersionLabel() . ' files. (JavaScript removed)';
+			}
+			$this->js = null;
+		}
+
 		// @log Writing Headers & Footers
 
 		$this->_puthtmlheaders();
@@ -10058,6 +10242,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 
 		$this->pageWriter->writePages();
+
+		// PDF/X-4 transparency groups need an ICC-based blending colour space. writePages()
+		// reserves its object id (so the page /Group dictionaries can forward-reference it)
+		// and it is emitted here, immediately after the page/content/annotation block, so it
+		// does not consume a low object number and shift the hardcoded page tree.
+		$this->metadataWriter->writeTransparencyGroupColorSpace();
 
 		// @log Writing document resources
 
@@ -10544,7 +10734,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	// add a watermark
 	function watermark($texte, $angle = 45, $fontsize = 96, $alpha = 0.2)
 	{
-		if ($this->PDFA || $this->PDFX) {
+		if ($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency())) {
 			throw new \Mpdf\MpdfException('PDFA and PDFX do not permit transparency, so mPDF does not allow Watermarks!');
 		}
 
@@ -10631,7 +10821,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function watermarkImg($src, $alpha = 0.2)
 	{
-		if ($this->PDFA || $this->PDFX) {
+		if ($this->PDFA || ($this->PDFX && !$this->pdfxAllowsTransparency())) {
 			throw new \Mpdf\MpdfException('PDFA and PDFX do not permit transparency, so mPDF does not allow Watermarks!');
 		}
 
@@ -10853,7 +11043,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	{
 
 		if ($this->PDFA || $this->PDFX) {
-			throw new \Mpdf\MpdfException("Adobe CJK fonts cannot be embedded in mPDF (required for PDFA1-b and PDFX/1-a).");
+			throw new \Mpdf\MpdfException("Adobe CJK fonts cannot be embedded in mPDF (required for PDFA1-b and " . $this->pdfxVersionLabel() . ").");
 		}
 		if ($family == 'big5') {
 			$this->AddBig5Font();
@@ -23369,6 +23559,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->extgstates[$i]['n'] = $this->n;
 			$this->writer->write('<</Type /ExtGState');
 			foreach ($this->extgstates[$i]['parms'] as $k => $v) {
+				// PDF/X (every part) prohibits transfer functions (/TR, /TR2) and halftone overrides (/HT, /HTP) in an ExtGState
+				if ($this->PDFX && ($k === 'TR' || $k === 'TR2' || $k === 'HT' || $k === 'HTP')) {
+					if (!$this->PDFXauto) {
+						throw new \Mpdf\MpdfException(sprintf('%s does not permit transfer functions or halftone overrides (/%s) in an ExtGState.', $this->pdfxVersionLabel(), $k));
+					}
+					continue;
+				}
 				$this->writer->write('/' . $k . ' ' . $v);
 			}
 			$this->writer->write('>>');

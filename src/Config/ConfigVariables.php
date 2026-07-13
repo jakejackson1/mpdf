@@ -138,11 +138,16 @@ class ConfigVariables
 			// 3 - allow CMYK / SPOT COLOR / Grayscale [convert RGB->CMYK]
 			'restrictColorSpace' => 0,
 
-			// PDFX/1-a Compliant files
-			// true=Forces compliance with PDFX-1a spec
-			// Cannot be used with 'restrictColorSpace' (i.e. no RGB)
+			// PDF/X Compliant files. Accepted values (the version rides on this key):
+			//   false                                    = off (default)
+			//   true or '1a' ('X-1a'/'PDF/X-1a:2003')    = PDF/X-1a:2003
+			//   '4' ('X-4'/'PDF/X-4')                    = PDF/X-4
+			// (case-insensitive; a leading 'pdf/' is tolerated).
+			// For PDF/X-1a (CMYK output intent) this cannot be combined with
+			// 'restrictColorSpace' (i.e. no RGB). PDF/X-4 with an RGB output intent
+			// may permit calibrated RGB.
 			'PDFX' => false,
-			// Overrides warnings making changes when possible to force PDFX1-a compliance
+			// Overrides warnings making changes when possible to force PDF/X compliance
 			'PDFXauto' => false,
 
 			// PDFA1-b Compliant files
