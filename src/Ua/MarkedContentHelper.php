@@ -65,10 +65,9 @@ class MarkedContentHelper
 	 *
 	 * @param  string   $structType  PDF struct type to tag (ignored when $mcid === -1)
 	 * @param  int      $mcid        marked-content ID from StructureTree::addContent(); -1 for Artifact
-	 * @param  string   $altText     reserved — alt text for inline Span wrappers; not currently emitted here
 	 * @return void
 	 */
-	public function begin($structType, $mcid, $altText = null)
+	public function begin($structType, $mcid)
 	{
 		// UA1 audit I-1 — assert the BDC tag is a known PDF/UA struct type.
 		// $mcid === -1 is the Artifact sentinel and emits /Artifact BMC, so

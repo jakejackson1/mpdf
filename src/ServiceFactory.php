@@ -159,7 +159,7 @@ class ServiceFactory
 		$markedContentHelper      = new MarkedContentHelper($writer);
 		$structureWriter          = new StructureWriter($mpdf, $writer, $structureTree);
 		$ariaIdResolver           = new AriaIdResolver($structureTree);
-		$ligatureActualTextWriter = new LigatureActualTextWriter($writer, $markedContentHelper);
+		$ligatureActualTextWriter = new LigatureActualTextWriter();
 		$fpdiStructMerger         = new FpdiStructMerger($mpdf, $structureTree);
 		$inlineStructStack        = new InlineStructStack();
 		$anchorState              = new AnchorState();

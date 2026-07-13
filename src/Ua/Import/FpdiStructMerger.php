@@ -706,7 +706,6 @@ class FpdiStructMerger
 	private function mergeRoleMap($catalog, $parser)
 	{
 		try {
-			$roleMapRef = PdfDictionary::get($catalog, 'MarkInfo');
 			// RoleMap is on the StructTreeRoot, not the catalog directly.
 			$structTreeRootRef = PdfDictionary::get($catalog, 'StructTreeRoot');
 			if ($structTreeRootRef instanceof PdfNull) {
@@ -1362,10 +1361,7 @@ class FpdiStructMerger
 	 *
 	 * To keep the number of touched files minimal and avoid breaking the tree's
 	 * invariants, we use StructureTree::registerImportedMcr() which is a
-	 * package-internal method for exactly this use case. If that method does not
-	 * exist the call is silently skipped — the MCR dict will still be valid
-	 * (addMcid() is already called above); only the reverse ParentTree lookup
-	 * from the Form XObject to the struct element would be missing.
+	 * package-internal method for exactly this use case.
 	 *
 	 * @param  int              $structParents  /StructParents key
 	 * @param  int              $mcid           MCID
@@ -1374,9 +1370,7 @@ class FpdiStructMerger
 	 */
 	private function registerMcrInParentTree($structParents, $mcid, StructureElement $elem)
 	{
-		if (method_exists($this->tree, 'registerImportedMcr')) {
-			$this->tree->registerImportedMcr($structParents, $mcid, $elem);
-		}
+		$this->tree->registerImportedMcr($structParents, $mcid, $elem);
 	}
 
 	/**

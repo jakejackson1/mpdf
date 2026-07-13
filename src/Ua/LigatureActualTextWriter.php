@@ -2,8 +2,6 @@
 
 namespace Mpdf\Ua;
 
-use Mpdf\Writer\BaseWriter;
-
 /**
  * Wrap OTL-substituted glyph clusters with /Span /ActualText BDC/EMC operators.
  *
@@ -26,32 +24,9 @@ use Mpdf\Writer\BaseWriter;
  *   - Matterhorn Protocol 1.1 condition 24-001 — glyph without Unicode mapping
  *
  * @see MarkedContentHelper  BDC/EMC emitter used elsewhere in the UA layer
- * @see BaseWriter           buffer-routing target for BDC/EMC bytes
  */
 class LigatureActualTextWriter
 {
-
-	/** @var BaseWriter */
-	private $writer;
-
-	/** @var MarkedContentHelper */
-	private $mch;
-
-	/**
-	 * Construct with the buffer-routing writer and the BDC/EMC emitter.
-	 *
-	 * Called once by ServiceFactory before UaState is constructed. Neither
-	 * $writer nor $mch is UaState — this avoids a construction-time cycle
-	 * between UaState and its six collaborators.
-	 *
-	 * @param BaseWriter          $writer
-	 * @param MarkedContentHelper $mch
-	 */
-	public function __construct(BaseWriter $writer, MarkedContentHelper $mch)
-	{
-		$this->writer = $writer;
-		$this->mch    = $mch;
-	}
 
 	/**
 	 * Build the opening BDC bytes for a /Span /ActualText wrapper.
