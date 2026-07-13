@@ -320,12 +320,13 @@ class ImageMapTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <img usemap="#unknown"> with no matching <map> warns and renders the
-	 * image without any Link annotations.
+	 * Auto mode (PDFUAauto=true): <img usemap="#unknown"> with no matching <map>
+	 * warns and renders the image without any Link annotations (audit E19 — the
+	 * registry now honours the same strict/auto policy as the tag handlers).
 	 */
 	public function testImgUsemapWithNoMatchingMapWarns()
 	{
-		$mpdf = $this->makeMpdf();
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$pdf = $this->getOutput(
 			$mpdf,
 			'<p>' . $this->imgUseMap('Plan', '#missing') . '</p>'
@@ -340,6 +341,24 @@ class ImageMapTest extends PdfUaTestCase
 			}
 		}
 		$this->assertTrue($found, 'Expected unknown-map warning was not recorded');
+	}
+
+	/**
+	 * Strict mode (PDFUAauto=false): <img usemap="#missing"> referencing an
+	 * unknown <map> throws MpdfException naming the missing map rather than
+	 * silently emitting no link annotations (audit E19). Before the fix the
+	 * registry warned unconditionally, so strict mode never threw and the
+	 * branch's strict/auto contract was violated.
+	 */
+	public function testStrictModeImgUsemapUnknownMapThrows()
+	{
+		$mpdf = $this->makeMpdf(['PDFUAauto' => false]);
+		$this->expectException(\Mpdf\MpdfException::class);
+		$this->expectExceptionMessage('unknown map "missing"');
+		$this->getOutput(
+			$mpdf,
+			'<p>' . $this->imgUseMap('Plan', '#missing') . '</p>'
+		);
 	}
 
 	/**

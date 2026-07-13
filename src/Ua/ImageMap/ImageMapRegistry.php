@@ -225,9 +225,10 @@ class ImageMapRegistry
 		foreach ($this->deferred as $deferred) {
 			$mapName = $deferred['mapName'];
 			if (!isset($this->maps[$mapName])) {
-				$this->warn(
-					'PDF/UA-1: <img usemap="#' . $mapName . '"> references unknown map; '
-					. 'no link annotations emitted.'
+				$this->enforce(
+					'PDF/UA-1: <img usemap="#' . $mapName . '"> references unknown map "' . $mapName
+					. '"; no link annotations can be emitted. Define a matching <map name="' . $mapName
+					. '"> or enable PDFUAauto to skip the image map.'
 				);
 				continue;
 			}
@@ -284,8 +285,9 @@ class ImageMapRegistry
 		foreach ($areas as $area) {
 			$rect = $this->shapeToRect($area['shape'], $area['coords'], $origW, $origH);
 			if ($rect === null) {
-				$this->warn(
-					'PDF/UA-1: <area shape="' . $area['shape'] . '"> coords malformed; skipped.'
+				$this->enforce(
+					'PDF/UA-1: <area shape="' . $area['shape'] . '"> coords malformed; the hotspot '
+					. 'cannot be placed. Fix the coords or enable PDFUAauto to skip the area.'
 				);
 				continue;
 			}
@@ -371,10 +373,10 @@ class ImageMapRegistry
 			while (array_key_exists($target, $this->mpdf->internallink)) {
 				$target = '#' . $target;
 				if (++$collisionGuard >= 1024) {
-					$this->warn(
+					$this->enforce(
 						'PDF/UA-1: <area href="#' . substr($area['href'], 1)
-						. '"> internal-link disambiguation exceeded 1024 '
-						. 'iterations; emitting external link instead.'
+						. '"> internal-link disambiguation exceeded 1024 iterations. '
+						. 'Fix the anchor collision or enable PDFUAauto to emit an external link instead.'
 					);
 					$target = null;
 					break;
@@ -547,6 +549,30 @@ class ImageMapRegistry
 			default:
 				return null;
 		}
+	}
+
+	/**
+	 * Apply the branch's strict/auto policy to an image-map conformance
+	 * violation detected during drain/emission.
+	 *
+	 * PDFUAauto=false (strict): throw MpdfException naming the offending
+	 * map/area so the document fails loudly rather than shipping partial or
+	 * mis-placed link output. PDFUAauto=true: record the diagnostic as a
+	 * warning and let the caller skip the offending item. Mirrors the
+	 * strict/auto branches the tag handlers use (Tag\Area::open,
+	 * Tag\A::open) — the registry runs after the tag handlers (at drain time)
+	 * but must honour the same contract.
+	 *
+	 * @param  string $msg
+	 * @return void
+	 * @throws \Mpdf\MpdfException in strict mode
+	 */
+	private function enforce($msg)
+	{
+		if (empty($this->mpdf->PDFUAauto)) {
+			throw new \Mpdf\MpdfException($msg);
+		}
+		$this->warn($msg);
 	}
 
 	/**
