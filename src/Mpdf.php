@@ -29101,12 +29101,27 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	// ========== OVERWRITE SEARCH STRING IN A PDF FILE ================
 	function OverWrite($file_in, $search, $replacement, $dest = Destination::DOWNLOAD, $file_out = "mpdf")
 	{
+		// PDF/UA-1: binary string replacement cannot maintain the logical structure
+		// tree required for accessibility.
+		// Strict mode (PDFUAauto=false): throw so the caller knows the guarantee is lost.
+		// Auto mode (PDFUAauto=true): warn and proceed — the overwrite is performed but
+		// the accessibility guarantee is a no-op for this call.
 		if ($this->PDFUA) {
-			throw new \Mpdf\MpdfException(
-				'OverWrite() is not compatible with PDF/UA-1 mode. Binary string replacement ' .
-				'cannot maintain the logical structure tree required for accessibility. ' .
-				'Regenerate the PDF using WriteHTML() with the updated content instead.'
-			);
+			if ($this->PDFUAauto) {
+				$this->ua->addWarning(
+					'OverWrite() called in PDF/UA-1 mode. Binary string replacement cannot ' .
+					'maintain the logical structure tree required for accessibility, so the ' .
+					'PDF/UA-1 guarantee cannot be preserved for this call. Regenerate the PDF ' .
+					'using WriteHTML() with the updated content to keep it conformant.'
+				);
+			} else {
+				throw new \Mpdf\MpdfException(
+					'OverWrite() is not compatible with PDF/UA-1 mode. Binary string replacement ' .
+					'cannot maintain the logical structure tree required for accessibility. ' .
+					'Regenerate the PDF using WriteHTML() with the updated content instead, ' .
+					'or enable PDFUAauto to proceed with a warning.'
+				);
+			}
 		}
 		$pdf = file_get_contents($file_in);
 
