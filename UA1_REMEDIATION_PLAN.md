@@ -17,12 +17,22 @@ documented limitation):
 Severity legend: **P0** document corruption / silent data loss · **P1** hard veraPDF
 FAIL on common input · **P2** requirement-gap deferral · **P3** hygiene.
 
-**Status (2026-07-13):** Phases **A–D complete** — every A/B/C/D item is committed and the
-plan's done-gates are green on the CI PHP 8.2 toolchain: `phpstan` 0 errors · full suite
-1395 tests / 3238 assertions · veraPDF `@group verapdf` 49/49 · security `@group security`
-72 tests. **Phase E** (second-round audit, 24 items) is outstanding. (phpstan's baseline is
-generated for PHP 8.2; on PHP 7.4 it reports 4 version-specific `ignore.unmatched` entries —
-expected, not a regression.)
+**Status (2026-07-13):** Phases **A–E complete** — every A/B/C/D/E item is committed and the
+plan's done-gates are green (independently re-run on the PHP 8.2 toolchain): `phpstan`
+0 errors · full suite **1482 tests / 3768 assertions** · veraPDF `@group verapdf` **63/63** ·
+security `@group security` **78 tests / 101 assertions**. (phpstan's baseline is generated for
+PHP 8.2; on PHP 7.4 it reports version-specific `ignore.unmatched` entries — expected, not a
+regression.)
+
+Phase E per-item commits (all on `ua1-support`): E1+E5 `1fe7f310` · E2 `e1376366` ·
+E3 `3b146ae8` · E4 `f35d8051` · E6 `9071d4a0` · E7 `380a6458` · E8 `6cfae511` ·
+E9 `fffa8a67` · E10 `544c6511` · E11 `e8c4fd98` · E12 `b06fc4bc` · E13 `0e0059d9` ·
+E14 `7504e52f` · E15 `57c0a39f` · E16 `1be38aca` · E17 `319c3e02` · E18 `abb54803` ·
+E19 `bb863d66` · E20 `01515a99` · E21 `d7ea29b1` · E22 `d70e3256` · E23 `1a30af7c` ·
+E24 `cd784982` · P3a `d9b9e9e6` · P3b `f628edcd` · P3c `6bbfd4d7` · gate-fix `a4d8fe6d`.
+One deliberate partial: **E-P3c** landed the page-ref cache and ARIA/SVG dedups but **skipped
+the `withArtifact()` bracket refactor** (judged output-risk; left for a dedicated pass) — the
+only Phase E cleanup not taken.
 
 ---
 
@@ -264,6 +274,10 @@ inside the code the earlier phases added (the B2 link self-tagging, the ruby wor
 FPDI struct merge). Same ground rules apply: every fix ships a regression fixture, strict
 mode throws, auto mode produces conformant output, no `warn-and-skip` survives. Line
 numbers are as of the review and approximate.
+
+**All Phase E items are implemented, tested, and committed** (see the per-item commit map in
+the Status banner). Each shipped a regression fixture; suite/veraPDF/security/phpstan gates
+are green. Line/section references below are as of the audit and predate the E-series edits.
 
 ### P0 — document corruption / silent data loss
 
@@ -698,24 +712,17 @@ byte-safe fold as defence-in-depth, but no reproduction on the supported matrix.
 
 ## Suggested execution order
 
-Phases **A–D are complete** (all committed; gates green — see the Status banner at the top).
-The remaining work is Phase E. For the record, A–D landed in this order: Phase A (A1, A2, A3),
-Phase D (D1, D2, D3), Phase B (B3, B1, B2), Phase C (C1a, C2, C1b).
+**All phases A–E are complete** (all committed; gates green — see the Status banner at the top).
+For the record, the phases landed in this order: A (A1, A2, A3), D (D1, D2, D3), B (B3, B1, B2),
+C (C1a, C2, C1b), then E.
 
-**Remaining — Phase E** — second-round findings. Sequence within the phase:
-   - **E1 + E5 together** first (FPDI tagged import is fully broken without both; E1 is
-     ~3 lines, E5 ~6) — highest impact-to-effort in the plan.
-   - Then the other **P0s**: E3 (encrypted XMP), E4 (ToUnicode astral), E2 (encrypted
-     import — coordinate with A3 so the two encrypted-import paths share one policy).
-   - Then the small/independent **P1s**: E7, E10, E11, E13, E14, then E9 and E12
-     (both touch cell-content MCID attribution — do after E6's pattern lands), and E8.
-   - **E6 last of the P1s** — the one large layout/marked-content change; E9/E11 reuse its
-     inline-MCID attribution, so land its pattern before finishing them.
-   - **P2s** (E15–E24) — mostly small and independent; E20 reuses the C2 `/QuadPoints`
-     machinery, so do it after C2.
-   - **P3** hygiene clusters — fold into the commits that touch each file, or batch at the
-     end; the E11↔SVG-dedup and E6↔`restoreFlowingBlockPdfuaState` cleanups land with their
-     P0/P1 items.
+Phase E landed in the planned sequence: **E1+E5** first (FPDI tagged import — broken without
+both), then the other P0s (E3, E4, E2 sharing A3's encrypted-import policy); the small
+independent P1s (E7, E10, E13, E14, E8), then **E6** (the large inline-MCID / marked-content
+change) whose pattern E9 and E11 reuse, then E12; the P2s (E15–E24, with E20 reusing C2's
+`/QuadPoints` machinery); and the P3 hygiene clusters last (E-P3c's `withArtifact()` bracket
+refactor deferred to a dedicated pass — the only Phase E cleanup not taken). A mid-phase gate
+caught and fixed one regression (`a4d8fe6d`).
 
-Each item is a self-contained commit with its regression fixture. After each phase, run
-`composer test`, the UA + security suites, and `VERAPDF_BIN=… @group verapdf`.
+Each item is a self-contained commit with its regression fixture; the full suite,
+`@group verapdf`, `@group security`, and `phpstan` are green on PHP 8.2.
