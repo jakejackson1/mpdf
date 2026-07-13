@@ -184,8 +184,9 @@ class ImageMapTest extends PdfUaTestCase
 	}
 
 	/**
-	 * <area shape="poly" coords="…"> emits a Link annotation with the polygon's
-	 * bounding box as /Rect (PDF Link annotations are axis-aligned only).
+	 * <area shape="poly" coords="…"> emits a Link annotation. /Rect is the
+	 * polygon's bounding box; the active region is refined to the polygon via
+	 * /QuadPoints (see testTriangularPolyEmitsQuadPointsCoveringTriangle).
 	 */
 	public function testPolyAreaProducesLinkAnnotation()
 	{
@@ -567,6 +568,59 @@ class ImageMapTest extends PdfUaTestCase
 		for ($i = 0; $i < 8; $i++) {
 			$this->assertEqualsWithDelta($expected[$i], $quad[$i], 0.05, "quad coord $i");
 		}
+	}
+
+	/**
+	 * A triangular <area shape="poly"> on an axis-aligned host image tiles its
+	 * interior with /QuadPoints (audit E20) instead of activating the whole
+	 * bounding box. The emitted quad covers only the triangle, whose area is
+	 * exactly half its bounding box — so the quad's device-space area must be
+	 * ~half the /Rect area, not the full box. ISO 32000-1 §12.5.6.5.
+	 */
+	public function testTriangularPolyEmitsQuadPointsCoveringTriangle()
+	{
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput(
+			$mpdf,
+			'<p>' . $this->imgUseMap() . '</p>'
+			. '<map name="rooms">'
+			// Apex (100,50); base from (50,150) to (150,150). Triangle area
+			// (0.5*100*100 = 5000) is exactly half the bbox (100*100 = 10000).
+			. '<area shape="poly" coords="100,50,150,150,50,150" href="https://example.com/garden" alt="Garden">'
+			. '</map>'
+		);
+
+		$this->assertStringContainsString('/Subtype /Link', $pdf);
+		$this->assertSame(1, preg_match('/\/QuadPoints \[([^\]]+)\]/', $pdf, $qm));
+		$quad = array_map('floatval', preg_split('/\s+/', trim($qm[1])));
+		// A single triangle → one degenerate quad (8 floats).
+		$this->assertCount(8, $quad);
+
+		$this->assertSame(1, preg_match('/\/Rect \[([^\]]+)\]/', $pdf, $rm));
+		$rect = array_map('floatval', preg_split('/\s+/', trim($rm[1])));
+		$rectArea = abs(($rect[2] - $rect[0]) * ($rect[3] - $rect[1]));
+		$quadArea = $this->shoelaceArea($quad);
+
+		$this->assertGreaterThan(0.0, $quadArea, 'the polygon hotspot must have a non-empty active region');
+		// ~half the bounding box: proves the quad is the triangle, not the full bbox.
+		$this->assertEqualsWithDelta(0.5 * $rectArea, $quadArea, 0.02 * $rectArea);
+	}
+
+	/**
+	 * Shoelace (absolute) area of a flat list of x,y coordinate pairs.
+	 *
+	 * @param  float[] $pts  [x0, y0, x1, y1, …]
+	 * @return float
+	 */
+	private function shoelaceArea(array $pts)
+	{
+		$n = (int) (count($pts) / 2);
+		$a = 0.0;
+		for ($i = 0; $i < $n; $i++) {
+			$j  = ($i + 1) % $n;
+			$a += $pts[2 * $i] * $pts[2 * $j + 1] - $pts[2 * $j] * $pts[2 * $i + 1];
+		}
+		return abs($a) / 2.0;
 	}
 
 	/**

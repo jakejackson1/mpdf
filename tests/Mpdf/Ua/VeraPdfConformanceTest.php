@@ -400,6 +400,32 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that an axis-aligned image map with a polygon hotspot passes ua1
+	 * (audit E20).
+	 *
+	 * A poly/polygon <area> tiles its interior with /QuadPoints (one degenerate
+	 * quad per ear-clipped triangle) so the clickable region approximates the
+	 * shape rather than its bounding box, while /Rect stays the bounding box. The
+	 * multi-quad annotation must still be a conformant tagged Link (OBJR +
+	 * /StructParent + /Alt). ISO 32000-1 §12.5.6.5; ISO 14289-1 §7.18.
+	 *
+	 * @return void
+	 */
+	public function testPolygonImageMapPassesUa1()
+	{
+		$png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+		$html = '<h1>Polygon image map</h1>'
+			. '<p><img src="' . $png . '" alt="Floor plan" usemap="#rooms" width="200" height="200"></p>'
+			. '<map name="rooms">'
+			. '<area shape="poly" coords="100,20,180,150,20,150"        href="https://example.com/atrium" alt="Atrium">'
+			. '<area shape="poly" coords="10,10,60,10,60,60,35,90,10,60" href="https://example.com/wing"   alt="West wing">'
+			. '</map>';
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'polygon image map');
+	}
+
+	/**
 	 * Test that a document with OTL-ligatured text passes ua1.
 	 *
 	 * DejaVuSerif ligates "fi", "ffi", and "ffl". Each ligature glyph cluster

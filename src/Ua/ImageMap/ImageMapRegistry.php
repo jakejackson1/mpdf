@@ -293,6 +293,26 @@ class ImageMapRegistry
 			}
 			list($x1, $y1, $x2, $y2) = $rect;
 
+			// PDF/UA-1 (audit E20) — a poly/polygon hotspot must not activate the
+			// whole bounding box. Tile the polygon interior with /QuadPoints (one
+			// degenerate quad per triangle) so the clickable region approximates
+			// the shape; /Rect stays the bounding box. Works for both axis-aligned
+			// hosts (synthesise the plain placement matrix) and rotated/transformed
+			// ones (reuse the captured render matrix — C2 machinery).
+			$poly = $this->polygonPoints($area['shape'], $area['coords']);
+			if ($poly !== null) {
+				$devMatrix = $matrix !== null
+					? $matrix
+					: $this->buildAxisAlignedMatrix($imgX, $imgY, $imgW, $imgH, $origW, $origH);
+				$quads = $this->polygonQuads($poly, $devMatrix);
+				if ($quads !== null) {
+					$this->emitQuads($area, $quads);
+					continue;
+				}
+				// Non-simple/degenerate polygon that could not be triangulated:
+				// fall through to the bounding-box path so the link still emits.
+			}
+
 			if ($matrix === null) {
 				$sx = $imgW / $origW;
 				$sy = $imgH / $origH;
@@ -315,24 +335,45 @@ class ImageMapRegistry
 			$c2 = $this->applyMatrix($matrix, $x2, $y1);
 			$c3 = $this->applyMatrix($matrix, $x2, $y2);
 			$c4 = $this->applyMatrix($matrix, $x1, $y2);
-			$quad = [$c1[0], $c1[1], $c2[0], $c2[1], $c3[0], $c3[1], $c4[0], $c4[1]];
-			$minx = min($c1[0], $c2[0], $c3[0], $c4[0]);
-			$maxx = max($c1[0], $c2[0], $c3[0], $c4[0]);
-			$miny = min($c1[1], $c2[1], $c3[1], $c4[1]);
-			$maxy = max($c1[1], $c2[1], $c3[1], $c4[1]);
-			if ($maxx - $minx <= 0 || $maxy - $miny <= 0) {
-				continue;
-			}
-			$scale = Mpdf::SCALE;
-			$this->emitAreaLink(
-				$area,
-				$minx / $scale,
-				($this->mpdf->hPt - $maxy) / $scale,
-				($maxx - $minx) / $scale,
-				($maxy - $miny) / $scale,
-				$quad
-			);
+			$this->emitQuads($area, [$c1[0], $c1[1], $c2[0], $c2[1], $c3[0], $c3[1], $c4[0], $c4[1]]);
 		}
+	}
+
+	/**
+	 * Emit one Link annotation for a hotspot already reduced to device-space
+	 * /QuadPoints (8·n floats, n≥1). /Rect is the quads' axis-aligned bounding
+	 * box back-converted to user space so Mpdf::Link() reproduces it. Shared by
+	 * the rotated single-quad path and the polygon-tiling path (audit E20).
+	 *
+	 * @param  array<string,mixed> $area
+	 * @param  float[]             $quads  device-space /QuadPoints (8·n floats)
+	 * @return void
+	 */
+	private function emitQuads(array $area, array $quads)
+	{
+		$xs = [];
+		$ys = [];
+		$count = count($quads);
+		for ($i = 0; $i < $count; $i += 2) {
+			$xs[] = $quads[$i];
+			$ys[] = $quads[$i + 1];
+		}
+		$minx = min($xs);
+		$maxx = max($xs);
+		$miny = min($ys);
+		$maxy = max($ys);
+		if ($maxx - $minx <= 0 || $maxy - $miny <= 0) {
+			return;
+		}
+		$scale = Mpdf::SCALE;
+		$this->emitAreaLink(
+			$area,
+			$minx / $scale,
+			($this->mpdf->hPt - $maxy) / $scale,
+			($maxx - $minx) / $scale,
+			($maxy - $miny) / $scale,
+			$quads
+		);
 	}
 
 	/**
@@ -438,6 +479,29 @@ class ImageMapRegistry
 		// Pixel space (top-left origin) to image unit square (bottom-left).
 		$pixelToUnit = [1.0 / $entry['origW'], 0.0, 0.0, -1.0 / $entry['origH'], 0.0, 1.0];
 		return $this->matmul($pixelToUnit, $ctm);
+	}
+
+	/**
+	 * Build the pixel-space -> device-space affine for an axis-aligned host
+	 * image (no rotate/transform), so the polygon-tiling path (audit E20) can
+	 * map hotspot vertices the same way the rotated path maps them via
+	 * buildHotspotMatrix(). Pixel origin is top-left; device origin is
+	 * bottom-left (y up), matching Mpdf::Link()'s y-flip.
+	 *
+	 * @param  float $imgX
+	 * @param  float $imgY
+	 * @param  float $imgW
+	 * @param  float $imgH
+	 * @param  float $origW
+	 * @param  float $origH
+	 * @return float[]  [a, b, c, d, e, f]
+	 */
+	private function buildAxisAlignedMatrix($imgX, $imgY, $imgW, $imgH, $origW, $origH)
+	{
+		$scale = Mpdf::SCALE;
+		$sx = ($imgW * $scale) / $origW;
+		$sy = ($imgH * $scale) / $origH;
+		return [$sx, 0.0, 0.0, -$sy, $imgX * $scale, $this->mpdf->hPt - $imgY * $scale];
 	}
 
 	/**
@@ -549,6 +613,192 @@ class ImageMapRegistry
 			default:
 				return null;
 		}
+	}
+
+	/**
+	 * Return a poly/polygon area's vertices in image-pixel space, or null when
+	 * the shape is not a polygon or its coords are malformed. Used by the E20
+	 * tiling path; every other shape keeps the plain shapeToRect() bounding box.
+	 *
+	 * @param  string  $shape
+	 * @param  float[] $coords
+	 * @return array<int,float[]>|null  list of [x, y] vertices, or null
+	 */
+	private function polygonPoints($shape, array $coords)
+	{
+		if ($shape !== 'poly' && $shape !== 'polygon') {
+			return null;
+		}
+		$n = count($coords);
+		if ($n < 6 || $n % 2 !== 0) {
+			return null;
+		}
+		$pts = [];
+		for ($i = 0; $i < $n; $i += 2) {
+			$pts[] = [(float) $coords[$i], (float) $coords[$i + 1]];
+		}
+		return $pts;
+	}
+
+	/**
+	 * Tile a polygon (pixel-space vertices) with device-space /QuadPoints: ear-clip
+	 * it into triangles, then map each triangle through $matrix and emit it as a
+	 * degenerate quad (its third vertex repeated as the fourth). The union of the
+	 * quads approximates the polygon interior. Returns null when the polygon is
+	 * non-simple/degenerate and cannot be triangulated, so the caller falls back to
+	 * the bounding box. ISO 32000-1 §12.5.6.5.
+	 *
+	 * @param  array<int,float[]> $poly    pixel-space vertices [[x, y], …]
+	 * @param  float[]            $matrix  pixel-space -> device-space affine
+	 * @return float[]|null                flat list of 8·n device-space floats, or null
+	 */
+	private function polygonQuads(array $poly, array $matrix)
+	{
+		$tris = $this->triangulatePolygon($poly);
+		if (empty($tris)) {
+			return null;
+		}
+		$dev = [];
+		foreach ($poly as $i => $pt) {
+			$dev[$i] = $this->applyMatrix($matrix, $pt[0], $pt[1]);
+		}
+		$quads = [];
+		foreach ($tris as $t) {
+			$a = $dev[$t[0]];
+			$b = $dev[$t[1]];
+			$c = $dev[$t[2]];
+			array_push($quads, $a[0], $a[1], $b[0], $b[1], $c[0], $c[1], $c[0], $c[1]);
+		}
+		return $quads;
+	}
+
+	/**
+	 * Ear-clipping triangulation of a simple polygon (convex or concave), after
+	 * John W. Ratcliff's classic algorithm. Returns a list of index triples into
+	 * $pts, or an empty list when the polygon is non-simple/degenerate (self-
+	 * intersecting or zero-area) and no valid triangulation exists.
+	 *
+	 * @param  array<int,float[]> $pts  vertices [[x, y], …]
+	 * @return array<int,int[]>         list of [i, j, k] index triples
+	 */
+	private function triangulatePolygon(array $pts)
+	{
+		$n = count($pts);
+		if ($n < 3) {
+			return [];
+		}
+		// Orient the working index ring counter-clockwise so the ear-convexity
+		// sign test is consistent regardless of the source winding.
+		$V = [];
+		if ($this->polygonArea($pts) > 0.0) {
+			for ($i = 0; $i < $n; $i++) {
+				$V[$i] = $i;
+			}
+		} else {
+			for ($i = 0; $i < $n; $i++) {
+				$V[$i] = ($n - 1) - $i;
+			}
+		}
+		$tris = [];
+		$nv    = $n;
+		$count = 2 * $nv; // failsafe against a non-simple polygon looping forever
+		$v = $nv - 1;
+		while ($nv > 2) {
+			if (($count--) <= 0) {
+				return []; // non-simple polygon: caller falls back to the bbox
+			}
+			$u = $v >= $nv ? 0 : $v;
+			$v = $u + 1 >= $nv ? 0 : $u + 1;
+			$w = $v + 1 >= $nv ? 0 : $v + 1;
+			if ($this->polygonSnip($pts, $V[$u], $V[$v], $V[$w], $nv, $V)) {
+				$tris[] = [$V[$u], $V[$v], $V[$w]];
+				// Remove the clipped ear tip (vertex v) from the ring.
+				for ($s = $v, $t = $v + 1; $t < $nv; $s++, $t++) {
+					$V[$s] = $V[$t];
+				}
+				$nv--;
+				$count = 2 * $nv;
+			}
+		}
+		return $tris;
+	}
+
+	/**
+	 * Signed area of a polygon (shoelace); positive for counter-clockwise winding.
+	 *
+	 * @param  array<int,float[]> $pts
+	 * @return float
+	 */
+	private function polygonArea(array $pts)
+	{
+		$n    = count($pts);
+		$area = 0.0;
+		for ($p = $n - 1, $q = 0; $q < $n; $p = $q++) {
+			$area += $pts[$p][0] * $pts[$q][1] - $pts[$q][0] * $pts[$p][1];
+		}
+		return $area * 0.5;
+	}
+
+	/**
+	 * Ear test for the ear-clipping triangulator: true when triangle (a, b, c) is
+	 * convex (CCW) and no other remaining vertex lies inside it.
+	 *
+	 * @param  array<int,float[]> $pts
+	 * @param  int                $a
+	 * @param  int                $b
+	 * @param  int                $c
+	 * @param  int                $nv  number of live vertices in $V
+	 * @param  int[]              $V   live index ring
+	 * @return bool
+	 */
+	private function polygonSnip(array $pts, $a, $b, $c, $nv, array $V)
+	{
+		$eps = 1e-9;
+		$ax = $pts[$a][0];
+		$ay = $pts[$a][1];
+		$bx = $pts[$b][0];
+		$by = $pts[$b][1];
+		$cx = $pts[$c][0];
+		$cy = $pts[$c][1];
+		if ($eps > (($bx - $ax) * ($cy - $ay) - ($by - $ay) * ($cx - $ax))) {
+			return false; // reflex (or collinear) vertex — not an ear
+		}
+		for ($p = 0; $p < $nv; $p++) {
+			$idx = $V[$p];
+			if ($idx === $a || $idx === $b || $idx === $c) {
+				continue;
+			}
+			if ($this->pointInTriangle($ax, $ay, $bx, $by, $cx, $cy, $pts[$idx][0], $pts[$idx][1])) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Barycentric-sign point-in-triangle test (inclusive of the edges), assuming a
+	 * counter-clockwise triangle (a, b, c).
+	 *
+	 * @return bool
+	 */
+	private function pointInTriangle($ax, $ay, $bx, $by, $cx, $cy, $px, $py)
+	{
+		$ax0 = $cx - $bx;
+		$ay0 = $cy - $by;
+		$bx0 = $ax - $cx;
+		$by0 = $ay - $cy;
+		$cx0 = $bx - $ax;
+		$cy0 = $by - $ay;
+		$apx = $px - $ax;
+		$apy = $py - $ay;
+		$bpx = $px - $bx;
+		$bpy = $py - $by;
+		$cpx = $px - $cx;
+		$cpy = $py - $cy;
+		$aCrossBp = $ax0 * $bpy - $ay0 * $bpx;
+		$cCrossAp = $cx0 * $apy - $cy0 * $apx;
+		$bCrossCp = $bx0 * $cpy - $by0 * $cpx;
+		return $aCrossBp >= 0.0 && $bCrossCp >= 0.0 && $cCrossAp >= 0.0;
 	}
 
 	/**
