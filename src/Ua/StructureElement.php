@@ -74,6 +74,20 @@ class StructureElement
 	protected $textRuns;
 
 	/**
+	 * @var array<int, array{attr:string, target:StructureElement}>
+	 *   Resolved ARIA relationship references that map to a PDF /Ref entry —
+	 *   an array of references to the other struct elements this element refers
+	 *   to (ISO 32000-2:2020 §14.7 — struct element /Ref relationship entries).
+	 *   Only aria-owns / aria-controls land here (AriaIdResolver::resolveAll()
+	 *   decides the mapping); aria-flowto / aria-activedescendant have no static
+	 *   PDF/UA-1 representation and are surfaced as a visible warning instead.
+	 *   Kept OFF the $attributes map so no internal marker key can leak into the
+	 *   emitted StructElem dict (UA1 audit E18). Serialised to /Ref by
+	 *   StructureWriter::writeElement().
+	 */
+	protected $relationships;
+
+	/**
 	 * @var string|null  Globally unique /ID string, required for Note elements
 	 *   (Matterhorn 09-002) and for TH cells referenced by TD /Headers.
 	 */
@@ -109,6 +123,7 @@ class StructureElement
 		$this->children   = [];
 		$this->mcids      = [];
 		$this->objrefs    = [];
+		$this->relationships = [];
 		$this->textRuns   = [];
 		$this->id         = null;
 		$this->objNum     = 0;
@@ -142,6 +157,12 @@ class StructureElement
 	public function getObjrefs()
 	{
 		return $this->objrefs;
+	}
+
+	/** @return array<int, array{attr:string, target:StructureElement}> resolved /Ref relationships (aria-owns / aria-controls). */
+	public function getRelationships()
+	{
+		return $this->relationships;
 	}
 
 	/** @return array<string,mixed> attributes map (see class docblock for categories). */
@@ -481,24 +502,30 @@ class StructureElement
 	}
 
 	/**
-	 * Record an ARIA relationship attribute value referencing another struct element.
+	 * Record a resolved ARIA relationship that maps to a PDF /Ref entry.
 	 *
-	 * Used by AriaIdResolver to wire up resolved aria-labelledby, aria-describedby,
-	 * aria-controls, aria-owns, and aria-flowto relationships as /A attribute
-	 * entries that StructureWriter includes in the struct element dict.
+	 * Called by AriaIdResolver::resolveAll() for aria-owns / aria-controls once
+	 * the target id has been resolved to its struct element. Both attributes
+	 * express a structural reference from this element to another, which is the
+	 * exact semantics of the /Ref entry — an array of references to the struct
+	 * elements this element refers to. StructureWriter::writeElement() emits the
+	 * collected targets as `/Ref [N 0 R …]` on this element's dict.
+	 *
+	 * The reference is stored in a dedicated list (not under $attributes) so no
+	 * internal marker key can leak into the emitted StructElem dict (UA1 audit
+	 * E18). aria-flowto / aria-activedescendant are NOT routed here: they have no
+	 * static PDF/UA-1 representation and AriaIdResolver records a visible warning
+	 * for them instead of storing-and-dropping.
 	 *
 	 * ISO 32000-2:2020 §14.7 — struct element relationships via /Ref entries.
 	 * WAI-ARIA 1.1 §6.6 — ID reference attributes.
 	 *
-	 * @param  string           $ariaAttr  ARIA attribute name (e.g. 'aria-labelledby')
+	 * @param  string           $ariaAttr  ARIA attribute name ('aria-owns' or 'aria-controls')
 	 * @param  StructureElement $target    resolved target struct element
 	 * @return void
 	 */
 	public function addRelationship($ariaAttr, StructureElement $target)
 	{
-		if (!isset($this->attributes['_aria_relationships'])) {
-			$this->attributes['_aria_relationships'] = [];
-		}
-		$this->attributes['_aria_relationships'][] = ['attr' => $ariaAttr, 'target' => $target];
+		$this->relationships[] = ['attr' => $ariaAttr, 'target' => $target];
 	}
 }

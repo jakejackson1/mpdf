@@ -20,10 +20,10 @@ namespace Mpdf\Ua;
  *   - aria-labelledby   → /Alt (StructElem dict, ISO 32000-1 Table 322)
  *   - aria-describedby  → /E (expansion text, ISO 32000-1 Table 322)
  *   - aria-details      → /E (same treatment as aria-describedby)
- *   - aria-controls     → relationship kid (ISO 32000-1 §14.8.5.3)
- *   - aria-owns         → relationship kid
- *   - aria-flowto       → relationship kid
- *   - aria-activedescendant → relationship kid
+ *   - aria-controls     → /Ref cross-reference (ISO 32000-2 §14.7 struct /Ref)
+ *   - aria-owns         → /Ref cross-reference
+ *   - aria-flowto       → no static PDF/UA-1 representation → visible warning
+ *   - aria-activedescendant → no static PDF/UA-1 representation → visible warning
  *
  * Interactive-state ARIA (aria-live, aria-busy, aria-checked, …) has no
  * static-PDF analog and is intentionally out of scope.
@@ -97,6 +97,20 @@ class AriaIdResolver
 	 *                13-004 / 28-002); resolveAll() never writes the empty value.
 	 */
 	private $nameResolutionErrors = [];
+
+	/**
+	 * @var string[]  Diagnostics produced by resolveAll() for resolved ARIA
+	 *                relationships that have no static PDF/UA-1 representation —
+	 *                aria-flowto (a reading-order override, determined here by
+	 *                structure-tree order) and aria-activedescendant (a transient
+	 *                interactive-focus relationship). Emitting nothing for these
+	 *                is correct — a static tagged PDF cannot carry the semantics —
+	 *                but they must be surfaced visibly rather than stored-and-
+	 *                dropped (UA1 audit E18). The _enddoc() caller flushes them
+	 *                into UaState::addWarning(); resolveAll() never stores the
+	 *                relationship on the element.
+	 */
+	private $relationshipWarnings = [];
 
 	/**
 	 * @var int  Monotonic counter for synthesised TH /ID values.
@@ -281,12 +295,27 @@ class AriaIdResolver
 						$elem->setAttribute('E', $text);
 					}
 					break;
-				case 'aria-controls':
 				case 'aria-owns':
+				case 'aria-controls':
+					// ISO 32000-2 §14.7 — /Ref cross-reference: this struct
+					// element refers to the resolved target struct element(s).
+					// aria-owns / aria-controls both express a structural
+					// reference and map cleanly to /Ref, which StructureWriter
+					// emits as `/Ref [N 0 R …]` on the referring element's dict.
+					$elem->addRelationship($attr, $target);
+					break;
 				case 'aria-flowto':
 				case 'aria-activedescendant':
-					// ISO 32000-1 §14.8.5.3 — relationship attributes.
-					$elem->addRelationship($attr, $target);
+					// No static PDF/UA-1 (ISO 32000-1) representation: aria-flowto
+					// overrides reading order (which a tagged PDF derives from the
+					// structure-tree order) and aria-activedescendant names a
+					// transient interactive-focus target. There is nothing to emit,
+					// but the loss MUST be visible rather than store-and-drop
+					// (UA1 audit E18). Record a warning the _enddoc() caller flushes
+					// into UaState::addWarning(); do not store the relationship.
+					$this->relationshipWarnings[] = 'ARIA relationship has no PDF/UA-1 representation: '
+						. $attr . '="' . $id . '" cannot be expressed in a static PDF/UA-1 '
+						. 'structure tree; the relationship was not emitted.';
 					break;
 			}
 		}
@@ -364,5 +393,22 @@ class AriaIdResolver
 	public function getNameResolutionErrors()
 	{
 		return $this->nameResolutionErrors;
+	}
+
+	/**
+	 * Diagnostics collected by resolveAll() for resolved ARIA relationships that
+	 * have no static PDF/UA-1 representation (aria-flowto / aria-activedescendant).
+	 *
+	 * These are not conformance violations — the emitted PDF is valid PDF/UA-1
+	 * either way — so they are surfaced as warnings in both strict and PDFUAauto
+	 * mode (like getUnresolvedWarnings()) rather than thrown. The _enddoc() caller
+	 * flushes them into UaState::addWarning(); AriaIdResolver holds no UaState
+	 * reference (UA1 audit E18).
+	 *
+	 * @return string[]
+	 */
+	public function getRelationshipWarnings()
+	{
+		return $this->relationshipWarnings;
 	}
 }

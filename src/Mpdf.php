@@ -11567,6 +11567,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			foreach ($resolver->getUnresolvedWarnings() as $w) {
 				$this->ua->addWarning($w);
 			}
+			// PDF/UA-1 audit E18 — a resolved aria-flowto / aria-activedescendant
+			// relationship has no static PDF/UA-1 representation. resolveAll() emits
+			// nothing for it (the PDF stays valid PDF/UA-1) but records a diagnostic
+			// so the loss is visible rather than silently store-and-dropped. Warn in
+			// both modes: this is not a conformance violation, so strict does not throw.
+			foreach ($resolver->getRelationshipWarnings() as $w) {
+				$this->ua->addWarning($w);
+			}
 			// PDF/UA-1 audit E8 — an aria-labelledby / aria-describedby reference
 			// that resolves to a missing or empty target must never emit an /Alt
 			// or /E: a BOM-only empty string replaces and hides the referring

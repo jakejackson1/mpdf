@@ -362,6 +362,30 @@ class StructureWriter
 			}
 		}
 
+		// /Ref — cross-references to other struct elements (ISO 32000-2 §14.7).
+		// Resolved aria-owns / aria-controls targets map here: an array of
+		// indirect references to the struct elements this element refers to.
+		// Every target's object number is pre-allocated by reserveObjectNumbers()
+		// before any dict body is written, so a forward or cross-tree reference
+		// resolves regardless of the depth-first write order. Duplicate targets
+		// (e.g. aria-owns and aria-controls naming the same id) collapse to one
+		// entry (UA1 audit E18).
+		$relationships = $elem->getRelationships();
+		if (!empty($relationships)) {
+			$refParts = [];
+			$seen     = [];
+			foreach ($relationships as $rel) {
+				$refObj = $rel['target']->getObjNum();
+				if ($refObj > 0 && !isset($seen[$refObj])) {
+					$seen[$refObj] = true;
+					$refParts[]    = $refObj . ' 0 R';
+				}
+			}
+			if (!empty($refParts)) {
+				$this->writer->write('/Ref [' . implode(' ', $refParts) . ']');
+			}
+		}
+
 		// /K — kids: MCIDs, MCR dicts, OBJR dicts, child struct elem refs.
 		$kParts = [];
 
