@@ -142,4 +142,43 @@ class StructureWriterTest extends PdfUaTestCase
 			$nums
 		);
 	}
+
+	/**
+	 * A /Layout /BBox carrying fractional user-space coordinates MUST be written
+	 * with '.' decimal separators regardless of the active LC_NUMERIC locale.
+	 *
+	 * Under a comma-decimal locale (de_DE / nl_NL) a bare float-to-string cast
+	 * emits "1,5" and corrupts the PDF number array; formatNumber()'s
+	 * sprintf('%.3F', …) must keep the output locale-independent (UA1 audit E24).
+	 */
+	public function testBBoxIsLocaleIndependent()
+	{
+		$original = setlocale(LC_NUMERIC, '0');
+		$applied  = setlocale(LC_NUMERIC, 'de_DE.UTF-8', 'de_DE', 'nl_NL.UTF-8', 'nl_NL', 'German', 'Dutch');
+		if ($applied === false || strpos(sprintf('%.1f', 1.5), ',') === false) {
+			if ($original !== false) {
+				setlocale(LC_NUMERIC, $original);
+			}
+			$this->markTestSkipped('No comma-decimal locale available on this host.');
+		}
+
+		try {
+			$tree = new StructureTree();
+			$tree->open('Figure');
+			$fig = $tree->getCurrent();
+			$fig->setAttribute('BBox', [10.5, 20.25, 100.125, 200.0]);
+			$tree->registerImportedMcr(0, 0, $fig);
+			$tree->close();
+
+			$pdf = $this->serialise($tree);
+		} finally {
+			if ($original !== false) {
+				setlocale(LC_NUMERIC, $original);
+			}
+		}
+
+		$this->assertSame(1, preg_match('#/BBox \[([^\]]*)\]#', $pdf, $m), '/BBox array not emitted');
+		$this->assertStringNotContainsString(',', $m[1], '/BBox must use "." decimal separator');
+		$this->assertSame('10.5 20.25 100.125 200', trim($m[1]));
+	}
 }

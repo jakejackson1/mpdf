@@ -485,8 +485,14 @@ class StructureWriter
 		$parts = ['<</O ' . $owner];
 		foreach ($attrs as $key => $value) {
 			if ($key === 'BBox' && is_array($value)) {
-				// BBox is an array of four numbers in user space.
-				$parts[] = '/' . $key . ' [' . implode(' ', $value) . ']';
+				// BBox is an array of four numbers in user space. Format via the
+				// locale-safe helper so a comma-decimal locale can never emit "1,5"
+				// and corrupt the array (UA1 audit E24).
+				$coords = [];
+				foreach ($value as $coord) {
+					$coords[] = $this->formatNumber($coord);
+				}
+				$parts[] = '/' . $key . ' [' . implode(' ', $coords) . ']';
 			} elseif ($key === 'Headers' && is_array($value)) {
 				// /Headers is an array of name objects referencing TH struct element IDs.
 				// ISO 32000-1 Table 349 — /Headers [/id1 /id2 ...] (array of names).
@@ -497,7 +503,8 @@ class StructureWriter
 				}
 				$parts[] = '/' . $key . ' [' . implode(' ', $nameList) . ']';
 			} elseif (is_int($value) || is_float($value)) {
-				$parts[] = '/' . $key . ' ' . $value;
+				// Locale-safe numeric formatting (UA1 audit E24).
+				$parts[] = '/' . $key . ' ' . $this->formatNumber($value);
 			} else {
 				// String values are emitted as PDF names (e.g. /Scope /Column).
 				$parts[] = '/' . $key . ' /' . $value;
@@ -505,6 +512,28 @@ class StructureWriter
 		}
 		$parts[] = '>>';
 		return implode(' ', $parts);
+	}
+
+	/**
+	 * Format a numeric attribute value as a locale-independent PDF number.
+	 *
+	 * PHP float-to-string conversion honours LC_NUMERIC, so under a comma-decimal
+	 * locale (e.g. de_DE, nl_NL) a bare cast emits "1,5" and corrupts the PDF.
+	 * Integers are always locale-safe and are emitted verbatim; floats go through
+	 * sprintf('%.3F', …) (uppercase F is locale-independent), matching how the
+	 * writers format coordinates elsewhere (UA1 audit E24).
+	 *
+	 * @param  int|float $value
+	 * @return string
+	 */
+	private function formatNumber($value)
+	{
+		if (is_int($value)) {
+			return (string) $value;
+		}
+		// Trim trailing zeros/dot so integral floats stay compact (e.g. "612" not "612.000").
+		$formatted = rtrim(rtrim(sprintf('%.3F', $value), '0'), '.');
+		return $formatted === '' || $formatted === '-0' ? '0' : $formatted;
 	}
 
 	/**
