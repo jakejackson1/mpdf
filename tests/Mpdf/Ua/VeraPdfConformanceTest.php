@@ -152,6 +152,38 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * A table declaring all three row groups plus an implicit-group table both
+	 * pass ua1 (audit E16).
+	 *
+	 * The <thead>/<tbody>/<tfoot> groups produce THead/TBody/TFoot struct
+	 * elements with their TR rows nested beneath them, and a table that writes
+	 * rows straight under <table> has a TBody synthesised for it — so TR is never
+	 * a direct child of Table (ISO 32000-1:2008 §14.8 Table 333).
+	 *
+	 * @return void
+	 */
+	public function testTableRowGroupStructurePassesUa1()
+	{
+		$html = '<h1>Row groups</h1>'
+			. '<table border="1">'
+			. '<thead><tr><th scope="col">Head A</th><th scope="col">Head B</th></tr></thead>'
+			. '<tbody>'
+			. '<tr><td>A1</td><td>B1</td></tr>'
+			. '<tr><td>A2</td><td>B2</td></tr>'
+			. '</tbody>'
+			. '<tfoot><tr><td>Foot A</td><td>Foot B</td></tr></tfoot>'
+			. '</table>'
+			. '<table border="1">'
+			. '<tr><td>Implicit 1</td><td>Implicit 2</td></tr>'
+			. '<tr><td>Implicit 3</td><td>Implicit 4</td></tr>'
+			. '</table>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'table row-group structure');
+	}
+
+	/**
 	 * Header-cell associations must pass ua1 (audit E12).
 	 *
 	 * A `<th id scope>` builds its TH struct element once and registers its /ID

@@ -265,6 +265,34 @@ class StructureTree
 	}
 
 	/**
+	 * Close the innermost open table row-group element (THead / TBody / TFoot)
+	 * when it is the stack top; otherwise a no-op.
+	 *
+	 * Row groups reach Table::close() still open in two situations, both handled
+	 * here as a backstop so the Table pop that follows lands on the Table itself:
+	 *   - the HTML omitted the group's optional end tag (ISO 32000-1 §14.8
+	 *     Table 333 — </thead>/</tbody>/</tfoot> are optional), so the group's
+	 *     own close() never fired; or
+	 *   - Tr::open() synthesised a TBody for rows the HTML wrote directly under
+	 *     <table>, and that synthetic group stays open across the group-less rows.
+	 *
+	 * Also called from a group handler's open() to collapse a preceding
+	 * synthetic TBody before a real THead/TBody/TFoot begins.
+	 *
+	 * @return void
+	 */
+	public function closeRowGroup()
+	{
+		if (count($this->stack) <= 1 || $this->isInArtifact()) {
+			return;
+		}
+		$type = end($this->stack)->getType();
+		if ($type === 'THead' || $type === 'TBody' || $type === 'TFoot') {
+			array_pop($this->stack);
+		}
+	}
+
+	/**
 	 * Push an existing struct element onto the open-element stack without
 	 * creating a new one or appending it as a child of the current top.
 	 *

@@ -80,11 +80,18 @@ class Tr extends Tag
 			$this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['is_tfoot'][$this->mpdf->row] = true;
 		}
 
-		// Push TR as a child of the enclosing Table (or THead/TBody/TFoot when
-		// those are supported).
-		// ISO 32000-1:2008 §14.8 Table 333 — TR is a block-level table element.
+		// Push TR beneath its row-grouping element (THead/TBody/TFoot). ISO
+		// 32000-1:2008 §14.8 Table 333 — TR belongs to a row group, not directly
+		// to Table. When the HTML wrote rows straight under <table> the stack top
+		// is the Table itself, so synthesise a TBody to hold the implicit rows; it
+		// stays open across consecutive group-less rows and is collapsed by
+		// Table::close() (or by the next explicit row group).
 		if ($this->mpdf->PDFUA) {
-			$this->ua->getStructureTree()->open('TR');
+			$tree = $this->ua->getStructureTree();
+			if (!$tree->isInArtifact() && $tree->getCurrent()->getType() === 'Table') {
+				$tree->open('TBody');
+			}
+			$tree->open('TR');
 
 			$trElem = $this->ua->getStructureTree()->getCurrent();
 			if (!empty($attr['ID'])) {

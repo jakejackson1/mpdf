@@ -752,8 +752,11 @@ class Table extends Tag
 			$this->mpdf->nestedtablejustfinished = true;
 			$this->mpdf->ignorefollowingspaces = true;
 			// Pop the Table struct element for nested tables. Top-level tables
-			// pop after _tableWrite() at the end of close().
+			// pop after _tableWrite() at the end of close(). Collapse any row
+			// group still open (synthetic TBody, or an explicit group whose
+			// optional end tag was omitted) so the pop lands on the Table.
 			if ($this->mpdf->PDFUA) {
+				$this->ua->getStructureTree()->closeRowGroup();
 				$this->ua->getStructureTree()->close();
 			}
 			return;
@@ -1270,10 +1273,13 @@ class Table extends Tag
 		}
 
 		// Pop the Table struct element at the end of close() for top-level tables,
-		// after _tableWrite() has rendered all cells.
+		// after _tableWrite() has rendered all cells. Collapse any row group still
+		// open (synthetic TBody, or an explicit group whose optional end tag was
+		// omitted) so the pop lands on the Table.
 		//
 		// ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
 		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->closeRowGroup();
 			$this->ua->getStructureTree()->close();
 		}
 	}
