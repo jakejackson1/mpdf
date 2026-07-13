@@ -127,21 +127,22 @@ class ValidationTest extends PdfUaTestCase
 	/**
 	 * OverWrite() does binary string replacement on a finished PDF. The
 	 * structure tree references object numbers and byte offsets that the
-	 * replacement cannot maintain, so PDF/UA-1 mode rejects the call
-	 * unconditionally — neither strict nor auto mode can produce a
-	 * conformant result.
+	 * replacement cannot maintain, so in strict PDF/UA-1 mode
+	 * (PDFUAauto=false) the call is rejected before any I/O happens
+	 * (audit E21). Auto mode's warn-and-proceed path is covered separately
+	 * by PdfUaModeTest::testOverWriteInAutoModeWarnsAndReturns.
 	 *
 	 * @return void
 	 */
 	public function testOverWriteThrowsInPdfuaMode()
 	{
-		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
+		$mpdf = $this->makeMpdf(['PDFUAauto' => false]);
 		$mpdf->WriteHTML('<h1>Hello</h1>');
 
 		$this->expectException(\Mpdf\MpdfException::class);
 		$this->expectExceptionMessageMatches('/OverWrite/');
-		// File path does not need to exist — the PDFUA guard fires before
-		// any I/O happens (see Mpdf::OverWrite).
+		// File path does not need to exist — the strict PDFUA guard fires
+		// before any I/O happens (see Mpdf::OverWrite).
 		$mpdf->OverWrite('/tmp/does_not_matter.pdf', 'foo', 'bar', 'S', 'out');
 	}
 

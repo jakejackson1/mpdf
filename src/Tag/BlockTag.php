@@ -579,7 +579,7 @@ abstract class BlockTag extends Tag
 				// PDF/UA-1 (audit E17) — record the resolved marker style on the
 				// in-cell L element as /ListNumbering so the writer emits its
 				// /A <</O /List /ListNumbering …>> attribute object (Table 347).
-				if ($this->mpdf->PDFUA && isset($elem) && $structType === 'L') {
+				if ($this->mpdf->PDFUA && isset($elem, $structType) && $structType === 'L') {
 					$numbering = self::listNumberingFromCssType($this->mpdf->listtype[$this->mpdf->listlvl]);
 					if ($numbering !== null) {
 						$elem->setAttribute('ListNumbering', $numbering);
