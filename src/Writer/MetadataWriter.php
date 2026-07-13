@@ -625,13 +625,12 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// Chrome issue is a cosmetic tooltip problem, not a data-integrity issue, and
 						// PDF/UA-1 conformance takes precedence over viewer workarounds.
 						if ($this->mpdf->PDFUA) {
-							$contents = '';
+							// Named external destinations (string, no leading '@') use their
+							// own text as the alternate description; internal-link targets
+							// ('@'-prefixed) and non-string targets fall back to a generic name.
+							$contents = 'Internal link';
 							if (is_string($pl[4]) && strpos($pl[4], '@') !== 0) {
 								$contents = $pl[4];
-							} elseif (is_string($pl[4]) && strpos($pl[4], '@') === 0) {
-								$contents = 'Internal link';
-							} else {
-								$contents = 'Internal link';
 							}
 							$annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($contents);
 						}

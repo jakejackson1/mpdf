@@ -185,12 +185,11 @@ class ServiceFactory
 		// docblock for the collision rationale.
 		$structureTree->setUaState($uaState);
 
-		// Wire the lazy UaState resolver on ImageMapRegistry so it can route
-		// PDFUAauto warnings through UaState::addWarning(). Done after the
-		// facade is fully built to avoid a construction-time cycle.
-		$imageMapRegistry->setLazyUaWiring(function () use ($uaState) {
-			return $uaState;
-		});
+		// Inject the facade into ImageMapRegistry so it can route PDFUAauto
+		// warnings through UaState::addWarning(). Done after the facade is fully
+		// built to avoid a construction-time cycle — same setter style as
+		// StructureTree::setUaState() above.
+		$imageMapRegistry->setUaState($uaState);
 
 		$tag = new Tag(
 			$mpdf,

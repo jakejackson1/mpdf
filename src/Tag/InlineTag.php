@@ -215,15 +215,7 @@ abstract class InlineTag extends Tag
 		$this->ua->getStructureTree()->open('Span', $structAttrs);
 		// ARIA: register HTML id (if any) and queue cross-references.
 		$elem = $this->ua->getStructureTree()->getCurrent();
-		if (!empty($attr['ID'])) {
-			$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
-		}
-		foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-			'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
-			if (!empty($attr[$ariaKey])) {
-				$this->ua->getAriaIdResolver()->queue($elem, strtolower($ariaKey), $attr[$ariaKey]);
-			}
-		}
+		$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
 		return true;
 	}
 

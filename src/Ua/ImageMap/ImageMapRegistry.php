@@ -5,6 +5,7 @@ namespace Mpdf\Ua\ImageMap;
 use Mpdf\Mpdf;
 use Mpdf\Ua\AnchorState;
 use Mpdf\Ua\StructureTree;
+use Mpdf\Ua\UaState;
 
 /**
  * PDF/UA-1 — registry, deferred queue, and emission for HTML image maps
@@ -80,13 +81,14 @@ class ImageMapRegistry
 	private $deferred = [];
 
 	/**
-	 * Lazy callback set by setLazyUaWiring(); used to resolve the UaState
-	 * reference for warning emission. Avoids a constructor-time cycle
-	 * (UaState owns this class).
+	 * UaState facade injected by setUaState() for warning emission. Injected
+	 * post-construction (not via the constructor) because UaState owns this
+	 * class, so accepting it as a constructor dep would be a build-time cycle
+	 * — mirrors StructureTree::setUaState().
 	 *
-	 * @var callable|null
+	 * @var UaState|null
 	 */
-	private $uaResolver = null;
+	private $uaState = null;
 
 	/**
 	 * @param Mpdf          $mpdf           host Mpdf for object-number allocation, page mutation, internal-link map
@@ -101,19 +103,19 @@ class ImageMapRegistry
 	}
 
 	/**
-	 * Wire a callback that returns the UaState facade for warning emission.
+	 * Inject the UaState facade for warning emission.
 	 *
 	 * Used by ServiceFactory to break the construction cycle: UaState owns
 	 * this class, so we cannot accept it as a constructor dep. The factory
-	 * calls setLazyUaWiring(function () use ($uaState) { return $uaState; })
-	 * after the facade has been built.
+	 * calls setUaState() after the facade has been built — mirroring
+	 * StructureTree::setUaState().
 	 *
-	 * @param  callable $resolver  () → UaState
+	 * @param  UaState $uaState
 	 * @return void
 	 */
-	public function setLazyUaWiring($resolver)
+	public function setUaState(UaState $uaState)
 	{
-		$this->uaResolver = $resolver;
+		$this->uaState = $uaState;
 	}
 
 	/**
@@ -826,20 +828,15 @@ class ImageMapRegistry
 	}
 
 	/**
-	 * Emit a PDFUAauto warning via the lazy UaState resolver if wired.
+	 * Emit a PDFUAauto warning via the injected UaState facade if wired.
 	 *
 	 * @param  string $msg
 	 * @return void
 	 */
 	private function warn($msg)
 	{
-		if ($this->uaResolver === null) {
-			return;
-		}
-		$resolver = $this->uaResolver;
-		$ua       = $resolver();
-		if ($ua !== null) {
-			$ua->addWarning($msg);
+		if ($this->uaState !== null) {
+			$this->uaState->addWarning($msg);
 		}
 	}
 }

@@ -151,15 +151,7 @@ class A extends Tag
 				// '_href' is filtered out by StructureWriter (it only emits
 				// known PDF dict keys), so it is safe to use as a private hint.
 				$elem->setAttribute('_href', $attr['HREF']);
-				if (!empty($attr['ID'])) {
-					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
-				}
-				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-						  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
-					if (!empty($attr[$k])) {
-						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
-					}
-				}
+				$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
 
 				// Capture the Link struct element so Mpdf::Link() can attach the
 				// element reference to the PageLinks entry. writeAnnotations()
@@ -191,15 +183,7 @@ class A extends Tag
 			if (!empty($structAttrs)) {
 				$this->ua->getStructureTree()->open('Span', $structAttrs);
 				$elem = $this->ua->getStructureTree()->getCurrent();
-				if (!empty($attr['ID'])) {
-					$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
-				}
-				foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-						  'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $k) {
-					if (!empty($attr[$k])) {
-						$this->ua->getAriaIdResolver()->queue($elem, strtolower($k), $attr[$k]);
-					}
-				}
+				$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
 				$this->ua->getAnchorState()->setAnchorStructType('Span');
 				$spanDepth = 1;
 			}
@@ -297,15 +281,7 @@ class A extends Tag
 		}
 		$this->ua->getStructureTree()->open('Span', $structAttrs);
 		$elem = $this->ua->getStructureTree()->getCurrent();
-		if (!empty($attr['ID'])) {
-			$this->ua->getAriaIdResolver()->registerId($attr['ID'], $elem);
-		}
-		foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
-				 'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
-			if (!empty($attr[$ariaKey])) {
-				$this->ua->getAriaIdResolver()->queue($elem, strtolower($ariaKey), $attr[$ariaKey]);
-			}
-		}
+		$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
 		return true;
 	}
 }

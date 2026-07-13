@@ -67,6 +67,17 @@ class AriaIdResolver
 	 */
 	const MAX_ARIA_IDS_TOKENS = 256;
 
+	/**
+	 * ID-referencing ARIA attributes (canonical lowercase, hyphenated) queued
+	 * by queueAriaRefs() and resolved in the second pass by resolveAll().
+	 *
+	 * @var string[]
+	 */
+	const REFERENCE_ARIA_ATTRS = [
+		'aria-labelledby', 'aria-describedby', 'aria-details',
+		'aria-controls', 'aria-owns', 'aria-flowto', 'aria-activedescendant',
+	];
+
 	/** @var StructureTree  injected once; walked during resolveAll() to populate /Alt /E /Ref. */
 	private $tree;
 
@@ -155,6 +166,41 @@ class AriaIdResolver
 		$id = strtolower((string) $id);
 		if ($id !== '' && !isset($this->idMap[$id])) {
 			$this->idMap[$id] = $elem;
+		}
+	}
+
+	/**
+	 * Register a struct element's HTML id and queue all of its ID-referencing
+	 * ARIA attributes in one call — collapsing the registerId() + per-attribute
+	 * queue() loop that was copy-pasted across Tag\A, Tag\InlineTag and the
+	 * image object paths (Figure / barcode / text-circle) in Mpdf.
+	 *
+	 * Two source conventions carry the same data under different key spellings:
+	 *   - HTML tag handlers: uppercase, hyphenated — ID, ARIA-LABELLEDBY, …
+	 *   - image object buffer ($objattr = true): pdfua_-prefixed, lowercase,
+	 *     underscored — pdfua_id, pdfua_aria_labelledby, …. ($objattr also
+	 *     carries an unrelated integer 'ID' = Form XObject number, so the
+	 *     convention must be selected explicitly rather than sniffed.)
+	 * Either way the canonical lowercase-hyphenated name is passed to queue().
+	 *
+	 * @param  StructureElement $elem     struct element to bind the id / refs to
+	 * @param  array            $attr     source attribute array
+	 * @param  bool             $objattr  true → read pdfua_-prefixed keys; false → HTML tag keys
+	 * @return void
+	 */
+	public function queueAriaRefs(StructureElement $elem, array $attr, $objattr = false)
+	{
+		$idKey = $objattr ? 'pdfua_id' : 'ID';
+		if (!empty($attr[$idKey])) {
+			$this->registerId($attr[$idKey], $elem);
+		}
+		foreach (self::REFERENCE_ARIA_ATTRS as $ariaName) {
+			$key = $objattr
+				? 'pdfua_' . str_replace('-', '_', $ariaName) // pdfua_aria_labelledby
+				: strtoupper($ariaName);                       // ARIA-LABELLEDBY
+			if (!empty($attr[$key])) {
+				$this->queue($elem, $ariaName, $attr[$key]);
+			}
 		}
 	}
 

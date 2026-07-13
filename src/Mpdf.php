@@ -7163,7 +7163,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * @param  bool $is_table  true when called from inside table-cell content
 	 * @return void
 	 */
-	private function restoreFlowingBlockPdfuaState($is_table = false)
+	public function restoreFlowingBlockPdfuaState($is_table = false)
 	{
 		if (!$this->PDFUA || $is_table) {
 			return;
@@ -7183,6 +7183,33 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				? $blk['pdfua_struct_elem']
 				: null;
 		}
+	}
+
+	/**
+	 * PDF/UA-1 — fold an SVG's embedded <title>/<desc> accessible metadata into
+	 * a single /Alt string. Shared by printobjectbuffer() and Image() so the
+	 * ''/null/text triage lives in one place: title + desc join with a blank
+	 * line, a lone title or desc stands alone, and an SVG carrying neither
+	 * returns null (leaving the caller's missing-alt handling untouched).
+	 * ISO 14289-1:2014 §7.3 / Matterhorn 13-004; W3C SVG 1.1 §5.4.
+	 *
+	 * @param  array $info  image / form-object info array (accessible_title / accessible_desc)
+	 * @return string|null  the promoted /Alt, or null when no metadata is present
+	 */
+	private function svgAccessibleAlt(array $info)
+	{
+		$svgTitle = isset($info['accessible_title']) ? $info['accessible_title'] : null;
+		$svgDesc  = isset($info['accessible_desc'])  ? $info['accessible_desc']  : null;
+		if ($svgTitle !== null && $svgDesc !== null) {
+			return $svgTitle . "\n\n" . $svgDesc;
+		}
+		if ($svgTitle !== null) {
+			return $svgTitle;
+		}
+		if ($svgDesc !== null) {
+			return $svgDesc;
+		}
+		return null;
 	}
 
 	/**
@@ -8373,16 +8400,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						&& isset($objattr['itype']) && $objattr['itype'] === 'svg'
 						&& isset($objattr['file'])
 						&& isset($this->formobjects[$objattr['file']])) {
-						$svgInfo  = $this->formobjects[$objattr['file']];
-						$svgTitle = isset($svgInfo['accessible_title']) ? $svgInfo['accessible_title'] : null;
-						$svgDesc  = isset($svgInfo['accessible_desc'])  ? $svgInfo['accessible_desc']  : null;
-						if ($svgTitle !== null && $svgDesc !== null) {
-							$pdfuaImageAlt = $svgTitle . "\n\n" . $svgDesc;
-						} elseif ($svgTitle !== null) {
-							$pdfuaImageAlt = $svgTitle;
-						} elseif ($svgDesc !== null) {
-							$pdfuaImageAlt = $svgDesc;
-						}
+						$pdfuaImageAlt = $this->svgAccessibleAlt($this->formobjects[$objattr['file']]);
 					}
 
 					// PDF/UA-1 audit E11 — ARIA / title accessible-name fallback.
@@ -8470,20 +8488,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// that the Figure struct element exists. Attrs were captured at
 						// parse time in Img::open() and carried through $objattr.
 						$figureElem = $this->ua->getStructureTree()->getCurrent();
-						if (!empty($objattr['pdfua_id'])) {
-							$this->ua->getAriaIdResolver()->registerId($objattr['pdfua_id'], $figureElem);
-						}
-						foreach (['aria_labelledby', 'aria_describedby', 'aria_details',
-							'aria_controls', 'aria_owns', 'aria_flowto', 'aria_activedescendant'] as $ariaField) {
-							$objKey = 'pdfua_' . $ariaField;
-							if (!empty($objattr[$objKey])) {
-								$this->ua->getAriaIdResolver()->queue(
-									$figureElem,
-									str_replace('_', '-', $ariaField),
-									$objattr[$objKey]
-								);
-							}
-						}
+						$this->ua->getAriaIdResolver()->queueAriaRefs($figureElem, $objattr, true);
 						$structParents = isset($this->pageDim[$this->page]['structParents'])
 							? $this->pageDim[$this->page]['structParents']
 							: 0;
@@ -8624,20 +8629,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// at _enddoc() time. The ARIA data was captured at parse time in
 						// BarCode::open() and serialised into $objattr['pdfua_*'] fields.
 						$barcodeElem = $this->ua->getStructureTree()->getCurrent();
-						if (!empty($objattr['pdfua_id'])) {
-							$this->ua->getAriaIdResolver()->registerId($objattr['pdfua_id'], $barcodeElem);
-						}
-						foreach (['aria_labelledby', 'aria_describedby', 'aria_details',
-							'aria_controls', 'aria_owns', 'aria_flowto', 'aria_activedescendant'] as $ariaField) {
-							$objKey = 'pdfua_' . $ariaField;
-							if (!empty($objattr[$objKey])) {
-								$this->ua->getAriaIdResolver()->queue(
-									$barcodeElem,
-									str_replace('_', '-', $ariaField),
-									$objattr[$objKey]
-								);
-							}
-						}
+						$this->ua->getAriaIdResolver()->queueAriaRefs($barcodeElem, $objattr, true);
 						$structParents = isset($this->pageDim[$this->page]['structParents'])
 							? $this->pageDim[$this->page]['structParents'] : 0;
 						$mcid = $this->ua->getStructureTree()->addContent($structParents);
@@ -8798,20 +8790,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						// at _enddoc() time. The ARIA data was captured at parse time in
 						// TextCircle::open() and serialised into $objattr['pdfua_*'] fields.
 						$textCircleElem = $this->ua->getStructureTree()->getCurrent();
-						if (!empty($objattr['pdfua_id'])) {
-							$this->ua->getAriaIdResolver()->registerId($objattr['pdfua_id'], $textCircleElem);
-						}
-						foreach (['aria_labelledby', 'aria_describedby', 'aria_details',
-							'aria_controls', 'aria_owns', 'aria_flowto', 'aria_activedescendant'] as $ariaField) {
-							$objKey = 'pdfua_' . $ariaField;
-							if (!empty($objattr[$objKey])) {
-								$this->ua->getAriaIdResolver()->queue(
-									$textCircleElem,
-									str_replace('_', '-', $ariaField),
-									$objattr[$objKey]
-								);
-							}
-						}
+						$this->ua->getAriaIdResolver()->queueAriaRefs($textCircleElem, $objattr, true);
 						$structParents = isset($this->pageDim[$this->page]['structParents'])
 							? $this->pageDim[$this->page]['structParents'] : 0;
 						$mcid = $this->ua->getStructureTree()->addContent($structParents);
@@ -10482,15 +10461,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					// $alt both still win over the SVG metadata.
 					// ISO 14289-1:2014 §7.3 / Matterhorn 13-004; W3C SVG 1.1 §5.4.
 					if ($alt === null && isset($info['type']) && $info['type'] === 'svg') {
-						$svgTitle = isset($info['accessible_title']) ? $info['accessible_title'] : null;
-						$svgDesc  = isset($info['accessible_desc'])  ? $info['accessible_desc']  : null;
-						if ($svgTitle !== null && $svgDesc !== null) {
-							$alt = $svgTitle . "\n\n" . $svgDesc;
-						} elseif ($svgTitle !== null) {
-							$alt = $svgTitle;
-						} elseif ($svgDesc !== null) {
-							$alt = $svgDesc;
-						}
+						$alt = $this->svgAccessibleAlt($info);
 					}
 
 					if ($alt === '') {

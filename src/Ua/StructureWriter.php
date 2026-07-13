@@ -58,6 +58,20 @@ class StructureWriter
 	private $rootObjNum = 0;
 
 	/**
+	 * Memoised /StructParents => page-object-number map for the current
+	 * writeStructTree() pass.
+	 *
+	 * buildPageRefMap() is a full pageDim scan; writeElement() recurses over
+	 * every struct element and each MCR branch needs this lookup. Building it
+	 * once at the top of writeStructTree() (instead of per element) keeps the
+	 * tree walk O(elements + pages) rather than O(elements × pages)
+	 * (UA1 audit E-P3c).
+	 *
+	 * @var array<int,int>|null  null between writeStructTree() invocations
+	 */
+	private $pageRefMap = null;
+
+	/**
 	 * @param Mpdf          $mpdf   host Mpdf for object-number allocation and page-ref lookups
 	 * @param BaseWriter    $writer PDF byte emitter
 	 * @param StructureTree $tree   in-memory element stack + ParentTree accumulator to serialise
@@ -153,6 +167,12 @@ class StructureWriter
 		// buffer offset. This reserves numbers so that parent /P and child /K cross-refs
 		// are all valid before any dict body is written.
 		$this->reserveObjectNumbers($this->tree->getRoot());
+
+		// Build the /StructParents => page-object-number map once for the whole
+		// tree walk. writeElement() recurses over every struct element and its
+		// MCR branch reads this map; rebuilding the full pageDim scan per element
+		// was O(elements × pages) (UA1 audit E-P3c).
+		$this->pageRefMap = $this->buildPageRefMap();
 
 		// Emit struct element dicts (depth-first, children before parents).
 		//
@@ -397,7 +417,7 @@ class StructureWriter
 		// MCR entries (ISO 32000-1 §14.7.4.4 Table 324).
 		// Single-page single-MCID with no /Stm: bare integer is allowed and preferred.
 		// Multi-page, multi-MCID, or /Stm references require full MCR dicts.
-		$pageRefs = $this->buildPageRefMap();
+		$pageRefs = $this->pageRefMap;
 		$singleSimpleMcid = (
 			count($mcids) === 1
 			&& empty($objrefs)
@@ -631,7 +651,8 @@ class StructureWriter
 	/**
 	 * Build a map from /StructParents integer to PDF page object number.
 	 *
-	 * Used by writeElement() to populate MCR dict /Pg entries. Page object
+	 * Called once per writeStructTree() pass and cached in $this->pageRefMap,
+	 * which writeElement() reads to populate MCR dict /Pg entries. Page object
 	 * numbers are found in $mpdf->offsets — the offset table doubles as the
 	 * object-number lookup since offsets[n] is non-zero iff object n exists.
 	 *
