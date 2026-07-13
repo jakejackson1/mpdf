@@ -603,7 +603,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	var $mb_enc;
 	var $originalMbEnc;
-	var $originalMbRegexEnc;
 
 	var $directionality;
 
@@ -1146,7 +1145,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->mb_enc = 'windows-1252';
 		$this->originalMbEnc = mb_internal_encoding();
-		$this->originalMbRegexEnc = mb_regex_encoding();
 
 		$this->directionality = 'ltr';
 		$this->defaultAlign = 'L';
@@ -1420,7 +1418,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		} else {
 			$this->setMBencoding('UTF-8'); // sets $this->mb_enc
 		}
-		@mb_regex_encoding('UTF-8'); // required only for mb_ereg... and mb_split functions
 
 		// Adobe CJK fonts
 		$this->available_CJK_fonts = [
@@ -1570,7 +1567,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	public function cleanup()
 	{
 		mb_internal_encoding($this->originalMbEnc);
-		@mb_regex_encoding($this->originalMbRegexEnc);
 
 		// this will free up the readers, based on code from Setasign's FpdiTrait::cleanUp()
 		foreach ($this->createdReaders as $id) {
@@ -9709,15 +9705,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (!function_exists('mb_substr')) {
 			throw new \Mpdf\MpdfException('mbstring extension must be loaded in order to run mPDF');
 		}
-
-		if (!function_exists('mb_regex_encoding')) {
-			$mamp = '';
-			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-				$mamp = ' If using MAMP, there is a bug in its PHP build causing this.';
-			}
-
-			throw new \Mpdf\MpdfException('mbstring extension with mbregex support must be loaded in order to run mPDF.' . $mamp);
-		}
 	}
 
 	function _puthtmlheaders()
@@ -11657,6 +11644,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$decToAlpha = new Conversion\DecToAlpha();
 		$decToCjk = new Conversion\DecToCjk();
+		$decToGreek = new Conversion\DecToGreek();
 		$decToHebrew = new Conversion\DecToHebrew();
 		$decToRoman = new Conversion\DecToRoman();
 		$decToOther = new Conversion\DecToOther($this);
@@ -11678,6 +11666,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		} elseif ($lowertype == 'lower-roman' || $type == 'i') {
 
 			$ppgno = $decToRoman->convert($ppgno, false);
+
+		} elseif ($lowertype == 'lower-greek') {
+
+			$ppgno = $decToGreek->convert($ppgno);
 
 		} elseif ($lowertype == 'hebrew') {
 
@@ -15686,6 +15678,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} else {
 					$blt_width = $this->GetStringWidth(str_repeat('m', strlen($maxnuma)) . $this->list_number_suffix);
 				}
+				break;
+			case 'lower-greek':
+				$decToGreek = new Conversion\DecToGreek();
+				$maxnumg = $decToGreek->convert($maxnum);
+				$blt_width = $this->GetStringWidth(str_repeat('ω', mb_strlen($maxnumg, 'UTF-8')) . $this->list_number_suffix);
 				break;
 			case 'upper-roman':
 			case 'I':
