@@ -2119,15 +2119,34 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		return $n;
 	}
 
+	/**
+	 * Guard shared by the optional-content entry points (SetVisibility, BeginLayer).
+	 *
+	 * Optional content groups are unavailable under PDF/A and PDF/X, so record the
+	 * warning and tell the caller to skip emitting the OCG. Otherwise the base
+	 * version is bumped to 1.5 for the OCG feature — except under PDF/A, PDF/X or
+	 * PDF/UA, whose declared base versions must be preserved (PDF/UA-1 is defined on
+	 * PDF 1.7, ISO 14289-1:2014 §6).
+	 *
+	 * @param string $warning message pushed to $PDFAXwarnings when OCGs are unavailable
+	 * @return bool true when optional content may be emitted, false when it must be skipped
+	 */
+	private function allowOptionalContent($warning)
+	{
+		if ($this->PDFA || $this->PDFX) {
+			$this->PDFAXwarnings[] = $warning;
+			return false;
+		}
+		if (!$this->PDFUA) {
+			$this->pdf_version = '1.5';
+		}
+		return true;
+	}
+
 	function SetVisibility($v)
 	{
-		if (($this->PDFA || $this->PDFX) && $this->visibility != 'visible') {
-			$this->PDFAXwarnings[] = "Cannot set visibility to anything other than full when using PDFA or PDFX";
+		if ($v != 'visible' && !$this->allowOptionalContent('Cannot set visibility to anything other than full when using PDFA or PDFX')) {
 			return '';
-		} elseif (!$this->PDFA && !$this->PDFX && !$this->PDFUA) {
-			// PDF/UA-1 is based on PDF 1.7 (ISO 14289-1:2014 §6); do not downgrade
-			// to 1.5 when PDFUA is active, just as we preserve version for PDFA/PDFX.
-			$this->pdf_version = '1.5';
 		}
 		if ($this->visibility != 'visible') {
 			$this->writer->write('EMC');
@@ -2995,13 +3014,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		if (!isset($this->layers[$id])) {
 			$this->layers[$id] = ['name' => 'Layer ' . ($id)];
-			if (($this->PDFA || $this->PDFX)) {
-				$this->PDFAXwarnings[] = "Cannot use layers when using PDFA or PDFX";
+			if (!$this->allowOptionalContent('Cannot use layers when using PDFA or PDFX')) {
 				return '';
-			} elseif (!$this->PDFA && !$this->PDFX && !$this->PDFUA) {
-				// PDF/UA-1 is based on PDF 1.7 (ISO 14289-1:2014 §6); do not downgrade
-				// to 1.5 when PDFUA is active, just as we preserve version for PDFA/PDFX.
-				$this->pdf_version = '1.5';
 			}
 		}
 		$this->current_layer = $id;
