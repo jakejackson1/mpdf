@@ -713,6 +713,43 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that a multi-page document with multi-MCID pages across several
+	 * /StructParents keys passes ua1.
+	 *
+	 * Exercises StructureWriter::writeParentTree()'s reworked value-array
+	 * emission (UA1 audit E23): each page dict gets its own /StructParents key
+	 * and its value is an MCID-indexed array of struct element refs. Mixing
+	 * paragraphs, a table and an image over several pages produces multiple keys
+	 * each holding a multi-element value array, confirming the gap-preserving
+	 * builder still yields conformant, correctly-aligned ParentTree entries.
+	 *
+	 * @return void
+	 */
+	public function testMultiKeyParentTreePassesUa1()
+	{
+		$png = base64_encode(
+			base64_decode(
+				'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+			)
+		);
+
+		$html = '<h1>Report</h1>'
+			. '<p>First paragraph on the first page with enough words to be a real block.</p>'
+			. '<p>Second paragraph, also on the first page, contributing another MCID.</p>'
+			. '<img src="data:image/png;base64,' . $png . '" alt="A decorative square swatch." style="width:20px;height:20px" />'
+			. '<table border="1"><thead><tr><th scope="col">Name</th><th scope="col">Value</th></tr></thead>'
+			. '<tbody><tr><td>Alpha</td><td>1</td></tr><tr><td>Beta</td><td>2</td></tr></tbody></table>'
+			. '<pagebreak />'
+			. '<h2>Appendix</h2>'
+			. '<p>A paragraph on the second page, giving that page its own StructParents key.</p>'
+			. '<p>Another second-page paragraph so the second key also holds several MCIDs.</p>';
+
+		$mpdf = $this->makeMpdf();
+		$pdf  = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'multi-key ParentTree document');
+	}
+
+	/**
 	 * Test that a document with abbr elements passes ua1.
 	 *
 	 * Abbreviations must produce Span struct elements with /E (expansion text)

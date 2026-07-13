@@ -530,13 +530,26 @@ class StructureWriter
 		// (singular /StructParent) entries into one sorted NumTree.
 		$entries = [];
 
-		// Page-level entries: value is a dense array of struct element refs.
+		// Page-level entries: value is an array indexed by MCID.
+		//
+		// ISO 32000-1 §14.7.4.4 — the value array position MUST equal the MCID:
+		// index i holds the struct element owning marked content with /MCID i.
+		// Emitting refs by iteration order (append-per-entry) is only correct
+		// when the MCID keys are dense and 0-based. Imported MCRs
+		// (StructureTree::registerImportedMcr()) copy source-PDF MCIDs verbatim,
+		// so a key's map can be non-zero-based or contain a gap; a positional
+		// append would then shift every later ref, mis-mapping MCIDs to elements
+		// (UA1 audit E23). Walk 0..maxMcid explicitly and place each ref at its
+		// own index, emitting `null` for any MCID with no owner so the remaining
+		// positions stay aligned.
 		foreach ($parentTree as $key => $mcidMap) {
-			$refs = [];
-			// mcidMap is keyed by MCID — sort by MCID to ensure dense, 0-based order.
 			ksort($mcidMap);
-			foreach ($mcidMap as $structElem) {
-				$refs[] = $structElem->getObjNum() . ' 0 R';
+			$refs   = [];
+			$maxMcid = empty($mcidMap) ? -1 : array_key_last($mcidMap);
+			for ($mcid = 0; $mcid <= $maxMcid; $mcid++) {
+				$refs[] = isset($mcidMap[$mcid])
+					? $mcidMap[$mcid]->getObjNum() . ' 0 R'
+					: 'null';
 			}
 			$entries[$key] = '[' . implode(' ', $refs) . ']';
 		}
