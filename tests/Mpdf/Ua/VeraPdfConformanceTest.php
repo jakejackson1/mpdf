@@ -152,6 +152,34 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Header-cell associations must pass ua1 (audit E12).
+	 *
+	 * A `<th id scope>` builds its TH struct element once and registers its /ID
+	 * and /Scope against it; a body `<td headers>` references that /ID via
+	 * /Headers (Matterhorn 09-004/005). A `<th>` inside a running header is
+	 * pagination artifact and must not attach its id to the Document root.
+	 *
+	 * @return void
+	 */
+	public function testHeaderCellAssociationsPassUa1()
+	{
+		$mpdf = $this->makeMpdf();
+		$mpdf->SetHTMLHeader(
+			'<table><tr><th scope="col" style="font-size: 9pt;">Running header cell</th></tr></table>'
+		);
+		$html = '<h1>Header cell associations</h1>'
+			. '<table border="1">'
+			. '<thead><tr><th id="q1" scope="col">Q1</th><th id="q2" scope="col">Q2</th></tr></thead>'
+			. '<tbody>'
+			. '<tr><td headers="q1">10</td><td headers="q2">20</td></tr>'
+			. '<tr><th id="tot" scope="row">Total</th><td headers="tot q1">30</td></tr>'
+			. '</tbody>'
+			. '</table>';
+		$pdf = $this->getOutput($mpdf, $html);
+		$this->assertVeraPdfCompliant($pdf, 'header cell associations');
+	}
+
+	/**
 	 * Test that block-level content inside a table cell passes ua1 (audit E9).
 	 *
 	 * A heading and a list inside a `<td>` must open their real H2 and L/LI
