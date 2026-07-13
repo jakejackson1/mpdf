@@ -215,19 +215,24 @@ These are hard conformance blockers.
 - **Root cause:** `data/iccprofiles/` ships only `sRGB_IEC61966-2-1.icc` (RGB).
   With B1 requiring an embedded CMYK profile, an X-4 doc that omits `ICCProfile`
   has nothing to embed.
-- **Approach:** Add a redistributable CMYK profile (e.g. a coated FOGRA/GRACoL
-  class profile under a licence compatible with mPDF's GPL-2.0-or-later, or the
-  ICC's freely-redistributable reference) to `data/iccprofiles/`, and have B1's
-  fallback load it. The `/OutputConditionIdentifier` should name the profile's
-  characterization. Document how to override with a house profile via
+- **Approach:** Add a redistributable CMYK profile to `data/iccprofiles/` and have
+  B1's fallback load it. Document how to override with a house profile via
   `ICCProfile`.
-- **Files:** `data/iccprofiles/<cmyk>.icc` (new),
-  `src/Writer/MetadataWriter.php` (fallback path), a short note in the config
-  docs.
-- **Verify:** Tier 1 — X-4 with no `ICCProfile` still embeds a 4-component ICC.
-- **Size:** ~15 LOC + the profile asset. *(Licence check on the profile is the
-  one non-code gate — resolve before merge; the ICC reference CMYK profiles are
-  redistributable.)*
+- **Resolved:** Bundled `SWOP2006_Coated3v2.icc` — the IDEAlliance / X-Rite
+  reference profile from the ICC Profile Registry (`prtr` device class, CMYK,
+  ICC v2). Its licence permits use, embedding, exchange and sharing (i.e.
+  redistribution) without restriction; it may not be altered or sold without
+  IDEAlliance's permission, so it is shipped verbatim as a separate, aggregated
+  data file with its licence recorded in `data/iccprofiles/NOTICE.md`. This
+  replaces the earlier `default_cmyk.icc` (Ghostscript/Artifex, AGPL — not
+  compatible with mPDF's licence).
+- **Files:** `data/iccprofiles/SWOP2006_Coated3v2.icc` (new),
+  `data/iccprofiles/NOTICE.md` (new), `data/iccprofiles/default_cmyk.icc`
+  (removed), `src/Writer/MetadataWriter.php` (fallback path).
+- **Verify:** Tier 1 — X-4 with no `ICCProfile` still embeds a 4-component ICC,
+  and the bundled fallback is asserted to be a `prtr`/CMYK profile
+  (`testBundledX4CmykFallbackIsAPrinterCmykProfile`).
+- **Size:** ~15 LOC + the profile asset. *(Licence gate resolved above.)*
 
 ### B3 — Emit the `pdfxid` XMP identifier for X-4
 

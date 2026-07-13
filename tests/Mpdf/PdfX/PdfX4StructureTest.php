@@ -166,6 +166,20 @@ class PdfX4StructureTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertStringNotContainsString('/N 3', $out, 'a CMYK default intent must not tag /N 3');
 	}
 
+	public function testBundledX4CmykFallbackIsAPrinterCmykProfile()
+	{
+		// The PDF/X-4 default output intent must be a genuine printer profile: PDF/X
+		// rejects any output-intent DestOutputProfile whose ICC device class is not
+		// 'prtr'. This pins the bundled fallback so a future profile swap cannot
+		// silently ship a display/scanner-class or non-CMYK profile.
+		$icc = __DIR__ . '/../../../data/iccprofiles/SWOP2006_Coated3v2.icc';
+		$this->assertFileExists($icc, 'the bundled PDF/X-4 CMYK fallback profile must be present');
+
+		$header = file_get_contents($icc, false, null, 0, 20);
+		$this->assertSame('prtr', substr($header, 12, 4), 'X-4 output-intent profile must be ICC device class prtr (printer)');
+		$this->assertSame('CMYK', substr($header, 16, 4), 'X-4 output-intent fallback must be a CMYK profile');
+	}
+
 	// ------------------------------------------------------------------ B3/B4/B5
 
 	public function testX4XmpUsesPdfxidIdentifier()

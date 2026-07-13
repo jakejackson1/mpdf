@@ -248,8 +248,8 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 				$this->writer->write('/DestOutputProfile ' . ($this->mpdf->n + 1) . ' 0 R');
 			} elseif ($this->mpdf->pdfxAllowsTransparency()) {
 				// PDF/X-4 requires an embedded DestOutputProfile even when no user profile is
-				// supplied, so fall back to the bundled default CMYK profile (see B2).
-				$this->writer->write('/Info (Default CMYK output intent)');
+				// supplied, so fall back to the bundled SWOP2006 coated CMYK profile.
+				$this->writer->write('/Info (SWOP2006 Coated3v2)');
 				$this->writer->write('/OutputConditionIdentifier (Custom)');
 				$this->writer->write('/OutputCondition ()');
 				$this->writer->write('/DestOutputProfile ' . ($this->mpdf->n + 1) . ' 0 R');
@@ -319,7 +319,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		}
 
 		// Same profile selection as writeOutputIntent(): a user ICC profile if supplied,
-		// otherwise the bundled default CMYK profile (this method only runs for PDF/X-4, so
+		// otherwise the bundled SWOP2006 CMYK profile (this method only runs for PDF/X-4, so
 		// the shared loader's default branch is the CMYK profile).
 		$s = $this->loadOutputIntentProfileBytes();
 
@@ -361,7 +361,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	 * Returns the raw ICC profile bytes used for the PDF/X output intent's
 	 * DestOutputProfile and, for PDF/X-4, the transparency-group blending colour space.
 	 * A user-supplied profile wins; otherwise a PDF/X-4 document falls back to the
-	 * bundled default CMYK profile and any other document to the bundled sRGB profile.
+	 * bundled SWOP2006 coated CMYK profile and any other document to the bundled sRGB profile.
 	 * Single source of truth shared by writeOutputIntent() and
 	 * writeTransparencyGroupColorSpace() so the two never embed different profiles.
 	 *
@@ -377,8 +377,8 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		}
 
 		if ($this->mpdf->pdfxAllowsTransparency()) {
-			// PDF/X-4 with no user profile: embed the bundled default CMYK profile (/N 4).
-			return file_get_contents(__DIR__ . '/../../data/iccprofiles/default_cmyk.icc');
+			// PDF/X-4 with no user profile: embed the bundled SWOP2006 coated CMYK profile (/N 4).
+			return file_get_contents(__DIR__ . '/../../data/iccprofiles/SWOP2006_Coated3v2.icc');
 		}
 
 		return file_get_contents(__DIR__ . '/../../data/iccprofiles/sRGB_IEC61966-2-1.icc');
