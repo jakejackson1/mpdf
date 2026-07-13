@@ -157,10 +157,13 @@ class FpdiStructMergerTest extends PdfUaTestCase
 	}
 
 	/**
-	 * Importing an untagged PDF page in PDFUA mode emits /Artifact BDC in the page stream.
+	 * Importing an untagged PDF page in PDFUA auto mode emits /Artifact BDC in the
+	 * page stream.
 	 *
 	 * ISO 14289-1:2014 §7.1 — real content must be a struct element or Artifact.
-	 * Imported pages cannot carry struct tagging, so they are wrapped as Artifact.
+	 * An untagged imported page carries no struct tagging, so in auto mode it is
+	 * wrapped as Artifact (UA1 audit E15 — strict mode throws instead; that path
+	 * is covered by FpdiImportTest).
 	 */
 	public function testImportProducesArtifactBdc()
 	{
@@ -168,7 +171,7 @@ class FpdiStructMergerTest extends PdfUaTestCase
 			$this->markTestSkipped('FPDI test fixture not available: ' . $this->untaggedPdf);
 		}
 
-		$mpdf = $this->makeMpdf();
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$mpdf->setSourceFile($this->untaggedPdf);
 		$pageId = $mpdf->importPage(1);
 		$mpdf->AddPage();
@@ -227,6 +230,9 @@ class FpdiStructMergerTest extends PdfUaTestCase
 	 *
 	 * The Artifact BDC emitted by the hook uses /Artifact <</Type /Layout>> BDC;
 	 * the struct element BDC for the <p> uses /P <</MCID N>> BDC.
+	 *
+	 * Auto mode (PDFUAauto=true) so the untagged import is wrapped as an Artifact
+	 * rather than throwing (UA1 audit E15).
 	 */
 	public function testImportArtifactAndStructElementCoexist()
 	{
@@ -234,7 +240,7 @@ class FpdiStructMergerTest extends PdfUaTestCase
 			$this->markTestSkipped('FPDI test fixture not available: ' . $this->untaggedPdf);
 		}
 
-		$mpdf = $this->makeMpdf();
+		$mpdf = $this->makeMpdf(['PDFUAauto' => true]);
 		$mpdf->setSourceFile($this->untaggedPdf);
 		$pageId = $mpdf->importPage(1);
 		$mpdf->AddPage();

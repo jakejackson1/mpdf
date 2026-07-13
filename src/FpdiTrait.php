@@ -88,6 +88,17 @@ trait FpdiTrait
 	 */
 	protected $lastSetSourceKey = null;
 
+	/**
+	 * Per-import diagnostics in PDF/UA-1 mode, keyed by the FPDI pageId returned
+	 * from importPage(). Records the redacted source key (encryptedSourceKey()
+	 * shape) and the source page number so useImportedPage() can name the page
+	 * when an untagged import is wrapped as an /Artifact (auto-mode warning) or
+	 * refused (strict-mode throw) — UA1 audit E15.
+	 *
+	 * @var array<string, array{source: string|null, pageNumber: int}>
+	 */
+	protected $importedPageSources = [];
+
 	protected function setPageFormat($format, $orientation)
 	{
 		// in mPDF this needs to be "P" (why ever)
@@ -487,9 +498,16 @@ trait FpdiTrait
 			$this->AddPage();
 		}
 
-		/* Extract $x if an array */
+		/* Extract $x if an array. A PDF/UA-1 author may pass 'alt' to give an
+		 * untagged imported page an accessible name (UA1 audit E15); capture it
+		 * before extract() since it has no matching local variable and would be
+		 * dropped by EXTR_IF_EXISTS. */
+		$importAlt = null;
 		if (is_array($x)) {
-			unset($x['pageId']);
+			if (array_key_exists('alt', $x)) {
+				$importAlt = $x['alt'];
+			}
+			unset($x['pageId'], $x['alt']);
 			extract($x, EXTR_IF_EXISTS);
 			if (is_array($x)) {
 				$x = 0;
@@ -563,6 +581,7 @@ trait FpdiTrait
 		// at this point in the call stack (it is only set during writeImportedPagesAndResolvedObjects).
 		$pdfuaMerger    = null;
 		$useTaggedMerge = false;
+		$tier1Figure    = false;
 		if ($this->PDFUA && isset($this->importedPages[$pageId])) {
 			$pdfuaMerger = $this->ua->getFpdiStructMerger();
 			$readerId    = $this->importedPages[$pageId]['readerId'];
@@ -579,9 +598,40 @@ trait FpdiTrait
 				// placement (first use + all SetPageTemplate reuses).
 				$pdfuaMerger->recordHostPage($pageId, $this->page);
 			} else {
-				// Tier 1: wrap Do as Artifact. This is also the demotion path for
-				// tagged sources whose verifyAndPrepareMerge() failed in auto mode.
-				$this->writer->write('/Artifact <</Type /Layout>> BDC');
+				// Tier 1: the source carries no usable struct tagging (an untagged
+				// source, or an auto-mode demotion of a tagged source whose
+				// verifyAndPrepareMerge() failed). UA1 audit E15 — an anonymous
+				// /Artifact wrap makes the real page content wholly inaccessible,
+				// so do not do it silently:
+				//   - if the author supplied an /Alt (useImportedPage($id, ['alt'
+				//     => …])), tag the whole page as a captioned Figure so it
+				//     carries an accessible name (ISO 14289-1:2014 §7.3);
+				//   - otherwise strict mode throws (the producer must supply a
+				//     tagged source or an explicit /Alt) and auto mode wraps as
+				//     /Artifact and records a warning naming the source page.
+				$altText = is_string($importAlt) ? trim($importAlt) : null;
+				if ($altText !== null && $altText !== '') {
+					$structParents = isset($this->pageDim[$this->page]['structParents'])
+						? $this->pageDim[$this->page]['structParents'] : 0;
+					$this->ua->getStructureTree()->open('Figure', ['Alt' => $altText]);
+					$importMcid = $this->ua->getStructureTree()->addContent($structParents);
+					$this->ua->getMarkedContentHelper()->begin('Figure', $importMcid);
+					$tier1Figure = true;
+				} elseif (empty($this->PDFUAauto)) {
+					throw new \Mpdf\MpdfException(
+						'PDF/UA-1: imported PDF ' . $this->importedPageSourceLabel($pageId)
+						. ' is untagged; wrapping it as /Artifact <</Type /Layout>> would hide '
+						. 'the real page content from assistive technology (ISO 14289-1:2014 §7.1; '
+						. 'Matterhorn 01-007). Import a source that preserves its struct tagging, '
+						. "pass an accessible name via useImportedPage(\$id, ['alt' => 'description']) "
+						. 'to tag the page as a Figure, or enable PDFUAauto to wrap it as an Artifact '
+						. 'and record a warning instead of throwing.'
+					);
+				} else {
+					// Auto mode, no accessible name: wrap Do as Artifact (warning
+					// naming the source page is recorded after the Do below).
+					$this->writer->write('/Artifact <</Type /Layout>> BDC');
+				}
 			}
 		}
 
@@ -597,13 +647,23 @@ trait FpdiTrait
 				foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
 					$this->ua->addWarning($w);
 				}
+			} elseif ($tier1Figure) {
+				// UA1 audit E15 — author-supplied /Alt: close the MCID content
+				// sequence and the Figure struct element so the imported page
+				// carries an accessible name instead of vanishing into an Artifact.
+				$this->ua->getMarkedContentHelper()->end();
+				$this->ua->getStructureTree()->close();
 			} else {
-				// Tier 1: close the Artifact sequence.
+				// Tier 1: close the Artifact sequence (auto mode; strict already
+				// threw above) and record a warning naming the source page so the
+				// content loss is signalled rather than silent (UA1 audit E15).
 				$this->writer->write('EMC');
 				$pdfuaMerger->addUntaggedWarning(
-					'Imported PDF page treated as untagged and wrapped as /Artifact <</Type /Layout>> — '
-					. 'content is not tagged with a struct element. '
-					. 'Matterhorn 01-007: use a workflow that preserves struct tagging to avoid this warning.'
+					'Imported PDF ' . $this->importedPageSourceLabel($pageId)
+					. ' is untagged and was wrapped as /Artifact <</Type /Layout>> — its content '
+					. 'is not exposed to assistive technology. Pass an accessible name via '
+					. "useImportedPage(\$id, ['alt' => 'description']) to tag it as a Figure, or "
+					. 'import a source that preserves struct tagging. Matterhorn 01-007.'
 				);
 
 				// Flush accumulated warnings into UaState so they appear in getPdfUaWarnings().
@@ -718,6 +778,35 @@ trait FpdiTrait
 	}
 
 	/**
+	 * Build a human-readable "page N of <source>" label for an imported page.
+	 *
+	 * Reads only the redacted diagnostics recorded in $importedPageSources at
+	 * importPage() time (never a full filesystem path — UA1 audit L-5 / I-6),
+	 * reducing the stored source key `file:<basename>@<digest>` back to its
+	 * basename. Used to name the source page in the untagged-import warning
+	 * (auto mode) and the strict-mode throw (UA1 audit E15).
+	 *
+	 * @param  mixed $pageId  the FPDI page identifier
+	 * @return string
+	 */
+	private function importedPageSourceLabel($pageId)
+	{
+		$meta   = isset($this->importedPageSources[$pageId]) ? $this->importedPageSources[$pageId] : [];
+		$source = (isset($meta['source']) && is_string($meta['source'])) ? $meta['source'] : '';
+		if (preg_match('/^file:(?P<name>.*)@[0-9a-f]+$/', $source, $m) && $m['name'] !== '') {
+			$source = $m['name'];
+		}
+		if ($source === '') {
+			$source = 'source';
+		}
+		$pageNumber = isset($meta['pageNumber']) ? (int) $meta['pageNumber'] : 0;
+
+		return $pageNumber > 0
+			? sprintf('page %d of %s', $pageNumber, $source)
+			: sprintf('page of %s', $source);
+	}
+
+	/**
 	 * Imports a page.
 	 *
 	 * @param int $pageNumber The page number.
@@ -762,6 +851,18 @@ trait FpdiTrait
 		}
 
 		$this->importedPages[$pageId]['externalLinks'] = $this->getImportedExternalPageLinks($pageNumber);
+
+		// UA1 audit E15 — remember which (redacted) source and page this import
+		// came from so useImportedPage() can name it if the source turns out to
+		// be untagged and is either wrapped as an /Artifact (auto) or refused
+		// (strict). Keyed on the active source, matching importPage()'s own
+		// last-set-source semantics.
+		if ($this->PDFUA) {
+			$this->importedPageSources[$pageId] = [
+				'source'     => $this->lastSetSourceKey,
+				'pageNumber' => (int) $pageNumber,
+			];
+		}
 
 		return $pageId;
 	}

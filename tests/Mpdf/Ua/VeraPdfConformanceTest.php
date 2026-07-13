@@ -486,6 +486,39 @@ class VeraPdfConformanceTest extends PdfUaTestCase
 	}
 
 	/**
+	 * Test that an untagged FPDI import given an author-supplied /Alt passes ua1
+	 * (audit E15).
+	 *
+	 * An untagged source has no struct tree to clone (Tier 1). Rather than burying
+	 * its real content in an anonymous /Artifact — conformant but wholly
+	 * inaccessible — the author names the page via
+	 * useImportedPage($id, ['alt' => …]); the whole imported page is then tagged as
+	 * a Figure struct element carrying that /Alt (ISO 14289-1:2014 §7.3; Matterhorn
+	 * 13-004). The Figure owns its own MCID content, so the page is neither untagged
+	 * real content (§7.1 test 3) nor a nameless Figure.
+	 *
+	 * @return void
+	 */
+	public function testFpdiTier1ImportWithAuthorAltPassesUa1()
+	{
+		$sourceFixture = $this->makeUntaggedSourceFixture();
+
+		$mpdf = $this->makeMpdf(['enableImports' => true]);
+		$mpdf->setSourceFile($sourceFixture);
+		$pageId = $mpdf->importPage(1);
+		$mpdf->WriteHTML('<h1>Imported figure</h1>');
+		$mpdf->useImportedPage($pageId, [
+			'x'     => 15,
+			'y'     => 40,
+			'width' => 150,
+			'alt'   => 'Untagged source page rendered as an accessible figure.',
+		]);
+		$pdf = $mpdf->Output(null, 'S');
+		@unlink($sourceFixture);
+		$this->assertVeraPdfCompliant($pdf, 'FPDI Tier 1 import with author-supplied /Alt');
+	}
+
+	/**
 	 * Test that an FPDI Tier 2 import (tagged source) passes ua1.
 	 *
 	 * A tagged PDF/UA source is imported via useImportedPage(). FpdiStructMerger
