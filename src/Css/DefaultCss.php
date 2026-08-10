@@ -82,6 +82,13 @@ class DefaultCss
 			'VERTICAL-ALIGN' => 'super',
 			'FONT-SIZE' => '55%', /* Recommended 0.83em */
 		],
+		'RT' => [
+			/* Ruby annotation renders at half the base size, stacked above it
+			   (W3C Ruby Annotation §4). The vertical raise and horizontal
+			   centring are applied by the inline layout engine, keyed off the
+			   textparam['ruby'] marker set by Tag\Rt. */
+			'FONT-SIZE' => '50%',
+		],
 		'U' => [
 			'TEXT-DECORATION' => 'underline',
 		],

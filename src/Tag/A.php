@@ -3,6 +3,7 @@
 namespace Mpdf\Tag;
 
 use Mpdf\Mpdf;
+use Mpdf\Ua\UaPolicy;
 
 class A extends Tag
 {
@@ -31,22 +32,256 @@ class A extends Tag
 				$this->mpdf->_saveTextBuffer($e, '', $attr['NAME']); //an internal link (adds a space for recognition)
 			} // *TABLES*
 		}
-		if (isset($attr['HREF'])) {
+
+		// PDF/UA-1 — distinguish hyperlink anchors from destination anchors.
+		//
+		// HTML5 §4.5.1: an <a> with no `href` (or with an empty/whitespace-only
+		// `href`) is not a hyperlink — it is plain inline text and, if `name`
+		// or `id` is present, a destination anchor only.
+		//
+		// PDF representation:
+		//   - Hyperlink → Link struct element with OBJR to a link annotation
+		//     (ISO 32000-1 §14.8.2.4 Table 335; ISO 14289-1 §7.18.5 / Matterhorn 02-003).
+		//   - Destination anchor → no struct element at all; the surrounding
+		//     block tags the inner text. The /Dests catalog registration is
+		//     handled by the NAME/_saveTextBuffer path above and is independent
+		//     of struct element creation.
+		//
+		// An empty/whitespace `href` is treated as "not a hyperlink" — emitting
+		// a Link struct element for <a name="x" href="">…</a> would either be
+		// pruned in PDFUAauto mode or throw in strict mode, which is surprising
+		// for what is plausibly just a templating artefact around a destination
+		// anchor.
+		//
+		// pruneEmptyLinks() / findFirstEmptyLinkHref() (StructureTree) remain
+		// in place as defence-in-depth for the residual case of authored
+		// hyperlinks with non-empty `href` but empty bodies — which still
+		// produce empty Link elements and still must throw / be pruned.
+		$rawHref = isset($attr['HREF']) ? $attr['HREF'] : null;
+		$isHyperlink = $rawHref !== null && trim($rawHref) !== '';
+
+		if ($isHyperlink) {
 			$this->mpdf->InlineProperties['A'] = $this->mpdf->saveInlineProperties();
 			$properties = $this->cssManager->MergeCSS('INLINE', 'A', $attr);
 			if (!empty($properties)) {
 				$this->mpdf->setCSS($properties, 'INLINE');
 			}
 			$this->mpdf->HREF = $attr['HREF']; // mPDF 5.7.4 URLs
+
+			// PDF/UA-1 — javascript:/vbscript: hrefs have no accessible
+			// alternative (ISO 14289-1:2014 §7.18 / Matterhorn 17-001 + 28-002).
+			// Most readers refuse to execute them, AT announces them verbatim,
+			// and they are not keyboard-equivalent (WCAG 2.1 §2.1.1).
+			//
+			// Strict mode (PDFUAauto=false): throw — the user must remove the
+			// link, supply a real URL, or opt into auto-mode.
+			//
+			// Auto mode (PDFUAauto=true): clear HREF (no Link annotation, no
+			// Link struct element), open a Span struct element for any ARIA /
+			// lang attributes so they are preserved, and emit a single warning.
+			// The visible inner text survives as plain inline content.
+			if ($this->mpdf->PDFUA && UaPolicy::isPolicyBlockedHref($attr['HREF'])) {
+				if (empty($this->mpdf->PDFUAauto)) {
+					throw new \Mpdf\MpdfException(
+						'PDF/UA-1 Matterhorn 17-001 / 28-002: <a href="'
+						. UaPolicy::formatHrefForMessage($attr['HREF'])
+						. '"> uses a scheme with no accessible alternative. '
+						. 'Remove the link, supply a real URL (https:, mailto:, '
+						. 'tel:, #fragment, ...), or enable PDFUAauto to strip '
+						. 'the link and keep the visible text.'
+					);
+				}
+				$this->ua->addWarning(
+					'PDF/UA-1: <a href="'
+					. UaPolicy::formatHrefForMessage($attr['HREF'])
+					. '"> stripped (no Link annotation emitted) — '
+					. 'javascript:/vbscript: schemes have no accessible alternative.'
+				);
+				// Strip: clear HREF so subsequent Cell() calls do not register
+				// a Link annotation (Mpdf::Link is a no-op when HREF is empty
+				// at the dispatch sites in Mpdf::Cell()/processFragment()).
+				$this->mpdf->HREF = '';
+				// Preserve ARIA / lang as a Span struct element if present, so
+				// the anchor's accessibility hints survive even though the link
+				// itself is gone. Mirrors InlineTag::openInlineUaStruct().
+				$spanDepth = $this->openStrippedAnchorSpan($attr) ? 1 : 0;
+				$this->ua->getAnchorState()->pushStripFrame(true, $spanDepth);
+				return;
+			}
+
+			// PDF/UA-1 — a hyperlink opened inside an artifact scope (running
+			// header/footer or an aria-hidden subtree) has visible content that is
+			// itself an artifact, so it must NOT be wired into the structure tree.
+			// StructureTree::open('Link') is already a no-op here, but getCurrent()
+			// would return the artifact-scope stack top (the Document root at
+			// header-render time); capturing that via setLinkStructElem() makes
+			// writeAnnotations() hang the link annotation's OBJR / /StructParent off
+			// the Document root with no Link struct element — a silent 7.18.5 /
+			// Matterhorn 02-003 FAIL. Skip the struct wiring entirely; Mpdf::Link()
+			// drops the annotation altogether (artifact content cannot host a tagged
+			// link), leaving the visible text as artifact content. A balanced strip
+			// frame is still pushed so close() stays balanced.
+			if ($this->mpdf->PDFUA && $this->ua->getStructureTree()->isInArtifact()) {
+				$this->ua->getAnchorState()->pushStripFrame(false, 0);
+				$this->ua->getAnchorState()->setAnchorStructType(null);
+				return;
+			}
+
+			// PDF/UA-1 — push a Link struct element for hyperlinks.
+			// Destination anchors (<a name="...">) do not produce struct elements.
+			if ($this->mpdf->PDFUA) {
+				$structAttrs = [];
+				if (isset($attr['LANG'])) {
+					$structAttrs['Lang'] = $attr['LANG'];
+				}
+				// Matterhorn 28-002 — in PDFUAauto we pre-set /Alt synthesised
+				// from the href so a Link wrapping only decorative content
+				// (e.g. <a><img alt=""></a>) still has an accessible name.
+				// When real link text is present, the inner content remains
+				// the primary accessible name and /Alt acts as a fallback for
+				// the link annotation (legitimate per ISO 32000-1 §14.7.2 Table 322).
+				if (!empty($this->mpdf->PDFUAauto)) {
+					$structAttrs['Alt'] = 'Link to ' . $attr['HREF'];
+				}
+				$this->ua->getStructureTree()->open('Link', $structAttrs);
+
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				// Stash the source href on the element so StructureWriter's
+				// strict-mode empty-Link check can quote it in its exception.
+				// '_href' is filtered out by StructureWriter (it only emits
+				// known PDF dict keys), so it is safe to use as a private hint.
+				$elem->setAttribute('_href', $attr['HREF']);
+				$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
+
+				// Capture the Link struct element so Mpdf::Link() can attach the
+				// element reference to the PageLinks entry. writeAnnotations()
+				// reads it back, allocates a /StructParent integer for the link
+				// annotation, and adds an OBJR kid to the element so the link
+				// annotation is reachable from the structure tree (ISO 14289-1
+				// §7.18.5 / Matterhorn 02-003).
+				$this->ua->getAnchorState()->setLinkStructElem($elem);
+				// Record this anchor on the stack as "not stripped" so close()
+				// pops a Link element here regardless of any nested anchor.
+				$this->ua->getAnchorState()->pushStripFrame(false, 0);
+				$this->ua->getAnchorState()->setAnchorStructType('Link');
+			}
+		} elseif ($this->mpdf->PDFUA) {
+			// Non-hyperlink <a> (destination anchor or empty/whitespace href).
+			// Emit a Span struct element only when the tag carries inline
+			// accessibility metadata (Lang, aria-label) that needs a host
+			// element to attach to. Otherwise emit nothing — the surrounding
+			// block tags the inner text, and the /Dests catalog (populated via
+			// the NAME path above) owns the destination registration.
+			$structAttrs = [];
+			if (isset($attr['LANG']) && $attr['LANG'] !== '') {
+				$structAttrs['Lang'] = $attr['LANG'];
+			}
+			if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+				$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+			}
+			$spanDepth = 0;
+			if (!empty($structAttrs)) {
+				$this->ua->getStructureTree()->open('Span', $structAttrs);
+				$elem = $this->ua->getStructureTree()->getCurrent();
+				$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
+				$this->ua->getAnchorState()->setAnchorStructType('Span');
+				$spanDepth = 1;
+			}
+			// close() pops exactly one strip frame per PDFUA <a>; push one here so
+			// the pop is balanced. A depth-0 frame (no Span opened) pops nothing
+			// off the struct tree — without it, close() would pop a frame belonging
+			// to a different anchor, or leak this branch's Span onto the stack.
+			$this->ua->getAnchorState()->pushStripFrame(true, $spanDepth);
+		} elseif (isset($attr['HREF'])) {
+			// Non-hyperlink <a href> with PDFUA off (empty/whitespace href). The
+			// isHyperlink gate above only governs Link-annotation / struct-element
+			// creation — it must not suppress anchor styling. Restore the pre-UA
+			// behaviour (which keyed purely on isset($attr['HREF'])) so anchor CSS
+			// still applies for e.g. <a href="" class="x">…</a>. HREF is set from
+			// the raw (empty) value, matching the original: Mpdf::Link() is a no-op
+			// on an empty HREF so no annotation is registered.
+			$this->mpdf->InlineProperties['A'] = $this->mpdf->saveInlineProperties();
+			$properties = $this->cssManager->MergeCSS('INLINE', 'A', $attr);
+			if (!empty($properties)) {
+				$this->mpdf->setCSS($properties, 'INLINE');
+			}
+			$this->mpdf->HREF = $attr['HREF'];
 		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// PDF/UA-1 — close balanced struct elements based on the strip stack.
+		// Each open() of an <a href> pushed exactly one entry; pop it here.
+		if ($this->mpdf->PDFUA && $this->ua->getAnchorState()->hasStripFrames()) {
+			$entry     = $this->ua->getAnchorState()->popStripFrame();
+			$stripped  = $entry[0];
+			$spanDepth = $entry[1];
+			if ($stripped) {
+				// Strip path: pop the Span struct element if one was pushed.
+				while ($spanDepth > 0) {
+					$this->ua->getStructureTree()->close();
+					$spanDepth--;
+				}
+			} else {
+				// Normal Link path: pop the Link struct element opened above.
+				$this->ua->getStructureTree()->close();
+			}
+		}
+
+		// PDF/UA-1 — clear the captured Link struct element ref. Any subsequent
+		// Mpdf::Link() call (outside an <a href> scope) must not pick up a stale
+		// reference from the previous link.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getAnchorState()->clearLinkStructElem();
+		}
+
 		$this->mpdf->HREF = '';
 		if (isset($this->mpdf->InlineProperties['A'])) {
 			$this->mpdf->restoreInlineProperties($this->mpdf->InlineProperties['A']);
 		}
 		unset($this->mpdf->InlineProperties['A']);
+	}
+
+	/**
+	 * Open a Span struct element with /Lang and /Alt when PDFUA + (lang |
+	 * aria-label) is present on a stripped anchor. Mirrors
+	 * InlineTag::openInlineUaStruct() but cannot reuse it because A does not
+	 * extend InlineTag. ARIA ID cross-references are registered the same way.
+	 *
+	 * Only `lang` and `aria-label` produce a /Lang or /Alt entry directly.
+	 * `aria-labelledby`, `aria-describedby`, etc. are queued for the second-pass
+	 * resolver only when there is already a struct element to attach them to.
+	 *
+	 * @param  array $attr
+	 * @return bool  true if a Span was pushed (so close() pops one).
+	 */
+	private function openStrippedAnchorSpan(array $attr)
+	{
+		$structAttrs = [];
+		if (isset($attr['LANG']) && $attr['LANG'] !== '') {
+			$structAttrs['Lang'] = $attr['LANG'];
+		}
+		if (isset($attr['ARIA-LABEL']) && $attr['ARIA-LABEL'] !== '') {
+			$structAttrs['Alt'] = $attr['ARIA-LABEL'];
+		}
+		// If there is no direct attribute that needs a Span and no ARIA ID
+		// reference to anchor, do not produce a Span — a stripped <a> with
+		// nothing to carry should render exactly like its inner text.
+		$hasAriaRef = false;
+		foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				 'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+			if (!empty($attr[$ariaKey])) {
+				$hasAriaRef = true;
+				break;
+			}
+		}
+		if (empty($structAttrs) && !$hasAriaRef && empty($attr['ID'])) {
+			return false;
+		}
+		$this->ua->getStructureTree()->open('Span', $structAttrs);
+		$elem = $this->ua->getStructureTree()->getCurrent();
+		$this->ua->getAriaIdResolver()->queueAriaRefs($elem, $attr);
+		return true;
 	}
 }

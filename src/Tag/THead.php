@@ -38,10 +38,24 @@ class THead extends Tag
 		if (isset($properties['TEXT-ALIGN'])) {
 			$this->mpdf->thead_textalign_default = $properties['TEXT-ALIGN'];
 		}
+
+		// ISO 32000-1:2008 §14.8 Table 333 — THead is a table row-grouping
+		// element; the enclosed TR rows nest beneath it. Collapse any TBody that
+		// Tr::open() synthesised for preceding group-less rows first.
+		if ($this->mpdf->PDFUA) {
+			$tree = $this->ua->getStructureTree();
+			$tree->closeRowGroup();
+			$tree->open('THead');
+		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
 	{
+		// ISO 32000-1:2008 §14.8 Table 333 — pop the THead row-group element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->closeRowGroup();
+		}
+
 		$this->mpdf->lastoptionaltag = '';
 		unset($this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl]);
 		$this->cssManager->tbCSSlvl--;

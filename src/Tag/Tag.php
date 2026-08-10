@@ -14,6 +14,7 @@ use Mpdf\Mpdf;
 use Mpdf\Otl;
 use Mpdf\SizeConverter;
 use Mpdf\TableOfContents;
+use Mpdf\Ua\UaState;
 
 abstract class Tag
 {
@@ -70,6 +71,11 @@ abstract class Tag
 	 */
 	protected $languageToFont;
 
+	/**
+	 * @var \Mpdf\Ua\UaState
+	 */
+	protected $ua;
+
 	const ALIGN = [
 		'left' => 'L',
 		'center' => 'C',
@@ -93,7 +99,8 @@ abstract class Tag
 		SizeConverter $sizeConverter,
 		ColorConverter $colorConverter,
 		ImageProcessor $imageProcessor,
-		LanguageToFontInterface $languageToFont
+		LanguageToFontInterface $languageToFont,
+		UaState $ua = null
 	) {
 
 		$this->mpdf = $mpdf;
@@ -106,6 +113,7 @@ abstract class Tag
 		$this->colorConverter = $colorConverter;
 		$this->imageProcessor = $imageProcessor;
 		$this->languageToFont = $languageToFont;
+		$this->ua = $ua;
 	}
 
 	public function getTagName()

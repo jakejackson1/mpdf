@@ -1,0 +1,63 @@
+<style>
+.gradient {
+	border:0.1mm solid #220044;
+	background-color: #f0f2ff;
+	background-gradient: linear #c7cdde #f0f2ff 0 1 0 0.5;
+}
+.radialgradient {
+	border:0.1mm solid #220044;
+	background-color: #f0f2ff;
+	background-gradient: radial #00FFFF #FFFF00 0.5 0.5 0.5 0.5 0.65;
+	margin: auto;
+}
+.rounded {
+	border:0.1mm solid #220044;
+	background-color: #f0f2ff;
+	background-gradient: linear #c7cdde #f0f2ff 0 1 0 0.5;
+	border-radius: 2mm;
+	background-clip: border-box;
+}
+h4 {
+	font-family: sans;
+	font-weight: bold;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+}
+div {
+	padding:1em;
+	margin-bottom: 1em;
+	text-align:justify;
+}
+pre { text-align:left }
+pre.code { font-family: monospace }
+</style>
+
+<body style="background-gradient: linear #88FFFF #FFFF44 0 0.5 1 0.5;">
+<h1>mPDF</h1>
+<h2>Backgrounds and Borders</h2>
+
+<div style="border:0.1mm solid #220044; padding:1em 2em; background-color:#ffffcc; ">
+<h4>Page background</h4>
+<div class="gradient">
+The background colour can be set by CSS styles on the body tag. This will set the background for the whole page. In this document, the background has been set as a gradient.
+</div>
+
+<h4>Background Gradients</h4>
+<div class="gradient">
+Background can be set as a linear or radial gradient between two colours. The background has been set on this div element to a linear gradient.
+</div>
+<div class="radialgradient">
+The background has been set on this div element to a radial gradient. (x1, y1, x2, y2, r) where (x1, y1) is the starting point with color1, (x2, y2) is the centre with color2, and r is the radius.
+</div>
+
+<h4>Rounded Borders</h4>
+<div class="rounded">
+Rounded corners to borders can be added using border-radius as defined in the draft spec of CSS3.
+The two length values of the border-*-radius properties define the radii of a quarter ellipse that defines the shape of the corner of the outer border edge.
+</div>
+<div class="rounded">
+border-radius: 4em; would be equivalent to border-top-left-radius: 4em; border-top-right-radius: 4em; border-bottom-right-radius: 4em; border-bottom-left-radius: 4em.
+</div>
+
+</div>
+</body>

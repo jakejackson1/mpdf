@@ -33,6 +33,16 @@ use Mpdf\Writer\MetadataWriter;
 use Mpdf\Writer\OptionalContentWriter;
 use Mpdf\Writer\PageWriter;
 use Mpdf\Writer\ResourceWriter;
+use Mpdf\Ua\UaState;
+use Mpdf\Ua\StructureTree;
+use Mpdf\Ua\MarkedContentHelper;
+use Mpdf\Ua\StructureWriter;
+use Mpdf\Ua\AriaIdResolver;
+use Mpdf\Ua\LigatureActualTextWriter;
+use Mpdf\Ua\AnchorState;
+use Mpdf\Ua\InlineStructStack;
+use Mpdf\Ua\ImageMap\ImageMapRegistry;
+use Mpdf\Ua\Import\FpdiStructMerger;
 use Psr\Log\LoggerInterface;
 
 class ServiceFactory
@@ -141,6 +151,46 @@ class ServiceFactory
 			$logger
 		);
 
+		// Build the UA collaborators first; none of them take UaState — each
+		// receives only the specific pieces it needs (StructureTree,
+		// MarkedContentHelper, $writer, $mpdf) so there is no construction-time
+		// cycle when UaState is built below.
+		$structureTree            = new StructureTree();
+		$markedContentHelper      = new MarkedContentHelper($writer);
+		$structureWriter          = new StructureWriter($mpdf, $writer, $structureTree);
+		$ariaIdResolver           = new AriaIdResolver($structureTree);
+		$ligatureActualTextWriter = new LigatureActualTextWriter();
+		$fpdiStructMerger         = new FpdiStructMerger($mpdf, $structureTree);
+		$inlineStructStack        = new InlineStructStack();
+		$anchorState              = new AnchorState();
+		$imageMapRegistry         = new ImageMapRegistry($mpdf, $structureTree, $anchorState);
+
+		// Build the facade last — fully populated in a single constructor call,
+		// with no setter-based wiring needed afterwards.
+		$uaState = new UaState(
+			$structureTree,
+			$markedContentHelper,
+			$structureWriter,
+			$ariaIdResolver,
+			$ligatureActualTextWriter,
+			$fpdiStructMerger,
+			$inlineStructStack,
+			$anchorState,
+			$imageMapRegistry
+		);
+
+		// Inject the facade back into StructureTree so its annotation-level
+		// ParentTree-key allocator (nextAnnotStructParent/reserveAnnotStructParent)
+		// shares the same counter as page /StructParents — see StructureTree
+		// docblock for the collision rationale.
+		$structureTree->setUaState($uaState);
+
+		// Inject the facade into ImageMapRegistry so it can route PDFUAauto
+		// warnings through UaState::addWarning(). Done after the facade is fully
+		// built to avoid a construction-time cycle — same setter style as
+		// StructureTree::setUaState() above.
+		$imageMapRegistry->setUaState($uaState);
+
 		$tag = new Tag(
 			$mpdf,
 			$cache,
@@ -151,13 +201,14 @@ class ServiceFactory
 			$sizeConverter,
 			$colorConverter,
 			$imageProcessor,
-			$languageToFont
+			$languageToFont,
+			$uaState
 		);
 
 		$fontWriter = new FontWriter($mpdf, $writer, $fontCache, $fontDescriptor);
-		$metadataWriter = new MetadataWriter($mpdf, $writer, $form, $protection, $logger);
+		$metadataWriter = new MetadataWriter($mpdf, $writer, $form, $protection, $uaState, $logger);
 		$imageWriter = new ImageWriter($mpdf, $writer);
-		$pageWriter = new PageWriter($mpdf, $form, $writer, $metadataWriter);
+		$pageWriter = new PageWriter($mpdf, $form, $writer, $metadataWriter, $uaState);
 		$bookmarkWriter = new BookmarkWriter($mpdf, $writer);
 		$optionalContentWriter = new OptionalContentWriter($mpdf, $writer);
 		$colorWriter = new ColorWriter($mpdf, $writer);
@@ -176,10 +227,12 @@ class ServiceFactory
 			$bookmarkWriter,
 			$metadataWriter,
 			$javaScriptWriter,
-			$logger
+			$logger,
+			$uaState
 		);
 
 		return [
+			'uaState' => $uaState,
 			'otl' => $otl,
 			'bmp' => $bmp,
 			'cache' => $cache,
@@ -222,6 +275,7 @@ class ServiceFactory
 	public function getServiceIds()
 	{
 		return [
+			'uaState',
 			'otl',
 			'bmp',
 			'cache',

@@ -1,0 +1,68 @@
+<style>
+.gradient {
+	border:0.1mm solid #220044;
+	background-color: #f0f2ff;
+}
+h4 {
+	font-family: sans;
+	font-weight: bold;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+}
+div {
+	padding:1em;
+	margin-bottom: 1em;
+	text-align:justify;
+}
+.myfixed1 { position: absolute;
+	overflow: visible;
+	left: 0;
+	bottom: 0;
+	border: 1px solid #880000;
+	background-color: #FFEEDD;
+	padding: 1.5em;
+	font-family:sans;
+	margin: 0;
+}
+.myfixed2 { position: fixed;
+	overflow: auto;
+	right: 0;
+	bottom: 0mm;
+	width: 65mm;
+	border: 1px solid #880000;
+	background-color: #FFEEDD;
+	padding: 0.5em;
+	font-family:sans;
+	margin: 0;
+	rotate: 90;
+}
+</style>
+
+<body>
+<h1>mPDF</h1>
+<h2>Floating &amp; Fixed Position elements</h2>
+
+<h4>CSS "Float"</h4>
+<div class="gradient">
+Block elements can be positioned alongside each other using the CSS property float: left or right. The clear property can also be used, set as left|right|both. Float is only supported on block elements.
+<br />
+A block element next to a float has the padding adjusted so that content fits in the remaining width.
+</div>
+
+<div class="gradient" style="float: right; width: 28%; margin-bottom: 0pt; ">
+This is text in a &lt;div&gt; element that is set to float:right and width:28%.
+</div>
+<div class="gradient" style="float: left; width: 54%; margin-bottom: 0pt; ">
+This is text in a &lt;div&gt; element that is set to float:left and width:54%.
+</div>
+
+<div style="clear: both; margin: 0pt; padding: 0pt; "></div>
+This is text that follows a &lt;div&gt; element that is set to clear:both.
+
+<h4>CSS "Position"</h4>
+At the bottom of the page are two DIV elements with position:fixed and position:absolute set.
+
+<div class="myfixed1">1 Praesent pharetra nulla in turpis. Sed ipsum nulla, sodales nec, vulputate in, scelerisque vitae, magna.</div>
+
+<div class="myfixed2">2 Praesent pharetra nulla in turpis. Sed ipsum nulla, sodales nec, vulputate in, scelerisque vitae, magna.</div>
+

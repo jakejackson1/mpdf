@@ -1,0 +1,31 @@
+<h1>SVG accessible metadata</h1>
+
+<p>Inline SVG with both title and desc — promoted into the Figure /Alt:</p>
+<p>
+	<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+		<title>Company logo</title>
+		<desc>A blue circle representing the company brand.</desc>
+		<circle cx="20" cy="20" r="16" fill="blue" />
+	</svg>
+</p>
+
+<p>Inline SVG with title only:</p>
+<p>
+	<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+		<title>Status indicator</title>
+		<rect x="4" y="4" width="32" height="32" fill="green" />
+	</svg>
+</p>
+
+<p>Inline SVG with desc only:</p>
+<p>
+	<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+		<desc>Decorative pattern: red triangle pointing up.</desc>
+		<polygon points="20,4 36,36 4,36" fill="red" />
+	</svg>
+</p>
+
+<p>Decorative SVG (alt="" on the host img wins):</p>
+<p>
+	<img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjY2NjIi8+PC9zdmc+" alt="" width="40" height="40">
+</p>

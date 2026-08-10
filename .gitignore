@@ -1,3 +1,4 @@
 vendor/*
 tests/Mpdf/tmp/*
 composer.lock
+.claude

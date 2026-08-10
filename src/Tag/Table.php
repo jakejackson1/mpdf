@@ -519,6 +519,25 @@ class Table extends Tag
 		//++++++++++++++++++++++++++++
 		$this->mpdf->plainCell_properties = [];
 		unset($table);
+
+		// Push the Table struct element after tableLevel is incremented so nested
+		// tables (tableLevel > 1) land as children of the enclosing TD on the stack.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->open('Table');
+
+			$tableElem = $this->ua->getStructureTree()->getCurrent();
+			if (!empty($attr['ID'])) {
+				$this->ua->getAriaIdResolver()->registerId($attr['ID'], $tableElem);
+			}
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($tableElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
+		}
 	}
 
 	public function close(&$ahtml, &$ihtml)
@@ -732,6 +751,14 @@ class Table extends Tag
 			$this->mpdf->tdbegin = true;
 			$this->mpdf->nestedtablejustfinished = true;
 			$this->mpdf->ignorefollowingspaces = true;
+			// Pop the Table struct element for nested tables. Top-level tables
+			// pop after _tableWrite() at the end of close(). Collapse any row
+			// group still open (synthetic TBody, or an explicit group whose
+			// optional end tag was omitted) so the pop lands on the Table.
+			if ($this->mpdf->PDFUA) {
+				$this->ua->getStructureTree()->closeRowGroup();
+				$this->ua->getStructureTree()->close();
+			}
 			return;
 		}
 		$this->mpdf->cMarginL = 0;
@@ -1243,6 +1270,17 @@ class Table extends Tag
 			$this->mpdf->InlineBDF = $save_bflp;
 			$this->mpdf->InlineBDFctr = $save_bflpc; // mPDF 6
 			$this->mpdf->restoreInlineProperties($save_silp);
+		}
+
+		// Pop the Table struct element at the end of close() for top-level tables,
+		// after _tableWrite() has rendered all cells. Collapse any row group still
+		// open (synthetic TBody, or an explicit group whose optional end tag was
+		// omitted) so the pop lands on the Table.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — Table grouping element.
+		if ($this->mpdf->PDFUA) {
+			$this->ua->getStructureTree()->closeRowGroup();
+			$this->ua->getStructureTree()->close();
 		}
 	}
 

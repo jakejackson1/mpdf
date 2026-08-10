@@ -406,6 +406,18 @@ class Td extends Tag
 		unset($c);
 		$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['s'] = 0;
 
+		// Push this cell's struct element here (parse time) as a child of the
+		// current TR. _tableWrite() runs after the parse-time stack has unwound,
+		// so pdfuaOpenCellStruct() stashes a reference on the cell dict;
+		// addContentForElement() then attaches the MCID directly to the stored
+		// reference at render time.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		// ISO 14289-1:2014 §7.5 — table header associations (Matterhorn 09-004/005).
+		if ($this->mpdf->PDFUA) {
+			$this->pdfuaOpenCellStruct($attr);
+		}
+
 		$cs = $rs = 1;
 		if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
 			$cs = $this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['colspan'] = $attr['COLSPAN'];
@@ -435,8 +447,153 @@ class Td extends Tag
 		unset($table);
 	}
 
+	/**
+	 * PDF/UA-1 — push this cell's struct element, register its HTML id / ARIA
+	 * relationships, and stash a reference on the cell dict for the deferred
+	 * render path (audit E9). Also opens the cell's block-frame scope.
+	 *
+	 * Th overrides pdfuaCellStructType() / pdfuaCellStructAttrs() /
+	 * pdfuaRegisterCellId() so a header cell builds its TH element ONCE with the
+	 * same id / Headers / ARIA wiring — rather than round-tripping through a
+	 * throwaway TD and losing the id binding and header associations (audit E12).
+	 *
+	 * ISO 32000-1:2008 §14.8 Table 333 — TD/TH table element.
+	 * ISO 14289-1:2014 §7.5 — table header associations (Matterhorn 09-004/005).
+	 *
+	 * @param array $attr  the cell tag's parsed HTML attributes
+	 * @return void
+	 */
+	protected function pdfuaOpenCellStruct($attr)
+	{
+		$tree = $this->ua->getStructureTree();
+		$tree->open($this->pdfuaCellStructType(), $this->pdfuaCellStructAttrs($attr));
+
+		// In artifact scope (a cell inside a running header/footer) open() is a
+		// no-op and getCurrent() returns an ancestor; skip the id / reference
+		// wiring so the cell does not bind its HTML id or /Headers onto the
+		// Document root (audit E12). The cell renders as pagination artifact.
+		if (!$tree->isInArtifact()) {
+			$cellElem = $tree->getCurrent();
+			$this->mpdf->cell[$this->mpdf->row][$this->mpdf->col]['pdfua_struct_elem'] = $cellElem;
+
+			$this->pdfuaRegisterCellId($attr, $cellElem);
+
+			// ISO 14289-1:2014 §7.1 — ARIA relationship attributes map to /A entries on struct elem.
+			foreach (['ARIA-LABELLEDBY', 'ARIA-DESCRIBEDBY', 'ARIA-DETAILS',
+				'ARIA-CONTROLS', 'ARIA-OWNS', 'ARIA-FLOWTO', 'ARIA-ACTIVEDESCENDANT'] as $ariaKey) {
+				if (!empty($attr[$ariaKey])) {
+					$this->ua->getAriaIdResolver()->queue($cellElem, strtolower($ariaKey), $attr[$ariaKey]);
+				}
+			}
+		}
+
+		// PDF/UA-1 (audit E9) — open this cell's block-frame scope so any block
+		// tags (h1-6, ul/ol, li, p, div, …) that open inside the cell and are left
+		// un-closed by omitted HTML end tags are unwound in close() rather than
+		// leaking onto the struct stack. Unconditional so the paired
+		// pdfuaLeaveCellFrameScope() in close() stays balanced even in artifact scope.
+		$this->mpdf->pdfuaEnterCellFrameScope();
+	}
+
+	/**
+	 * The PDF struct type for this cell. Td → 'TD'; Th overrides → 'TH'.
+	 *
+	 * @return string
+	 */
+	protected function pdfuaCellStructType()
+	{
+		return 'TD';
+	}
+
+	/**
+	 * Build this cell's struct-element attribute map: /Headers (from the
+	 * headers="" attribute) plus /ColSpan / /RowSpan. Th merges /Scope on top.
+	 *
+	 * @param array $attr  the cell tag's parsed HTML attributes
+	 * @return array
+	 */
+	protected function pdfuaCellStructAttrs($attr)
+	{
+		$cellAttrs = [];
+		if (!empty($attr['HEADERS'])) {
+			// Each token in /Headers must be byte-identical to the /ID value the
+			// matching TH writes; HTML id values may contain characters illegal in
+			// PDF names (parens, slash, %, whitespace …) so we normalise via the
+			// same helper Th uses, otherwise AT cannot cross-reference cell-to-TH.
+			$rawHeaders = (string) $attr['HEADERS'];
+			if (strlen($rawHeaders) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH) {
+				// UA1 audit M-1 — bound the input the same way aria-* attributes are bounded.
+				$this->ua->addWarning(
+					'Table cell headers="" exceeded ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_LENGTH
+					. ' bytes; ignored to prevent memory amplification (UA1 audit M-1).'
+				);
+			} else {
+				$ids = preg_split(
+					'/\s+/',
+					trim($rawHeaders),
+					\Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS + 1,
+					PREG_SPLIT_NO_EMPTY
+				);
+				if (is_array($ids) && !empty($ids)) {
+					if (count($ids) > \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS) {
+						$this->ua->addWarning(
+							'Table cell headers="" had more than ' . \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS
+							. ' IDs; truncated (UA1 audit M-1).'
+						);
+						$ids = array_slice($ids, 0, \Mpdf\Ua\AriaIdResolver::MAX_ARIA_IDS_TOKENS);
+					}
+					$sanitised = [];
+					foreach ($ids as $rawId) {
+						$sanitised[] = \Mpdf\Ua\StructureElement::sanitiseIdForPdf($rawId);
+					}
+					$cellAttrs['Headers'] = $sanitised;
+				}
+			}
+		}
+		// ISO 14289-1 §7.5 / Matterhorn 09-008 — table rows must have the same
+		// number of columns once colspan and rowspan are taken into account.
+		// veraPDF reads /ColSpan and /RowSpan off TD/TH (defaulting to 1); a
+		// row using colspan="3" without /ColSpan is reported as 1-column wide
+		// and the row-equality check fails (§7.2 test 43).
+		if (isset($attr['COLSPAN']) && preg_match('/^\d+$/', $attr['COLSPAN']) && $attr['COLSPAN'] > 1) {
+			$cellAttrs['ColSpan'] = (int) $attr['COLSPAN'];
+		}
+		if (isset($attr['ROWSPAN']) && preg_match('/^\d+$/', $attr['ROWSPAN']) && $attr['ROWSPAN'] > 1) {
+			$cellAttrs['RowSpan'] = (int) $attr['ROWSPAN'];
+		}
+		return $cellAttrs;
+	}
+
+	/**
+	 * Register this cell's HTML id. Td records it in the id map only (so ARIA
+	 * references can resolve to the cell); Th overrides to ALSO write a /ID on the
+	 * struct dict so TD /Headers can cross-reference the header cell.
+	 *
+	 * @param array                      $attr      the cell tag's parsed HTML attributes
+	 * @param \Mpdf\Ua\StructureElement  $cellElem  the cell's struct element
+	 * @return void
+	 */
+	protected function pdfuaRegisterCellId($attr, $cellElem)
+	{
+		if (!empty($attr['ID'])) {
+			$this->ua->getAriaIdResolver()->registerId($attr['ID'], $cellElem);
+		}
+	}
+
 	public function close(&$ahtml, &$ihtml)
 	{
+		// Pop the TD pushed in open() to keep the parse-time struct stack balanced;
+		// _tableWrite() emits BDC/EMC against the stored pdfua_struct_elem reference.
+		//
+		// ISO 32000-1:2008 §14.8 Table 333 — TD table element.
+		if ($this->mpdf->PDFUA) {
+			// Audit E9 — first close any block struct element left open in the
+			// cell (HTML omits end tags mPDF does not replay inside tables), so
+			// this close() pops the TD/TH itself and not a leaked child frame.
+			$this->mpdf->pdfuaLeaveCellFrameScope();
+			$this->ua->getStructureTree()->close();
+		}
+
 		if ($this->mpdf->tableLevel) {
 			$this->mpdf->lastoptionaltag = 'TR';
 			unset($this->cssManager->tablecascadeCSS[$this->cssManager->tbCSSlvl]);

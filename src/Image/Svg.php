@@ -3018,8 +3018,23 @@ class Svg
 	 */
 	function mergeStyles($data)
 	{
+		// UA1 audit M-3 — DOMDocument::loadXML defaults to allowing external
+		// entity resolution; refuse network access (LIBXML_NONET) and disable
+		// the entity loader on PHP < 8.0 (deprecated/no-op on 8.0+).
+		$prevEntityLoader = null;
+		if (\PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
+			$prevEntityLoader = libxml_disable_entity_loader(true);
+		}
 		$xml = new \DOMDocument();
-		if (!$xml->loadXML($data, LIBXML_NOERROR)) {
+		try {
+			$loaded = $xml->loadXML($data, LIBXML_NOERROR | LIBXML_NONET);
+		} catch (\Exception $e) {
+			$loaded = false;
+		}
+		if ($prevEntityLoader !== null) {
+			libxml_disable_entity_loader($prevEntityLoader);
+		}
+		if (!$loaded) {
 			return $data;
 		}
 
@@ -3108,6 +3123,18 @@ class Svg
 		}
 
 		$this->svg_info = [];
+
+		// PDF/UA-1: harvest the SVG's top-level <title>/<desc> as the
+		// accessible name/description for downstream Figure /Alt emission
+		// (W3C SVG 1.1 §5.4, Matterhorn 13-004). Gated on PDFUA so the
+		// SimpleXML cost is skipped for non-UA renders.
+		$accessibleMetadata = ['title' => null, 'desc' => null];
+		if (!empty($this->mpdf->PDFUA)) {
+			$accessibleMetadata = $this->extractAccessibleMetadata($data);
+		}
+		$this->svg_info['accessible_title'] = $accessibleMetadata['title'];
+		$this->svg_info['accessible_desc']  = $accessibleMetadata['desc'];
+
 		$last_gradid = ''; // mPDF 6
 		$last_svg_fontid = ''; // mPDF 6
 		$last_svg_fontdefw = ''; // mPDF 6
@@ -3319,8 +3346,123 @@ class Svg
 				'w' => $this->svg_info['w'] * $this->kp,
 				'h' => -$this->svg_info['h'] * $this->kp,
 				'data' => $this->svg_string,
+				// Propagated through ImageProcessor::processSvg() so
+				// Mpdf::printobjectbuffer() can promote the values into Figure /Alt.
+				'accessible_title' => isset($this->svg_info['accessible_title'])
+					? $this->svg_info['accessible_title'] : null,
+				'accessible_desc' => isset($this->svg_info['accessible_desc'])
+					? $this->svg_info['accessible_desc'] : null,
 			];
 		}
+	}
+
+	/**
+	 * Extract the SVG document-level <title> / <desc> for use as the
+	 * accessible name/description on the rasterised Figure.
+	 *
+	 * Per W3C SVG 1.1 §5.4 only the FIRST direct-child <title>/<desc> of
+	 * the root <svg> element are document-level. Nested <title>/<desc> on
+	 * inner <g>, <symbol>, <defs> or shape elements describe THAT element
+	 * and must NOT be hoisted as the SVG-wide accessible name.
+	 *
+	 * Used by Mpdf::printobjectbuffer() and Mpdf::Image() to populate the
+	 * Figure StructElem /Alt key when the host <img> has no alt attribute.
+	 * Spec refs: ISO 14289-1:2014 §7.3 / Matterhorn Protocol 1.1 13-004.
+	 *
+	 * Returns null (not empty string) when the element is absent OR when its
+	 * text content is empty — both cases mean "no metadata", so downstream
+	 * fallback / strict-throw logic behaves identically.
+	 *
+	 * @param  string $data  Raw SVG markup as already pre-cleaned by
+	 *                       ImageSVG() (comments stripped, &lt; escaped).
+	 * @return array{title: ?string, desc: ?string}
+	 */
+	public function extractAccessibleMetadata($data)
+	{
+		$result = ['title' => null, 'desc' => null];
+
+		if ($data === null || $data === '' || stripos($data, '<svg') === false) {
+			return $result;
+		}
+
+		// SVG markup in the wild is frequently malformed (missing namespaces,
+		// unescaped attribute entities, stray characters). Buffer libxml errors
+		// so the user does not see PHP warnings; on failure return [null, null]
+		// and let the rest of ImageSVG() proceed unchanged.
+		$useInternalErrors = libxml_use_internal_errors(true);
+		// UA1 audit M-3 — `LIBXML_NOENT` substitutes external entity *content*
+		// into the parsed text. Combined with a DOCTYPE that defines a SYSTEM
+		// entity it produces a classic XXE: a `<title>&xxe;</title>` reads
+		// `/etc/hosts` into the accessible-name. Today the documented entry
+		// path (`Svg::ImageSVG()`) strips DOCTYPE before reaching this method,
+		// but the method is `public` — defensive callers must not rely on
+		// that incidental scrubbing. Drop NOENT entirely; entity content is
+		// not a legitimate accessible-name source.
+		//
+		// On PHP < 8.0 we additionally disable the libxml external-entity
+		// loader (the function is deprecated/no-op on 8.0+).
+		$prevEntityLoader = null;
+		if (\PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
+			$prevEntityLoader = libxml_disable_entity_loader(true);
+		}
+		try {
+			$xml = simplexml_load_string($data, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA);
+		} catch (\Exception $e) {
+			$xml = false;
+		}
+		libxml_clear_errors();
+		libxml_use_internal_errors($useInternalErrors);
+		if ($prevEntityLoader !== null) {
+			libxml_disable_entity_loader($prevEntityLoader);
+		}
+
+		if ($xml === false) {
+			return $result;
+		}
+
+		// Iterate direct children of the root <svg> only — ->children() with no
+		// namespace argument returns only non-namespaced (or default-namespaced)
+		// children, which matches the document-level <title>/<desc> case. We
+		// explicitly stop at the first match for each so authors who place
+		// multiple titles (rare, technically invalid) get the document-leading
+		// one as the accessible name.
+		$titleText = null;
+		$descText  = null;
+		foreach ($xml->children() as $child) {
+			$name = $child->getName();
+			if ($titleText === null && $name === 'title') {
+				$titleText = (string) $child;
+			} elseif ($descText === null && $name === 'desc') {
+				$descText = (string) $child;
+			}
+			if ($titleText !== null && $descText !== null) {
+				break;
+			}
+		}
+
+		if ($titleText !== null) {
+			// Titles are short labels — collapse all whitespace runs (incl.
+			// newlines from pretty-printed XML) to a single space.
+			$titleText = trim(preg_replace('/\s+/u', ' ', $titleText));
+			$result['title'] = ($titleText === '') ? null : $titleText;
+		}
+		if ($descText !== null) {
+			// Descriptions can be multi-line — preserve \n boundaries but
+			// normalise CRLF/CR to LF and trim outer whitespace.
+			$descText = str_replace(["\r\n", "\r"], "\n", $descText);
+			// Collapse runs of spaces/tabs (but not newlines) so XML
+			// pretty-printing indentation does not bleed into /Alt text.
+			$descText = preg_replace('/[ \t]+/u', ' ', $descText);
+			// Trim each line individually then re-join, finally trimming outer.
+			$descLines = explode("\n", $descText);
+			foreach ($descLines as $i => $line) {
+				$descLines[$i] = trim($line);
+			}
+			$descText = trim(implode("\n", $descLines));
+			$result['desc'] = ($descText === '') ? null : $descText;
+		}
+
+		return $result;
 	}
 
 	// AUTOFONT =========================

@@ -2668,6 +2668,30 @@ class Otl
 
 			$newOTLdata[0]['is_ligature'] = true;
 
+			// PDF/UA-1: capture source Unicode codepoints before the splice
+			// removes the component positions from $this->OTLdata. Stored in
+			// GPOSinfo so it survives sliceOTLdata() reindexing and is
+			// available in applyGPOSpdf() alongside existing GPOS fields.
+			// $GlyphPos[0] == $pos (first component); [1..n] are the
+			// subsequent component positions removed by the splice below.
+			//
+			// Gated on PDFUA: only the ActualText path consumes ligature_source,
+			// and forcing a (previously-empty) GPOSinfo onto every ligature would
+			// route non-PDFUA ligature runs off the Tj fast path onto
+			// applyGPOSpdf() for no benefit (Mpdf render routing keys on
+			// !empty($OTLdata['GPOSinfo'])).
+			if ($this->mpdf->PDFUA) {
+				$ligSrc = [$this->OTLdata[$pos]['uni']];
+				for ($ligi = 1; $ligi < count($GlyphPos); $ligi++) {
+					if (isset($this->OTLdata[$GlyphPos[$ligi]]['uni'])) {
+						$ligSrc[] = $this->OTLdata[$GlyphPos[$ligi]]['uni'];
+					}
+				}
+				if (!isset($newOTLdata[0]['GPOSinfo'])) {
+					$newOTLdata[0]['GPOSinfo'] = [];
+				}
+				$newOTLdata[0]['GPOSinfo']['ligature_source'] = $ligSrc;
+			}
 
 			array_splice($this->OTLdata, $pos, 1, $newOTLdata);
 

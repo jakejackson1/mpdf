@@ -28,6 +28,8 @@ trait FpdiTrait
 		writePdfType as fpdiWritePdfType;
 		useImportedPage as fpdiUseImportedPage;
 		importPage as fpdiImportPage;
+		setSourceFile as fpdiSetSourceFile;
+		setSourceFileWithParserParams as fpdiSetSourceFileWithParserParams;
 	}
 
 	protected $k = Mpdf::SCALE;
@@ -45,6 +47,57 @@ trait FpdiTrait
 	 * @var int
 	 */
 	protected $templateId = 0;
+
+	/**
+	 * Set of synthetic pageIds returned in place of FPDI page ids when the source
+	 * PDF is encrypted (Tier 0 in PDF/UA-1 mode).
+	 *
+	 * Populated by handleEncryptedImportInUaMode() during importPage() when
+	 * vendor/setasign/fpdi throws CrossReferenceException::ENCRYPTED (0x010C).
+	 * Queried by isEncryptedPlaceholder() inside useImportedPage() to short-
+	 * circuit the FPDI Form-XObject draw path and emit an Artifact placeholder
+	 * instead.
+	 *
+	 * Keys are the synthetic pageId strings; values are arrays carrying the
+	 * original source-file path and page number for diagnostics.
+	 *
+	 * @var array<string, array{file: string|null, pageNumber: int}>
+	 */
+	protected $encryptedPageIds = [];
+
+	/**
+	 * Tracks source files whose setSourceFile() call was rejected by FPDI as
+	 * encrypted, indexed by the realpath (or raw path) of the source. importPage()
+	 * consults this map after a successful or failed setSourceFile() so it can
+	 * synthesise a Tier 0 placeholder pageId without re-attempting the FPDI parse.
+	 *
+	 * @var array<string, true>
+	 */
+	protected $encryptedSourceFiles = [];
+
+	/**
+	 * Key (encryptedSourceKey() shape) of the source passed to the most recent
+	 * setSourceFile() call, whether it succeeded or was flagged encrypted.
+	 *
+	 * importPage() reads from whichever source was set last, so this — not the
+	 * most-recently-*flagged* key — is what decides the Tier 0 placeholder path.
+	 * Using the last-flagged key instead would blank every later import from a
+	 * valid source once any earlier source was encrypted.
+	 *
+	 * @var string|null
+	 */
+	protected $lastSetSourceKey = null;
+
+	/**
+	 * Per-import diagnostics in PDF/UA-1 mode, keyed by the FPDI pageId returned
+	 * from importPage(). Records the redacted source key (encryptedSourceKey()
+	 * shape) and the source page number so useImportedPage() can name the page
+	 * when an untagged import is wrapped as an /Artifact (auto-mode warning) or
+	 * refused (strict-mode throw) — UA1 audit E15.
+	 *
+	 * @var array<string, array{source: string|null, pageNumber: int}>
+	 */
+	protected $importedPageSources = [];
 
 	protected function setPageFormat($format, $orientation)
 	{
@@ -80,6 +133,316 @@ trait FpdiTrait
 		if (\version_compare($pdfVersion, $this->pdf_version, '>')) {
 			$this->pdf_version = $pdfVersion;
 		}
+	}
+
+	/**
+	 * Return a PdfReader for an already-opened source file by its reader id.
+	 *
+	 * Wraps the vendor trait's protected getPdfReader() so that collaborators
+	 * outside the class hierarchy (e.g. FpdiStructMerger) can access the reader
+	 * without calling a protected method directly.
+	 *
+	 * @param  string $readerId  reader id obtained from $importedPages[$pageId]['readerId']
+	 * @return \setasign\Fpdi\PdfReader\PdfReader
+	 */
+	public function getSourcePdfReader($readerId)
+	{
+		return $this->getPdfReader($readerId);
+	}
+
+	/**
+	 * Set the source PDF file, intercepting encryption errors in PDF/UA-1 mode.
+	 *
+	 * In non-PDFUA mode, delegates straight to vendor/setasign/fpdi (existing
+	 * behaviour — encrypted sources continue to throw CrossReferenceException).
+	 *
+	 * In PDFUA mode, catches CrossReferenceException::ENCRYPTED (0x010C) so the
+	 * caller can fall through to the Tier 0 (Artifact placeholder) path:
+	 *   - Strict mode (PDFUAauto=false): throws \Mpdf\MpdfException with a
+	 *     PDF/UA-1-aware citation; the caller must decrypt the source upstream.
+	 *   - Auto mode (PDFUAauto=true):   marks the file as encrypted in
+	 *     $encryptedSourceFiles and returns the source page count (recovered from
+	 *     the cleartext page tree; UA1 audit E2) so the caller's per-page loop
+	 *     reaches importPage() once per page, each returning a placeholder pageId.
+	 *
+	 * Other CrossReferenceException codes (XREF_MISSING, etc.) are re-thrown so
+	 * non-encryption parser failures continue to surface as before.
+	 *
+	 * ISO 32000-1:2008 §7.6 — encryption (general). FPDI exposes no password
+	 * setter, so any document with an /Encrypt entry in the trailer is rejected
+	 * regardless of cipher (RC4, AES) or scope (full-document or strings-only
+	 * via §7.6.5 crypt filters).
+	 *
+	 * @param  string|resource|\setasign\Fpdi\PdfParser\StreamReader $file
+	 * @return int  page count (recovered source page count in auto mode for an encrypted source)
+	 * @throws \Mpdf\MpdfException             in strict mode for an encrypted source
+	 * @throws CrossReferenceException         for non-encryption parser failures
+	 */
+	public function setSourceFile($file)
+	{
+		try {
+			$pageCount = $this->fpdiSetSourceFile($file);
+			if ($this->PDFUA) {
+				$this->lastSetSourceKey = $this->encryptedSourceKey($file);
+			}
+			return $pageCount;
+		} catch (CrossReferenceException $e) {
+			if ($e->getCode() !== CrossReferenceException::ENCRYPTED) {
+				throw $e;
+			}
+			return $this->handleEncryptedSetSourceFile($file, $e);
+		}
+	}
+
+	/**
+	 * Set the source PDF file with parser parameters; mirror of setSourceFile().
+	 *
+	 * Uses the same encryption-detection wrapper so callers using the params
+	 * variant receive identical Tier 0 fallback behaviour. Note: FPDI's vendor
+	 * implementation accepts an optional second argument typed `array`; that
+	 * default is preserved here so the override keeps the same public signature.
+	 *
+	 * @param  string|resource|\setasign\Fpdi\PdfParser\StreamReader $file
+	 * @param  array $parserParams
+	 * @return int  page count (recovered source page count in auto mode for an encrypted source)
+	 * @throws \Mpdf\MpdfException
+	 * @throws CrossReferenceException
+	 */
+	public function setSourceFileWithParserParams($file, array $parserParams = [])
+	{
+		try {
+			$pageCount = $this->fpdiSetSourceFileWithParserParams($file, $parserParams);
+			if ($this->PDFUA) {
+				$this->lastSetSourceKey = $this->encryptedSourceKey($file);
+			}
+			return $pageCount;
+		} catch (CrossReferenceException $e) {
+			if ($e->getCode() !== CrossReferenceException::ENCRYPTED) {
+				throw $e;
+			}
+			return $this->handleEncryptedSetSourceFile($file, $e);
+		}
+	}
+
+	/**
+	 * Common encrypted-source handler invoked by setSourceFile() variants.
+	 *
+	 * Strict mode (PDFUA=true && PDFUAauto=false) throws \Mpdf\MpdfException
+	 * with the citation message; auto mode flags the file in
+	 * $encryptedSourceFiles so importPage() can return a Tier 0 placeholder.
+	 *
+	 * Non-PDFUA callers re-throw the original CrossReferenceException so the
+	 * pre-existing behaviour is preserved exactly.
+	 *
+	 * @param  mixed                    $file the original $file argument
+	 * @param  CrossReferenceException  $e    the underlying FPDI exception
+	 * @return int                            recovered source page count in auto mode
+	 * @throws \Mpdf\MpdfException
+	 * @throws CrossReferenceException
+	 */
+	private function handleEncryptedSetSourceFile($file, CrossReferenceException $e)
+	{
+		if (empty($this->PDFUA)) {
+			throw $e;
+		}
+
+		if (empty($this->PDFUAauto)) {
+			throw new \Mpdf\MpdfException(
+				'Imported PDF source is encrypted (ISO 32000-1:2008 §7.6) and cannot be tagged. '
+				. 'vendor/setasign/fpdi exposes no password setter and refuses any document with '
+				. 'an /Encrypt entry. Decrypt the source upstream (e.g. `qpdf --decrypt input.pdf '
+				. 'output.pdf`), disable PDFUA on this import, or enable PDFUAauto to fall back '
+				. 'to /Artifact wrapping (Matterhorn 01-007).',
+				$e->getCode()
+			);
+		}
+
+		// Auto mode — record the source as encrypted so importPage() can
+		// synthesise a placeholder pageId. We try to canonicalise via realpath
+		// for string inputs; resource and StreamReader inputs are tracked by
+		// spl_object_hash() / resource id (matches FPDI's getPdfReaderId logic).
+		$key = $this->encryptedSourceKey($file);
+		$this->encryptedSourceFiles[$key] = true;
+		$this->lastSetSourceKey = $key;
+
+		// UA1 audit E2 — recover the real page count so a multi-page encrypted
+		// source produces one placeholder per source page instead of collapsing
+		// to a single blank page. FPDI never wired up a parser (it threw), but
+		// encryption only enciphers strings and streams (ISO 32000-1:2008
+		// §7.6.2), so the page-tree root's /Type /Pages … /Count N stays in
+		// cleartext and can be scanned without the key.
+		$pageCount = $this->countEncryptedSourcePages($file);
+
+		// Surface a UA-aware warning at this stage so callers inspecting
+		// getPdfUaWarnings() after Output() see the encrypted-source diagnostic
+		// even if importPage() is not subsequently called for some reason.
+		if ($this->ua !== null) {
+			$this->ua->addWarning(sprintf(
+				'Imported PDF source is encrypted (ISO 32000-1:2008 §7.6) and cannot be parsed by '
+				. 'vendor/setasign/fpdi. Auto-mode fallback: importPage() will return a synthetic '
+				. 'pageId and useImportedPage() will draw a Tier 0 /Artifact <</Type /Layout>> '
+				. 'visible placeholder (border + caption) for each of the %d source page(s) in place '
+				. 'of the original content. Matterhorn 01-007.',
+				$pageCount
+			));
+		}
+
+		// Return the (recovered) source page count so the caller's loop —
+		// typically `for ($i = 1; $i <= setSourceFile($file); $i++) importPage($i)` —
+		// visits every page and reaches the Tier 0 path once per page rather than
+		// silently discarding pages 2..N.
+		return $pageCount;
+	}
+
+	/**
+	 * Best-effort page count for an encrypted source that FPDI refused to parse.
+	 *
+	 * A standard-security-handler document (ISO 32000-1:2008 §7.6.4) enciphers
+	 * only string and stream objects; name tokens and integers — including the
+	 * page-tree root's `/Type /Pages … /Count N` — remain in cleartext. Scanning
+	 * the raw bytes for the largest `/Count` sitting in a `/Pages` dictionary
+	 * therefore recovers the total leaf-page count without the decryption key.
+	 *
+	 * Falls back to 1 when the bytes are unreadable (e.g. an opaque StreamReader
+	 * whose underlying resource cannot be rewound) or no page tree is found, so
+	 * at least one visible placeholder is still emitted.
+	 *
+	 * @param  mixed $file the original $file argument passed to setSourceFile()
+	 * @return int         source page count, clamped to a minimum of 1
+	 */
+	private function countEncryptedSourcePages($file)
+	{
+		$bytes = $this->readSourceBytes($file);
+		if ($bytes === null || $bytes === '') {
+			return 1;
+		}
+
+		// Match /Count and /Type /Pages in either order within a single dict.
+		// [^>]*? cannot cross the dict's closing `>>`, so a /Count from one
+		// object never binds to a /Pages in another. The tree root carries the
+		// total; nested /Pages nodes carry sub-counts, so take the maximum.
+		$max = 0;
+		if (preg_match_all(
+			'#/Type\s*/Pages\b[^>]*?/Count\s+(\d+)|/Count\s+(\d+)[^>]*?/Type\s*/Pages\b#s',
+			$bytes,
+			$matches,
+			PREG_SET_ORDER
+		)) {
+			foreach ($matches as $m) {
+				$n = max((int) ($m[1] ?? 0), (int) ($m[2] ?? 0));
+				if ($n > $max) {
+					$max = $n;
+				}
+			}
+		}
+
+		return $max > 0 ? $max : 1;
+	}
+
+	/**
+	 * Read the full byte content of a setSourceFile() argument for scanning.
+	 *
+	 * Handles the same input shapes FPDI accepts — a path string, a stream
+	 * resource, or an FPDI StreamReader wrapping one — restoring any stream
+	 * position it touches so a later (auto-mode) reader is unaffected. Returns
+	 * null when no bytes can be obtained.
+	 *
+	 * @param  mixed $file
+	 * @return string|null
+	 */
+	private function readSourceBytes($file)
+	{
+		if (is_string($file)) {
+			$bytes = @file_get_contents($file);
+			return $bytes !== false ? $bytes : null;
+		}
+
+		$stream = null;
+		if ($file instanceof \setasign\Fpdi\PdfParser\StreamReader) {
+			$stream = $file->getStream();
+		} elseif (is_resource($file)) {
+			$stream = $file;
+		}
+
+		if (is_resource($stream)) {
+			$pos   = @ftell($stream);
+			@rewind($stream);
+			$bytes = @stream_get_contents($stream);
+			if ($pos !== false) {
+				@fseek($stream, $pos);
+			}
+			return $bytes !== false ? $bytes : null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Build a stable lookup key for $encryptedSourceFiles from a $file argument.
+	 *
+	 * Mirrors vendor/setasign/fpdi's getPdfReaderId() logic (string → realpath,
+	 * resource → (string) cast, object → spl_object_hash) without invoking the
+	 * vendor reader machinery (which would re-trigger the encryption throw).
+	 *
+	 * @param  mixed $file
+	 * @return string
+	 */
+	private function encryptedSourceKey($file)
+	{
+		if (is_resource($file)) {
+			return 'resource:' . (string) $file;
+		}
+		if (is_string($file)) {
+			// UA1 audit L-5 — synthesise a stable, non-leaking key. The full
+			// resolved path used to surface in synthetic pageIds (and any
+			// warning that quoted them), exposing $_SERVER['DOCUMENT_ROOT']
+			// or container internals to PDF consumers. Hash the canonical
+			// path for the matching identity, but only emit a redacted
+			// human-readable hint (basename) so logs still carry context.
+			$rp     = @realpath($file);
+			$canon  = $rp !== false ? $rp : $file;
+			$digest = substr(sha1($canon), 0, 12);
+			return 'file:' . $this->redactPath($canon) . '@' . $digest;
+		}
+		if (is_object($file)) {
+			return 'object:' . spl_object_hash($file);
+		}
+		return 'unknown:' . gettype($file);
+	}
+
+	/**
+	 * Redact a filesystem path for inclusion in user-facing diagnostics.
+	 *
+	 * Returns the basename only; absolute paths leak deployment topology
+	 * (web root, container layout, build paths) when warnings are surfaced
+	 * to PDF consumers via getPdfUaWarnings(). Empty / non-string inputs
+	 * round-trip as the empty string.
+	 *
+	 * UA1 audit I-6 — structural guarantee that future warning sites
+	 * cannot regress past path redaction.
+	 *
+	 * @param  mixed $path
+	 * @return string
+	 */
+	private function redactPath($path)
+	{
+		if (!is_string($path) || $path === '') {
+			return '';
+		}
+		return basename($path);
+	}
+
+	/**
+	 * Whether $pageId is a Tier 0 encrypted-source placeholder.
+	 *
+	 * @param  mixed $pageId
+	 * @return bool
+	 */
+	public function isEncryptedPlaceholder($pageId)
+	{
+		return is_string($pageId)
+			&& strpos($pageId, \Mpdf\Ua\Import\FpdiStructMerger::ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX) === 0
+			&& isset($this->encryptedPageIds[$pageId]);
 	}
 
 	/**
@@ -135,20 +498,312 @@ trait FpdiTrait
 			$this->AddPage();
 		}
 
-		/* Extract $x if an array */
+		/* Extract $x if an array. A PDF/UA-1 author may pass 'alt' to give an
+		 * untagged imported page an accessible name (UA1 audit E15); capture it
+		 * before extract() since it has no matching local variable and would be
+		 * dropped by EXTR_IF_EXISTS. */
+		$importAlt = null;
 		if (is_array($x)) {
-			unset($x['pageId']);
+			if (array_key_exists('alt', $x)) {
+				$importAlt = $x['alt'];
+			}
+			unset($x['pageId'], $x['alt']);
 			extract($x, EXTR_IF_EXISTS);
 			if (is_array($x)) {
 				$x = 0;
 			}
 		}
 
+		// PDF/UA-1 Tier 0 — encrypted source (FPDI cannot parse).
+		//
+		// $pageId comes from handleEncryptedImportInUaMode() and is NOT in
+		// $this->importedPages (no Form XObject was created). Draw an Artifact
+		// placeholder bracketed with BDC/EMC and return a size so the caller's
+		// downstream layout logic remains valid. UA1 audit E2 — the placeholder
+		// draws a visible border + caption naming the source so the content loss
+		// is not silent (it is an Artifact, so it needs no tagging).
+		if ($this->PDFUA && $this->isEncryptedPlaceholder($pageId)) {
+			$pdfuaMerger = $this->ua->getFpdiStructMerger();
+
+			// Default placeholder dimensions to the host page's content area so
+			// the caller does not have to supply width/height for an opaque
+			// fallback. Width/height passed by the caller take precedence.
+			$resolvedWidth  = ($width !== null) ? $width : $this->pgwidth;
+			$resolvedHeight = ($height !== null) ? $height : ($this->h - $this->tMargin - $this->bMargin);
+
+			$this->writer->write('/Artifact <</Type /Layout>> BDC');
+			$this->drawEncryptedSourcePlaceholder(
+				$x,
+				$y,
+				$resolvedWidth,
+				$resolvedHeight,
+				$this->encryptedPlaceholderCaption($pageId)
+			);
+			$this->writer->write('EMC');
+
+			$pdfuaMerger->addUntaggedWarning(
+				'Imported PDF page is encrypted (ISO 32000-1:2008 §7.6) and cannot be parsed by '
+				. 'vendor/setasign/fpdi. Treated as Tier 0: a placeholder /Artifact <</Type /Layout>> '
+				. 'BDC … EMC pair is drawn in place of the original page content. Decrypt the source '
+				. 'upstream (e.g. `qpdf --decrypt`) for accessible imports. Matterhorn 01-007.'
+			);
+
+			// Flush accumulated warnings into UaState so getPdfUaWarnings() sees them.
+			foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
+				$this->ua->addWarning($w);
+			}
+
+			return [
+				'width'       => $resolvedWidth,
+				'height'      => $resolvedHeight,
+				0             => $resolvedWidth,
+				1             => $resolvedHeight,
+				'orientation' => $resolvedWidth >= $resolvedHeight ? 'L' : 'P',
+			];
+		}
+
+		// PDF/UA-1 — two-tier treatment for imported PDF pages.
+		//
+		// Tier 1 (untagged source): The Do operator emitted by FPDI is bracketed with
+		//   /Artifact <</Type /Layout>> BDC … EMC
+		// (ISO 14289-1:2014 §7.1; Matterhorn 01-007; ISO 32000-1:2008 §14.7.4.4 Table 324).
+		// A diagnostic warning is emitted via getPdfUaWarnings().
+		//
+		// Tier 2 (tagged source): The source PDF's struct subtree is cloned into the host
+		// StructureTree via FpdiStructMerger::mergePageStructSubtree(). The Form XObject
+		// receives a /StructParents entry at write time (see writeImportedPagesAndResolvedObjects).
+		// No Artifact wrap is emitted; the cloned struct elements provide the tagging.
+		// Tier 2 is gated on verifyAndPrepareMerge() succeeding — if the source struct
+		// strings fail the sanity gauntlet (forward-compat guard for ISO 32000-1 §7.6.5
+		// strings-only encryption), auto mode demotes to Tier 1 and strict mode throws.
+		//
+		// The readerId is read from importedPages because $this->currentReaderId is null
+		// at this point in the call stack (it is only set during writeImportedPagesAndResolvedObjects).
+		$pdfuaMerger    = null;
+		$useTaggedMerge = false;
+		$tier1Figure    = false;
+		if ($this->PDFUA && isset($this->importedPages[$pageId])) {
+			$pdfuaMerger = $this->ua->getFpdiStructMerger();
+			$readerId    = $this->importedPages[$pageId]['readerId'];
+
+			if ($pdfuaMerger->sourceIsTagged($readerId) && $pdfuaMerger->verifyAndPrepareMerge($pageId)) {
+				$useTaggedMerge = true;
+				// Tier 2: merge struct subtree. Object numbers are not yet known at
+				// render time (they are allocated in writeImportedPagesAndResolvedObjects),
+				// so pass 0 for foXObjectObjNum and hostPageObjNum; the actual numbers
+				// are patched by patchMergedSubtreeObjectNumbers() at write time.
+				$pdfuaMerger->mergePageStructSubtree($pageId, 0, 0);
+				// Record this host page so patchMergedSubtreeObjectNumbers() can resolve
+				// pageDim[$hostPage]['n'] after writePages() has run. Called on every
+				// placement (first use + all SetPageTemplate reuses).
+				$pdfuaMerger->recordHostPage($pageId, $this->page);
+			} else {
+				// Tier 1: the source carries no usable struct tagging (an untagged
+				// source, or an auto-mode demotion of a tagged source whose
+				// verifyAndPrepareMerge() failed). UA1 audit E15 — an anonymous
+				// /Artifact wrap makes the real page content wholly inaccessible,
+				// so do not do it silently:
+				//   - if the author supplied an /Alt (useImportedPage($id, ['alt'
+				//     => …])), tag the whole page as a captioned Figure so it
+				//     carries an accessible name (ISO 14289-1:2014 §7.3);
+				//   - otherwise strict mode throws (the producer must supply a
+				//     tagged source or an explicit /Alt) and auto mode wraps as
+				//     /Artifact and records a warning naming the source page.
+				$altText = is_string($importAlt) ? trim($importAlt) : null;
+				if ($altText !== null && $altText !== '') {
+					$structParents = isset($this->pageDim[$this->page]['structParents'])
+						? $this->pageDim[$this->page]['structParents'] : 0;
+					$this->ua->getStructureTree()->open('Figure', ['Alt' => $altText]);
+					$importMcid = $this->ua->getStructureTree()->addContent($structParents);
+					$this->ua->getMarkedContentHelper()->begin('Figure', $importMcid);
+					$tier1Figure = true;
+				} elseif (empty($this->PDFUAauto)) {
+					throw new \Mpdf\MpdfException(
+						'PDF/UA-1: imported PDF ' . $this->importedPageSourceLabel($pageId)
+						. ' is untagged; wrapping it as /Artifact <</Type /Layout>> would hide '
+						. 'the real page content from assistive technology (ISO 14289-1:2014 §7.1; '
+						. 'Matterhorn 01-007). Import a source that preserves its struct tagging, '
+						. "pass an accessible name via useImportedPage(\$id, ['alt' => 'description']) "
+						. 'to tag the page as a Figure, or enable PDFUAauto to wrap it as an Artifact '
+						. 'and record a warning instead of throwing.'
+					);
+				} else {
+					// Auto mode, no accessible name: wrap Do as Artifact (warning
+					// naming the source page is recorded after the Do below).
+					$this->writer->write('/Artifact <</Type /Layout>> BDC');
+				}
+			}
+		}
+
 		$newSize = $this->fpdiUseImportedPage($pageId, $x, $y, $width, $height, $adjustPageSize);
+
+		if ($this->PDFUA && $pdfuaMerger !== null) {
+			if ($useTaggedMerge) {
+				// Tier 2: nothing to close; the struct elements carry the tagging.
+				// No EMC needed because no BDC was emitted.
+				// Flush merger-side warnings (e.g. cycle / depth-cap / node-budget
+				// diagnostics from FpdiStructMerger; UA1 audit H-2 / M-4) into
+				// UaState so callers can see them via getPdfUaWarnings().
+				foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
+					$this->ua->addWarning($w);
+				}
+			} elseif ($tier1Figure) {
+				// UA1 audit E15 — author-supplied /Alt: close the MCID content
+				// sequence and the Figure struct element so the imported page
+				// carries an accessible name instead of vanishing into an Artifact.
+				$this->ua->getMarkedContentHelper()->end();
+				$this->ua->getStructureTree()->close();
+			} else {
+				// Tier 1: close the Artifact sequence (auto mode; strict already
+				// threw above) and record a warning naming the source page so the
+				// content loss is signalled rather than silent (UA1 audit E15).
+				$this->writer->write('EMC');
+				$pdfuaMerger->addUntaggedWarning(
+					'Imported PDF ' . $this->importedPageSourceLabel($pageId)
+					. ' is untagged and was wrapped as /Artifact <</Type /Layout>> — its content '
+					. 'is not exposed to assistive technology. Pass an accessible name via '
+					. "useImportedPage(\$id, ['alt' => 'description']) to tag it as a Figure, or "
+					. 'import a source that preserves struct tagging. Matterhorn 01-007.'
+				);
+
+				// Flush accumulated warnings into UaState so they appear in getPdfUaWarnings().
+				foreach ($pdfuaMerger->getUntaggedWarnings() as $w) {
+					$this->ua->addWarning($w);
+				}
+			}
+		}
 
 		$this->setImportedPageLinks($pageId, $x, $y, $newSize);
 
 		return $newSize;
+	}
+
+	/**
+	 * Draw the visible content of a Tier 0 (encrypted-source) placeholder.
+	 *
+	 * The Artifact wrap brackets are emitted by useImportedPage(); this method
+	 * draws what appears between them. UA1 audit E2 — an encrypted source cannot
+	 * be parsed, so rather than an invisible zero-content BMC/EMC pair (which
+	 * loses the page silently) it strokes a faint border around the placeholder
+	 * footprint and prints a caption naming the source. The marks sit inside the
+	 * /Artifact <</Type /Layout>> wrap, so they are decorative (non-content) and
+	 * require no tagging, while making the omission visible to a sighted reader.
+	 *
+	 * Runs inside a q…Q graphics-state save so its colour/line-width changes do
+	 * not leak; the mPDF-side state trackers are realigned afterwards because
+	 * Q reverts the actual PDF state but not mPDF's cached model of it.
+	 *
+	 * @param  float|int $x        upper-left x in user units
+	 * @param  float|int $y        upper-left y in user units
+	 * @param  float|int $width    placeholder width in user units
+	 * @param  float|int $height   placeholder height in user units
+	 * @param  string    $caption  human-readable source label drawn top-left
+	 * @return void
+	 */
+	protected function drawEncryptedSourcePlaceholder($x, $y, $width, $height, $caption = '')
+	{
+		if ($width <= 0 || $height <= 0) {
+			return;
+		}
+
+		// Snapshot the mPDF-side drawing state so it can be realigned after the
+		// q…Q pair (Q restores the actual PDF state; these cached fields are not).
+		$prevLineWidth  = $this->LineWidth;
+		$prevDrawColor  = $this->DrawColor;
+		$prevFillColor  = $this->FillColor;
+		$prevTextColor  = $this->TextColor;
+		$prevColorFlag  = $this->ColorFlag;
+		$prevFontFamily = $this->FontFamily;
+		$prevFontStyle  = $this->FontStyle;
+		$prevFontSizePt = $this->FontSizePt;
+
+		$this->writer->write('q');
+
+		// Faint grey border tracing the lost page's footprint.
+		$this->SetDrawColor(128);
+		$this->SetLineWidth(0.2);
+		$this->Rect($x, $y, $width, $height, 'S');
+
+		// Caption naming the (redacted) source, in an embedded font so the
+		// document stays PDF/UA-1 conformant (ISO 14289-1:2014 §7.21).
+		if ($caption !== '') {
+			$this->SetFont($prevFontFamily !== '' ? $prevFontFamily : '', '', 8);
+			$this->SetTextColor(128);
+			$this->Text($x + 2, $y + $this->FontSize + 1, $caption);
+		}
+
+		$this->writer->write('Q');
+
+		// Realign mPDF's cached graphics state with the post-Q actual state.
+		$this->LineWidth = $prevLineWidth;
+		$this->DrawColor = $prevDrawColor;
+		$this->FillColor = $prevFillColor;
+		$this->TextColor = $prevTextColor;
+		$this->ColorFlag = $prevColorFlag;
+		if (isset($this->pageoutput[$this->page])) {
+			unset(
+				$this->pageoutput[$this->page]['LineWidth'],
+				$this->pageoutput[$this->page]['DrawColor'],
+				$this->pageoutput[$this->page]['FillColor']
+			);
+		}
+		if ($prevFontFamily !== '') {
+			$this->SetFont($prevFontFamily, $prevFontStyle, $prevFontSizePt);
+		}
+	}
+
+	/**
+	 * Build the caption drawn on a Tier 0 encrypted-source placeholder.
+	 *
+	 * Uses only the redacted diagnostics recorded in $encryptedPageIds (never a
+	 * full filesystem path — UA1 audit L-5 / I-6), reducing the stored source
+	 * key `file:<basename>@<digest>` back to its basename for a friendly label.
+	 *
+	 * @param  string $pageId  the synthetic placeholder pageId
+	 * @return string
+	 */
+	private function encryptedPlaceholderCaption($pageId)
+	{
+		$meta = isset($this->encryptedPageIds[$pageId]) ? $this->encryptedPageIds[$pageId] : [];
+		$label = (isset($meta['file']) && is_string($meta['file'])) ? $meta['file'] : '';
+		if (preg_match('/^file:(?P<name>.*)@[0-9a-f]+$/', $label, $m) && $m['name'] !== '') {
+			$label = $m['name'];
+		}
+		if ($label === '') {
+			$label = 'encrypted PDF';
+		}
+		$pageNumber = isset($meta['pageNumber']) ? (int) $meta['pageNumber'] : 0;
+
+		return sprintf('Encrypted PDF source omitted (page %d): %s', $pageNumber, $label);
+	}
+
+	/**
+	 * Build a human-readable "page N of <source>" label for an imported page.
+	 *
+	 * Reads only the redacted diagnostics recorded in $importedPageSources at
+	 * importPage() time (never a full filesystem path — UA1 audit L-5 / I-6),
+	 * reducing the stored source key `file:<basename>@<digest>` back to its
+	 * basename. Used to name the source page in the untagged-import warning
+	 * (auto mode) and the strict-mode throw (UA1 audit E15).
+	 *
+	 * @param  mixed $pageId  the FPDI page identifier
+	 * @return string
+	 */
+	private function importedPageSourceLabel($pageId)
+	{
+		$meta   = isset($this->importedPageSources[$pageId]) ? $this->importedPageSources[$pageId] : [];
+		$source = (isset($meta['source']) && is_string($meta['source'])) ? $meta['source'] : '';
+		if (preg_match('/^file:(?P<name>.*)@[0-9a-f]+$/', $source, $m) && $m['name'] !== '') {
+			$source = $m['name'];
+		}
+		if ($source === '') {
+			$source = 'source';
+		}
+		$pageNumber = isset($meta['pageNumber']) ? (int) $meta['pageNumber'] : 0;
+
+		return $pageNumber > 0
+			? sprintf('page %d of %s', $pageNumber, $source)
+			: sprintf('page of %s', $source);
 	}
 
 	/**
@@ -167,9 +822,89 @@ trait FpdiTrait
 	 */
 	public function importPage($pageNumber, $box = PageBoundaries::CROP_BOX, $groupXObject = true)
 	{
-		$pageId = $this->fpdiImportPage($pageNumber, $box, $groupXObject);
+		// PDF/UA-1 Tier 0 fast path — if the source set by the most recent
+		// setSourceFile() was caught as CrossReferenceException::ENCRYPTED in auto
+		// mode, its parser was never wired up. Synthesise a placeholder pageId
+		// without re-attempting fpdiImportPage(), which would re-throw. Keying on
+		// the last-set source (not the last-flagged one) is what stops a valid
+		// import that follows an encrypted one from being blanked.
+		if ($this->PDFUA
+			&& $this->lastSetSourceKey !== null
+			&& isset($this->encryptedSourceFiles[$this->lastSetSourceKey])
+		) {
+			return $this->handleEncryptedImportInUaMode($pageNumber, $this->lastSetSourceKey);
+		}
+
+		try {
+			$pageId = $this->fpdiImportPage($pageNumber, $box, $groupXObject);
+		} catch (CrossReferenceException $e) {
+			if ($this->PDFUA && $e->getCode() === CrossReferenceException::ENCRYPTED) {
+				// Late-detected encryption — vendor parser threw during page parse
+				// rather than during setSourceFile(). Flag the active source and
+				// reuse the same Tier 0 path.
+				if ($this->lastSetSourceKey !== null) {
+					$this->encryptedSourceFiles[$this->lastSetSourceKey] = true;
+				}
+				return $this->handleEncryptedImportInUaMode($pageNumber, $this->lastSetSourceKey);
+			}
+			throw $e;
+		}
 
 		$this->importedPages[$pageId]['externalLinks'] = $this->getImportedExternalPageLinks($pageNumber);
+
+		// UA1 audit E15 — remember which (redacted) source and page this import
+		// came from so useImportedPage() can name it if the source turns out to
+		// be untagged and is either wrapped as an /Artifact (auto) or refused
+		// (strict). Keyed on the active source, matching importPage()'s own
+		// last-set-source semantics.
+		if ($this->PDFUA) {
+			$this->importedPageSources[$pageId] = [
+				'source'     => $this->lastSetSourceKey,
+				'pageNumber' => (int) $pageNumber,
+			];
+		}
+
+		return $pageId;
+	}
+
+	/**
+	 * Tier 0 — register an encrypted-source placeholder pageId or throw in strict mode.
+	 *
+	 * Strict mode (PDFUAauto=false): throws \Mpdf\MpdfException directly. There is
+	 * no Form XObject to wrap, so the caller cannot silently demote.
+	 *
+	 * Auto mode (PDFUAauto=true): builds a synthetic pageId
+	 * (ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX + monotonically-increasing suffix),
+	 * tracks it in $encryptedPageIds, and returns it. useImportedPage() consults
+	 * isEncryptedPlaceholder() to short-circuit the FPDI draw path and emit the
+	 * Artifact placeholder.
+	 *
+	 * @param  int         $pageNumber  the page number the caller requested
+	 * @param  string|null $sourceKey   key returned by encryptedSourceKey() for diagnostics
+	 * @return string                   the synthetic placeholder pageId
+	 * @throws \Mpdf\MpdfException      in strict mode
+	 */
+	private function handleEncryptedImportInUaMode($pageNumber, $sourceKey = null)
+	{
+		if (empty($this->PDFUAauto)) {
+			throw new \Mpdf\MpdfException(
+				'Imported PDF source is encrypted (ISO 32000-1:2008 §7.6) and cannot be tagged. '
+				. 'vendor/setasign/fpdi exposes no password setter and refuses any document with '
+				. 'an /Encrypt entry. Decrypt the source upstream (e.g. `qpdf --decrypt input.pdf '
+				. 'output.pdf`), disable PDFUA on this import, or enable PDFUAauto to fall back '
+				. 'to /Artifact wrapping (Matterhorn 01-007).'
+			);
+		}
+
+		$pageId = \Mpdf\Ua\Import\FpdiStructMerger::ENCRYPTED_PAGE_PLACEHOLDER_ID_PREFIX
+			. ($sourceKey !== null ? $sourceKey . ':' : '')
+			. ((int) $pageNumber)
+			. ':' . count($this->encryptedPageIds);
+
+		$this->encryptedPageIds[$pageId] = [
+			'file'       => is_string($sourceKey) ? $sourceKey : null,
+			'pageNumber' => (int) $pageNumber,
+		];
 
 		return $pageId;
 	}
@@ -296,8 +1031,26 @@ trait FpdiTrait
 
 		foreach ($this->importedPages as $key => $pageData) {
 			$this->writer->object();
-			$this->importedPages[$key]['objectNumber'] = $this->n;
+			$foXObjectObjNum                           = $this->n;
+			$this->importedPages[$key]['objectNumber'] = $foXObjectObjNum;
 			$this->currentReaderId = $pageData['readerId'];
+
+			// PDF/UA-1 Tier 2 — inject /StructParents into the Form XObject dict so
+			// the ParentTree NumTree back-reference from the Form XObject to its struct
+			// elements resolves correctly (ISO 32000-1:2008 §14.7.4.4).
+			if ($this->PDFUA) {
+				$merger         = $this->ua->getFpdiStructMerger();
+				$structParentsN = $merger->getFormXObjectStructParents($key);
+				if ($structParentsN >= 0 && $pageData['stream'] instanceof PdfStream) {
+					$pageData['stream']->value->value['StructParents'] = PdfNumeric::create($structParentsN);
+				}
+
+				// Patch MCR placeholder entries (pageRef=0, stm=0) with real object
+				// numbers now that both the Form XObject and page dicts have been
+				// written (writePages runs before writeImportedPagesAndResolvedObjects).
+				$merger->patchMergedSubtreeObjectNumbers($key, $foXObjectObjNum);
+			}
+
 			$this->writePdfType($pageData['stream']);
 			$this->_put('endobj');
 		}
