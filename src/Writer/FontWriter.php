@@ -135,7 +135,7 @@ class FontWriter
 				$this->mpdf->fonts[$k]['n'] = $this->mpdf->n + 1;
 
 				if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
-					throw new \Mpdf\MpdfException('Core fonts are not allowed in PDF/A1-b or PDFX/1-a files (Times, Helvetica, Courier etc.)');
+					throw new \Mpdf\MpdfException('Core fonts are not allowed in PDF/A1-b or ' . $this->mpdf->pdfxVersionLabel() . ' files (Times, Helvetica, Courier etc.)');
 				}
 
 				$this->writer->object();

@@ -46,15 +46,34 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$this->logger = $logger;
 	}
 
+	/**
+	 * The single document timestamp shared by the Info dictionary and the XMP packet so
+	 * their CreationDate/ModDate agree (item E2). Seeded once on first use; whichever of
+	 * writeInfo()/writeMetadata() runs first fixes the value for the other.
+	 *
+	 * @return int Unix timestamp
+	 */
+	private function getDocumentTime()
+	{
+		if ($this->mpdf->documentTime === null) {
+			$this->mpdf->documentTime = time();
+		}
+
+		return $this->mpdf->documentTime;
+	}
+
 	public function writeMetadata() // _putmetadata
 	{
 		$this->writer->object();
 		$this->mpdf->MetadataRoot = $this->mpdf->n;
 
-		$z = date('O'); // +0200
+		// Use one shared timestamp for the XMP packet and the Info dictionary so they
+		// report an identical CreationDate/ModDate (item E2 — X preflight expects parity).
+		$docTime = $this->getDocumentTime();
+		$z = date('O', $docTime); // +0200
 		$offset = substr($z, 0, 3) . ':' . substr($z, 3, 2);
 
-		$CreationDate = date('Y-m-d\TH:i:s') . $offset; // 2006-03-10T10:47:26-05:00 2006-06-19T09:05:17Z
+		$CreationDate = date('Y-m-d\TH:i:s', $docTime) . $offset; // 2006-03-10T10:47:26-05:00 2006-06-19T09:05:17Z
 
 		$uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0x0fff) | 0x4000, random_int(0, 0x3fff) | 0x8000, random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff));
 
@@ -65,6 +84,10 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$m .= '    <pdf:Producer>' . htmlspecialchars($this->getProducerString(), ENT_QUOTES | ENT_XML1) . '</pdf:Producer>' . "\n";
 		if (!empty($this->mpdf->keywords)) {
 			$m .= '    <pdf:Keywords>' . htmlspecialchars($this->mpdf->keywords, ENT_QUOTES | ENT_XML1) . '</pdf:Keywords>' . "\n";
+		}
+		// PDF/X requires XMP<->Info parity: mirror the Info dictionary /Trapped/False (item E2).
+		if ($this->mpdf->PDFX) {
+			$m .= '    <pdf:Trapped>False</pdf:Trapped>' . "\n";
 		}
 		$m .= '   </rdf:Description>' . "\n";
 
@@ -114,9 +137,17 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$m .= $this->mpdf->additionalXmpRdf;
 		}
 
-		// This bit is specific to PDFX-1a
+		// This bit is specific to PDF/X
 		if ($this->mpdf->PDFX) {
-			$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:pdfx="http://ns.adobe.com/pdfx/1.3/" pdfx:Apag_PDFX_Checkup="1.3" pdfx:GTS_PDFXConformance="PDF/X-1a:2003" pdfx:GTS_PDFXVersion="PDF/X-1:2003"/>' . "\n";
+			if ($this->mpdf->pdfxAllowsTransparency()) {
+				// PDF/X-4 is identified by the pdfxid schema; it has no A/U-style conformance
+				// suffix, so no GTS_PDFXConformance is written, and the deprecated Adobe
+				// pdfx:1.3 / Apag_PDFX_Checkup attributes are intentionally omitted.
+				$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/" pdfxid:GTS_PDFXVersion="PDF/X-4"/>' . "\n";
+			} else {
+				// PDF/X-1a:2003 (legacy Adobe pdfx:1.3 schema)
+				$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:pdfx="http://ns.adobe.com/pdfx/1.3/" pdfx:Apag_PDFX_Checkup="1.3" pdfx:GTS_PDFXConformance="PDF/X-1a:2003" pdfx:GTS_PDFXVersion="PDF/X-1:2003"/>' . "\n";
+			}
 		} // This bit is specific to PDFA-1b
 		elseif ($this->mpdf->PDFA) {
 
@@ -136,6 +167,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 		$m .= '   <rdf:Description rdf:about="uuid:' . $uuid . '" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/">' . "\n";
 		$m .= '    <xmpMM:DocumentID>uuid:' . $uuid . '</xmpMM:DocumentID>' . "\n";
+		// PDF/X preflight expects a DocumentID/InstanceID pair (item E2); scoped to PDF/X to
+		// leave the PDF/A packet byte-identical.
+		if ($this->mpdf->PDFX) {
+			$m .= '    <xmpMM:InstanceID>uuid:' . $uuid . '</xmpMM:InstanceID>' . "\n";
+		}
 		$m .= '   </rdf:Description>' . "\n";
 		$m .= '  </rdf:RDF>' . "\n";
 		$m .= ' </x:xmpmeta>' . "\n";
@@ -174,12 +210,12 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/' . $key . ' ' . $this->writer->utf16BigEndianTextString($value));
 		}
 
-		$now = PdfDate::format(time());
+		$now = PdfDate::format($this->getDocumentTime());
 		$this->writer->write('/CreationDate ' . $this->writer->string('D:' . $now));
 		$this->writer->write('/ModDate ' . $this->writer->string('D:' . $now));
 		if ($this->mpdf->PDFX) {
 			$this->writer->write('/Trapped/False');
-			$this->writer->write('/GTS_PDFXVersion(PDF/X-1a:2003)');
+			$this->writer->write('/GTS_PDFXVersion(' . $this->mpdf->pdfxVersionLabel() . ')');
 		}
 	}
 
@@ -210,6 +246,13 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 				$this->writer->write('/OutputConditionIdentifier (Custom)');
 				$this->writer->write('/OutputCondition ()');
 				$this->writer->write('/DestOutputProfile ' . ($this->mpdf->n + 1) . ' 0 R');
+			} elseif ($this->mpdf->pdfxAllowsTransparency()) {
+				// PDF/X-4 requires an embedded DestOutputProfile even when no user profile is
+				// supplied, so fall back to the bundled SWOP2006 coated CMYK profile.
+				$this->writer->write('/Info (SWOP2006 Coated3v2)');
+				$this->writer->write('/OutputConditionIdentifier (Custom)');
+				$this->writer->write('/OutputCondition ()');
+				$this->writer->write('/DestOutputProfile ' . ($this->mpdf->n + 1) . ' 0 R');
 			} else {
 				$this->writer->write('/Info (CGATS TR 001)');
 				$this->writer->write('/OutputConditionIdentifier (CGATS TR 001)');
@@ -220,20 +263,15 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$this->writer->write('>>');
 		$this->writer->write('endobj');
 
-		if ($this->mpdf->PDFX && !$this->mpdf->ICCProfile) {
+		// X-1a with no user ICCProfile cites a registered condition only and embeds no profile.
+		// X-4 must always embed a DestOutputProfile, so it never early-returns here.
+		if ($this->mpdf->PDFX && !$this->mpdf->ICCProfile && !$this->mpdf->pdfxAllowsTransparency()) {
 			return;
 		}
 
 		$this->writer->object();
 
-		if ($this->mpdf->ICCProfile) {
-			if (!file_exists($this->mpdf->ICCProfile)) {
-				throw new \Mpdf\MpdfException(sprintf('Unable to find ICC profile "%s"', $this->mpdf->ICCProfile));
-			}
-			$s = file_get_contents($this->mpdf->ICCProfile);
-		} else {
-			$s = file_get_contents(__DIR__ . '/../../data/iccprofiles/sRGB_IEC61966-2-1.icc');
-		}
+		$s = $this->loadOutputIntentProfileBytes();
 
 		if ($this->mpdf->compress) {
 			$s = gzcompress($s);
@@ -241,7 +279,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 		$this->writer->write('<<');
 
-		if ($this->mpdf->PDFX || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3)) {
+		if ($this->mpdf->PDFX) {
+			// /N must match the embedded DestOutputProfile's component count (item E1):
+			// 4 for a CMYK intent (X-1a and the X-4 CMYK default), 3 for an RGB X-4 intent.
+			$this->writer->write('/N ' . $this->mpdf->pdfxOutputIntentComponentCount());
+		} elseif ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3) {
 			$this->writer->write('/N 4');
 		} else {
 			$this->writer->write('/N 3');
@@ -254,6 +296,92 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$this->writer->write('/Length ' . strlen($s) . '>>');
 		$this->writer->stream($s);
 		$this->writer->write('endobj');
+	}
+
+	/**
+	 * PDF/X-4 permits live transparency, but every transparency group must resolve
+	 * in a well-defined, device-independent blending colour space (a bare device
+	 * space can fail X-4 preflight). Emit a standalone ICCBased colour-space stream
+	 * backed by the same profile as the output intent so the page and form-XObject
+	 * transparency groups can reference it (see PageWriter and FormWriter).
+	 *
+	 * The object id is reserved by PageWriter::writePages() (as the next free object
+	 * number after all page/content/annotation/form objects) and stored in
+	 * $mpdf->transparencyGroupCsObjId so the /Group dictionaries can forward-reference
+	 * it. This method must therefore run immediately AFTER writePages() so that the
+	 * object it allocates matches that reservation; it does not consume a low object
+	 * number and shift the hardcoded page tree.
+	 */
+	public function writeTransparencyGroupColorSpace() // _puttransparencygroupcs
+	{
+		if (!$this->mpdf->pdfxAllowsTransparency()) {
+			return;
+		}
+
+		// Same profile selection as writeOutputIntent(): a user ICC profile if supplied,
+		// otherwise the bundled SWOP2006 CMYK profile (this method only runs for PDF/X-4, so
+		// the shared loader's default branch is the CMYK profile).
+		$s = $this->loadOutputIntentProfileBytes();
+
+		if ($this->mpdf->compress) {
+			$s = gzcompress($s);
+		}
+
+		$this->writer->object();
+
+		// The object number just allocated must match the id reserved during writePages();
+		// a mismatch means the page /Group dictionaries point at the wrong object, so fail
+		// loudly rather than emit a corrupt file.
+		if ($this->mpdf->transparencyGroupCsObjId && (int) $this->mpdf->transparencyGroupCsObjId !== (int) $this->mpdf->n) {
+			throw new \Mpdf\MpdfException(sprintf(
+				'PDF/X-4 transparency-group colour space object id mismatch (reserved %d, allocated %d).',
+				$this->mpdf->transparencyGroupCsObjId,
+				$this->mpdf->n
+			));
+		}
+
+		$this->mpdf->transparencyGroupCsObjId = $this->mpdf->n;
+
+		$this->writer->write('<<');
+
+		// Component count must match the output intent (item E1): /N 4 for a CMYK intent,
+		// /N 3 for an RGB X-4 intent. This method only runs for PDF/X-4.
+		$this->writer->write('/N ' . $this->mpdf->pdfxOutputIntentComponentCount());
+
+		if ($this->mpdf->compress) {
+			$this->writer->write('/Filter /FlateDecode ');
+		}
+
+		$this->writer->write('/Length ' . strlen($s) . '>>');
+		$this->writer->stream($s);
+		$this->writer->write('endobj');
+	}
+
+	/**
+	 * Returns the raw ICC profile bytes used for the PDF/X output intent's
+	 * DestOutputProfile and, for PDF/X-4, the transparency-group blending colour space.
+	 * A user-supplied profile wins; otherwise a PDF/X-4 document falls back to the
+	 * bundled SWOP2006 coated CMYK profile and any other document to the bundled sRGB profile.
+	 * Single source of truth shared by writeOutputIntent() and
+	 * writeTransparencyGroupColorSpace() so the two never embed different profiles.
+	 *
+	 * @return string
+	 */
+	private function loadOutputIntentProfileBytes()
+	{
+		if ($this->mpdf->ICCProfile) {
+			if (!file_exists($this->mpdf->ICCProfile)) {
+				throw new \Mpdf\MpdfException(sprintf('Unable to find ICC profile "%s"', $this->mpdf->ICCProfile));
+			}
+			return file_get_contents($this->mpdf->ICCProfile);
+		}
+
+		if ($this->mpdf->pdfxAllowsTransparency()) {
+			// PDF/X-4 with no user profile: embed the bundled SWOP2006 coated CMYK profile (/N 4).
+			return file_get_contents(__DIR__ . '/../../data/iccprofiles/SWOP2006_Coated3v2.icc');
+		}
+
+		return file_get_contents(__DIR__ . '/../../data/iccprofiles/sRGB_IEC61966-2-1.icc');
 	}
 
 	public function writeAssociatedFiles() // _putAssociatedFiles
@@ -329,13 +457,23 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 	{
 		$this->writer->write('/Type /Catalog');
 
-		// PDF/A-2 and PDF/A-3 are based on PDF 1.7 (ISO 32000-1).
-		// The /Version entry in the catalog overrides the header version.
+		// PDF/A-2 and PDF/A-3 are based on PDF 1.7 (ISO 32000-1); PDF/X-4 is based
+		// on PDF 1.6. The /Version entry in the catalog overrides the header
+		// version, and the higher of header/catalog always wins.
+		$catalogVersion = null;
 		if ($this->mpdf->PDFA && strpos($this->mpdf->PDFAversion, '-') !== false) {
 			list($part) = explode('-', $this->mpdf->PDFAversion);
 			if ((int) $part >= 2) {
-				$this->writer->write('/Version /1.7');
+				$catalogVersion = '1.7';
 			}
+		}
+		// PDF/X-4 asserts 1.6 unless a higher version has already been selected
+		// (e.g. a combined PDF/A-2/3 + X-4 document). PDF/X-1a is left untouched.
+		if ($this->mpdf->pdfxAllowsTransparency() && $catalogVersion === null) {
+			$catalogVersion = '1.6';
+		}
+		if ($catalogVersion !== null) {
+			$this->writer->write('/Version /' . $catalogVersion);
 		}
 
 		$this->writer->write('/Pages 1 0 R');

@@ -41,7 +41,8 @@ final class ImageWriter
 			$this->writer->write('/Width ' . $info['w']);
 			$this->writer->write('/Height ' . $info['h']);
 
-			if (isset($info['interpolation']) && $info['interpolation']) {
+			if (isset($info['interpolation']) && $info['interpolation'] && !$this->mpdf->PDFX) {
+				// PDF/X (every part) prohibits '/Interpolate true'
 				$this->writer->write('/Interpolate true'); // mPDF 6 - image interpolation shall be performed by a conforming reader
 			}
 
@@ -56,8 +57,10 @@ final class ImageWriter
 				$icc = true;
 				$this->writer->write('/ColorSpace [/ICCBased ' . ($this->mpdf->n + 1) . ' 0 R]');
 			} elseif ($info['cs'] === 'Indexed') {
-				if ($this->mpdf->PDFX || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3)) {
-					throw new \Mpdf\MpdfException('PDFA1-b and PDFX/1-a files do not permit using mixed colour space (' . $file . ').');
+				// PDF/X-4 with an RGB output intent permits an Indexed/DeviceRGB palette (the
+				// intent defines the RGB space); a CMYK intent (X-1a or X-4 CMYK) does not.
+				if (($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3)) {
+					throw new \Mpdf\MpdfException('PDFA1-b and ' . $this->mpdf->pdfxVersionLabel() . ' files do not permit using mixed colour space (' . $file . ').');
 				}
 				$this->writer->write('/ColorSpace [/Indexed /DeviceRGB ' . (strlen($info['pal']) / 3 - 1) . ' ' . ($this->mpdf->n + 1) . ' 0 R]');
 			} else {
@@ -69,8 +72,10 @@ final class ImageWriter
 					if ($info['type'] === 'jpg') {
 						$this->writer->write('/Decode [1 0 1 0 1 0 1 0]');
 					}
-				} elseif (($this->mpdf->PDFX || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3)) && $info['cs'] === 'DeviceRGB') {
-					throw new \Mpdf\MpdfException('PDFA1-b and PDFX/1-a files do not permit using mixed colour space (' . $file . ').');
+				} elseif ((($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace === 3)) && $info['cs'] === 'DeviceRGB') {
+					// A CMYK output intent (X-1a or X-4 CMYK) forbids bare DeviceRGB; an RGB
+					// output intent (X-4 with a user RGB ICC profile) defines the space, so it passes.
+					throw new \Mpdf\MpdfException('PDFA1-b and ' . $this->mpdf->pdfxVersionLabel() . ' files do not permit using mixed colour space (' . $file . ').');
 				}
 			}
 

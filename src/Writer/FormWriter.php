@@ -55,6 +55,11 @@ final class FormWriter
 			$this->writer->object();
 			$this->writer->write('<</Type /Group');
 			$this->writer->write('/S /Transparency');
+			if ($this->mpdf->pdfxAllowsTransparency() && $this->mpdf->transparencyGroupCsObjId) {
+				// PDF/X-4: give the form-XObject transparency group a device-independent
+				// blending space consistent with the output intent.
+				$this->writer->write('/CS [/ICCBased ' . $this->mpdf->transparencyGroupCsObjId . ' 0 R]');
+			}
 			$this->writer->write('>>');
 			$this->writer->write('endobj');
 		}

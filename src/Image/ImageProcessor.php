@@ -253,7 +253,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			return $this->imageError('', false, 'GD library needed to parse image files');
 		}
 
-		if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
+		if ($this->mpdf->PDFA || ($this->mpdf->PDFX && !$this->mpdf->pdfxAllowsTransparency())) {
 			$mask = false;
 		}
 
@@ -676,7 +676,10 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			return $this->imageError($file, $firstTime, 'Error creating GD image file from JPG(CMYK) image');
 		}
 
-		if ($a[2] === 'DeviceRGB' && ($this->mpdf->PDFX || $this->mpdf->restrictColorSpace === 3)) {
+		// PDF/X forces RGB JPEGs to CMYK only for a CMYK output intent (item E1); under an
+		// RGB output intent (PDF/X-4 with a user RGB ICC profile) the JPEG falls through to
+		// the ICC-extraction path below so calibrated RGB is preserved.
+		if ($a[2] === 'DeviceRGB' && (($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || $this->mpdf->restrictColorSpace === 3)) {
 			// Convert to CMYK image stream - nominally returned as type='png'
 			$info = $this->convertImage($data, $a[2], 'DeviceCMYK', $a[0], $a[1], $ppUx, false);
 			if (($this->mpdf->PDFA && !$this->mpdf->PDFAauto) || ($this->mpdf->PDFX && !$this->mpdf->PDFXauto)) {
@@ -853,7 +856,10 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		//$j = strpos($data,'cHRM');	// Chromaticity and Whitepoint
 		// $firstTime added mPDF 6 so when PNG Grayscale with alpha using resrtictcolorspace to CMYK
 		// the alpha channel is sent through as secondtime as Indexed and should not be converted to CMYK
-		if ($firstTime && ($colspace === 'DeviceRGB' || $colspace === 'Indexed') && ($this->mpdf->PDFX || $this->mpdf->restrictColorSpace === 3)) {
+		// PDF/X forces RGB/Indexed PNGs to CMYK only for a CMYK output intent (item E1);
+		// under an RGB output intent (PDF/X-4 with a user RGB ICC profile) the PNG keeps its
+		// RGB colour (ICC-tagged RGB then passes through via the /ICCBased branch).
+		if ($firstTime && ($colspace === 'DeviceRGB' || $colspace === 'Indexed') && (($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || $this->mpdf->restrictColorSpace === 3)) {
 
 			// Convert to CMYK image stream - nominally returned as type='png'
 			$info = $this->convertImage($data, $colspace, 'DeviceCMYK', $w, $h, $ppUx, $pngalpha, $gamma, $ct); // mPDF 5.7.2 Gamma correction
@@ -868,7 +874,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			// Convert to Grayscale image stream - nominally returned as type='png'
 			$info = $this->convertImage($data, $colspace, 'DeviceGray', $w, $h, $ppUx, $pngalpha, $gamma, $ct); // mPDF 5.7.2 Gamma correction
 
-		} elseif (($this->mpdf->PDFA || $this->mpdf->PDFX) && $pngalpha) {
+		} elseif (($this->mpdf->PDFA || ($this->mpdf->PDFX && !$this->mpdf->pdfxAllowsTransparency())) && $pngalpha) {
 
 			// Remove alpha channel
 			if ($this->mpdf->restrictColorSpace === 1) { // Grayscale

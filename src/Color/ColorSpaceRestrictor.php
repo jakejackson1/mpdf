@@ -113,7 +113,10 @@ class ColorSpaceRestrictor
 	 */
 	private function restrictRgbColorSpace($c, $color, &$PDFAXwarnings = [])
 	{
-		if ($this->mpdf->PDFX || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace == 3)) {
+		// PDF/X colour policy is keyed to the output intent (item E1): a CMYK intent
+		// (X-1a, or X-4 with a CMYK/no profile) still forces RGB to CMYK; an RGB intent
+		// (X-4 with a user-supplied RGB ICC profile) lets calibrated RGB pass through.
+		if (($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace == 3)) {
 			if (($this->mpdf->PDFA && !$this->mpdf->PDFAauto) || ($this->mpdf->PDFX && !$this->mpdf->PDFXauto)) {
 				$PDFAXwarnings[] = "RGB color specified '" . $color . "' (converted to CMYK)";
 			}
@@ -159,7 +162,10 @@ class ColorSpaceRestrictor
 	 */
 	private function restrictRgbaColorSpace($c, $color, &$PDFAXwarnings = [])
 	{
-		if ($this->mpdf->PDFX || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace == 3)) {
+		// Same intent-keyed policy as restrictRgbColorSpace (item E1): keep converting
+		// RGBa to CMYK for a CMYK output intent; under an RGB output intent (PDF/X-4 with
+		// a user RGB ICC profile) the RGBa colour passes straight through unchanged.
+		if (($this->mpdf->PDFX && $this->mpdf->pdfxOutputIntentIsCmyk()) || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace == 3)) {
 			if (($this->mpdf->PDFA && !$this->mpdf->PDFAauto) || ($this->mpdf->PDFX && !$this->mpdf->PDFXauto)) {
 				$PDFAXwarnings[] = "RGB color with transparency specified '" . $color . "' (converted to CMYK without transparency)";
 			}
