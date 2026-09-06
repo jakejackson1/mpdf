@@ -74,5 +74,10 @@
 	},
 	"config": {
 		"sort-packages": true
+	},
+	"extra": {
+		"branch-alias": {
+			"dev-gravitypdf": "8.x-dev"
+		}
 	}
 }
