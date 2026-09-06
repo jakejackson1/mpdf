@@ -38,4 +38,13 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertSame('NotoSans-Regular', $this->ttf->fullName);
 	}
 
+	/**
+	 * Verify a font whose GSUB lookups carry UseMarkFilteringSet parses rather than throwing
+	 */
+	public function testGetMetricsWithMarkGlyphSets()
+	{
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSansSinhala-Subset.ttf', (string) time(), 0, false, false, 0xFF);
+		$this->assertSame('NotoSansSinhala-Regular', $this->ttf->fullName);
+	}
+
 }
