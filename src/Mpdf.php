@@ -2184,7 +2184,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$h = $imh * $cw / $imw;
 				$w = $cw;
 				if ($h < $ch) {
-					$w = $w * $h / $ch;
+					$w = $w * $ch / $h;
 					$h = $ch;
 				}
 			} else {
@@ -2556,7 +2556,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								$ih = $ih * $pb['bpa']['w'] / $iw;
 								$iw = $pb['bpa']['w'];
 								if ($ih < $pb['bpa']['h']) {
-									$iw = $iw * $ih / $pb['bpa']['h'];
+									$iw = $iw * $pb['bpa']['h'] / $ih;
 									$ih = $pb['bpa']['h'];
 								}
 							} else {
@@ -2757,7 +2757,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								$ih = $ih * $pb['bpa']['w'] / $iw;
 								$iw = $pb['bpa']['w'];
 								if ($ih < $pb['bpa']['h']) {
-									$iw = $iw * $ih / $pb['bpa']['h'];
+									$iw = $iw * $pb['bpa']['h'] / $ih;
 									$ih = $pb['bpa']['h'];
 								}
 							} else {
