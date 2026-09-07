@@ -13910,11 +13910,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 						continue;
 					}
 					/* -- END CSS-POSITION -- */
-					$regexp = '|=\'(.*?)\'|s'; // eliminate single quotes, if any
+					// Rewrite single quoted values as double quoted ones, unless that would swallow a
+					// double quote of their own - those are left for the attribute regex below
+					$regexp = '|=\'([^\'"]*)\'|s';
 					$e = preg_replace($regexp, "=\"\$1\"", $e);
 					// changes anykey=anyvalue to anykey="anyvalue" (only do this inside [some] tags)
 					if (substr($e, 0, 10) != 'pageheader' && substr($e, 0, 10) != 'pagefooter' && substr($e, 0, 12) != 'tocpagebreak' && substr($e, 0, 10) != 'indexentry' && substr($e, 0, 8) != 'tocentry') { // mPDF 6  (ZZZ99H)
-						$regexp = '| (\\w+?)=([^\\s>"]+)|si';
+						$regexp = '| (\\w+?)=([^\\s>"\']+)|si';
 						$e = preg_replace($regexp, " \$1=\"\$2\"", $e);
 					}
 
@@ -13938,37 +13940,39 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							$e = preg_replace($regexp, ' \\1="' . $path . '"', $e);
 						}
 					}//END of Fix path values
-					// Extract attributes
-					$contents = [];
-					$contents1 = [];
-					$contents2 = [];
-					// Changed to allow style="background: url('bg.jpg')"
-					// Changed to improve performance; maximum length of \S (attribute) = 16
-					// Increase allowed attribute name to 32 - cutting off "toc-even-header-name" etc.
-					preg_match_all('/\\S{1,32}=["][^"]*["]/', $e, $contents1);
-					preg_match_all('/\\S{1,32}=[\'][^\']*[\']/i', $e, $contents2);
+					// Extract attributes. The tag name is the first thing matched; after it comes a
+					// name, then a value that may be double quoted, single quoted, unquoted, or
+					// absent altogether, as it is for boolean attributes such as `selected`.
+					// Names are letter-led so the slash that closes an empty tag is not read as one.
+					preg_match_all('/([a-zA-Z][\w:.\-]*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>"]+)))?/', $e, $contents, PREG_SET_ORDER);
 
-					$contents = array_merge($contents1, $contents2);
-					preg_match('/\\S+/', $e, $a2);
-					$tag = (isset($a2[0]) ? strtoupper($a2[0]) : '');
+					$tag = $contents ? strtoupper($contents[0][1]) : '';
+					array_shift($contents); // the tag name itself is not an attribute
+
 					$attr = [];
 					if ($orig_srcpath) {
 						$attr['ORIG_SRC'] = $orig_srcpath;
 					}
-					if (!empty($contents)) {
-						foreach ($contents[0] as $v) {
-							// Changed to allow style="background: url('bg.jpg')"
-							if (preg_match('/^([^=]*)=["]?([^"]*)["]?$/', $v, $a3) || preg_match('/^([^=]*)=[\']?([^\']*)[\']?$/', $v, $a3)) {
-								if (strtoupper($a3[1]) == 'ID' || strtoupper($a3[1]) == 'CLASS') { // 4.2.013 Omits STYLE
-									$attr[strtoupper($a3[1])] = trim(strtoupper($a3[2]));
-								} // includes header-style-right etc. used for <pageheader>
-								elseif (preg_match('/^(HEADER|FOOTER)-STYLE/i', $a3[1])) {
-									$attr[strtoupper($a3[1])] = trim(strtoupper($a3[2]));
-								} else {
-									$attr[strtoupper($a3[1])] = trim($a3[2]);
-								}
-							}
+					foreach ($contents as $v) {
+						// At most one of the three value forms takes part, and PCRE drops whichever
+						// groups come after the one that did
+						if (isset($v[4])) {
+							$value = $v[4];
+						} elseif (isset($v[3])) {
+							$value = $v[3];
+						} elseif (isset($v[2])) {
+							$value = $v[2];
+						} else {
+							$value = '';
 						}
+
+						$name = strtoupper($v[1]);
+						// 4.2.013 Omits STYLE; HEADER-STYLE-RIGHT etc. are used for <pageheader>
+						if ($name === 'ID' || $name === 'CLASS' || preg_match('/^(HEADER|FOOTER)-STYLE/', $name)) {
+							$value = strtoupper($value);
+						}
+
+						$attr[$name] = trim($value);
 					}
 					$this->tag->OpenTag($tag, $attr, $a, $i); // mPDF 6
 					/* -- CSS-POSITION -- */
