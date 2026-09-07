@@ -3310,6 +3310,13 @@ class Svg
 
 		xml_parse($svg2pdf_xml_parser, $data);
 
+		// The <svg> element is where the picture's dimensions come from. A document the parser could
+		// not read that far into - one with an unquoted attribute value, say - leaves none behind,
+		// and an image of no size divides by zero on its way to the page
+		if (!isset($this->svg_info['w'], $this->svg_info['h'])) {
+			$this->svg_error = true;
+		}
+
 		if ($this->svg_error) {
 			return false;
 		} else {
