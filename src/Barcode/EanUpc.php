@@ -48,6 +48,12 @@ class EanUpc extends \Mpdf\Barcode\AbstractBarcode implements \Mpdf\Barcode\Barc
 		}
 		$dataLength = $length - 1;
 
+		// More digits than the symbol holds were encoded as far as they fitted and then printed in
+		// full underneath, so the bars and the number below them disagreed
+		if (strlen($code) > $length) {
+			throw new \Mpdf\Barcode\BarcodeException(sprintf('Invalid EAN UPC barcode value "%s"', $code));
+		}
+
 		// Padding
 		$code = str_pad($code, $dataLength, '0', STR_PAD_LEFT);
 		$codeLength = strlen($code);
