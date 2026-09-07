@@ -575,7 +575,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 								if (isset($pl['quadPoints'])) {
 									$s = '/QuadPoints[';
 									foreach ($pl['quadPoints'] as $value) {
-										$s .= sprintf('%.2F ', $value);
+										$s .= sprintf('%.3F ', $value);
 									}
 									$s .= ']';
 									$this->writer->write($s);
