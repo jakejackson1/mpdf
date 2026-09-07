@@ -14692,6 +14692,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->HTMLheaderPageAnnots = [];
 					$this->HTMLheaderPageForms = [];
 					$this->pageBackgrounds = [];
+					$this->pageoutput[$this->page] = [];
+					$this->pageoutput[$this->page]['Font'] = '';
 					$this->WriteHTML($html, HTMLParserMode::HTML_HEADER_BUFFER);
 					$actual_h = $this->y - $y;
 					$ratio = $actual_h / $use_w;
