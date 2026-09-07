@@ -15497,6 +15497,33 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		return [$l_exists, $r_exists, $l_max, $r_max, $l_width, $r_width];
 	}
 
+	/**
+	 * Record a float that has just been closed, dropping the ones it has buried.
+	 *
+	 * $floatDivs is document-global and was emptied only in the constructor, yet GetFloatDivInfo() reads
+	 * all of it every time a float is placed. A page of floats therefore costs O(n^2) over a long
+	 * document, which is what a report of floated rows looks like.
+	 *
+	 * A float that ended at or above where this one starts can no longer satisfy the
+	 * `$currpos < $f['endpos']` test, since layout only moves forward from here, so it is dropped. The
+	 * comparison is against the incoming start rather than the current cursor because the cursor rewinds
+	 * to the top of the float that has just been written; anything that jumps backwards prunes nothing
+	 * rather than pruning wrongly.
+	 *
+	 * @param array $floatDiv
+	 *
+	 * @return void
+	 */
+	public function addFloatDiv(array $floatDiv)
+	{
+		$this->floatDivs = array_values(array_filter($this->floatDivs, function ($f) use ($floatDiv) {
+			// Only within the same block formatting context: a float elsewhere is still ClearFloats' to find.
+			return $f['blockContext'] !== $floatDiv['blockContext'] || $f['endpos'] > $floatDiv['startpos'];
+		}));
+
+		$this->floatDivs[] = $floatDiv;
+	}
+
 	/* -- END CSS-FLOAT -- */
 
 	// LIST MARKERS	// mPDF 6  Lists

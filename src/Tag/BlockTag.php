@@ -1301,7 +1301,7 @@ abstract class BlockTag extends Tag
 				}
 			}
 
-			$this->mpdf->floatDivs[] = [
+			$this->mpdf->addFloatDiv([
 				'side' => 'R',
 				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
 				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
@@ -1312,7 +1312,7 @@ abstract class BlockTag extends Tag
 				'w' => $this->mpdf->blk[$this->mpdf->blklvl]['float_width'],
 				'blklvl' => $this->mpdf->blklvl,
 				'blockContext' => $this->mpdf->blk[$this->mpdf->blklvl - 1]['blockContext']
-			];
+			]);
 
 			$this->mpdf->y = $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'];
 			$this->mpdf->page = $this->mpdf->blk[$this->mpdf->blklvl]['startpage'];
@@ -1336,7 +1336,7 @@ abstract class BlockTag extends Tag
 				}
 			}
 
-			$this->mpdf->floatDivs[] = [
+			$this->mpdf->addFloatDiv([
 				'side' => 'L',
 				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
 				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
@@ -1347,7 +1347,7 @@ abstract class BlockTag extends Tag
 				'w' => $this->mpdf->blk[$this->mpdf->blklvl]['float_width'],
 				'blklvl' => $this->mpdf->blklvl,
 				'blockContext' => $this->mpdf->blk[$this->mpdf->blklvl - 1]['blockContext']
-			];
+			]);
 
 			$this->mpdf->y = $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'];
 			$this->mpdf->page = $this->mpdf->blk[$this->mpdf->blklvl]['startpage'];
