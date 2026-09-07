@@ -1244,8 +1244,8 @@ class TTFontFile
 			$LigCaretList_offset = $this->read_ushort();
 			$MarkAttachClassDef_offset = $this->read_ushort();
 
-			// Version 0x00010002 of GDEF header contains additional Offset to a list defining mark glyph set definitions (MarkGlyphSetDef)
-			if ($ver_min == 2) {
+			// GDEF 1.2 added the MarkGlyphSetsDef offset; 1.3 keeps it and appends an ItemVarStore after it
+			if ($ver_min >= 2) {
 				$MarkGlyphSetsDef_offset = $this->read_ushort();
 			}
 
@@ -1336,8 +1336,8 @@ class TTFontFile
 				$this->MarkAttachmentType = [];
 			}
 
-			// MarkGlyphSets only in Version 0x00010002 of GDEF
-			if ($ver_min == 2 && $MarkGlyphSetsDef_offset) {
+			// MarkGlyphSets in Version 0x00010002 of GDEF and later
+			if ($ver_min >= 2 && $MarkGlyphSetsDef_offset) {
 				$this->seek($gdef_offset + $MarkGlyphSetsDef_offset);
 				$MarkSetTableFormat = $this->read_ushort();
 				$MarkSetCount = $this->read_ushort();
@@ -2963,7 +2963,7 @@ class TTFontFile
 		}
 		// Flag & 0x0010 = UseMarkFilteringSet: skip every mark *except* those in the set
 		if (($flag & 0x0010) && strpos($this->GlyphClassMarks, $glyph)
-				&& !strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
+				&& !strpos($this->markGlyphSet($MarkFilteringSet), $glyph)) {
 			$ignore = true;
 		}
 
@@ -2980,6 +2980,19 @@ class TTFontFile
 	 *
 	 * @return string
 	 */
+	/**
+	 * A lookup's MarkFilteringSet indexes GDEF's mark glyph sets. A font naming a set GDEF does not define is
+	 * malformed, and guessing which marks it meant would shape silently wrong, so both callers fail loudly here.
+	 */
+	private function markGlyphSet($MarkFilteringSet)
+	{
+		if (!isset($this->MarkGlyphSets[$MarkFilteringSet])) {
+			throw new \Mpdf\Exception\FontException(sprintf('Font "%s" uses mark filtering set %s, which GDEF does not define', $this->fontkey, $MarkFilteringSet));
+		}
+
+		return $this->MarkGlyphSets[$MarkFilteringSet];
+	}
+
 	private function marksOutsideFilteringSet($marks, $set)
 	{
 		$keep = [];
@@ -3017,11 +3030,8 @@ class TTFontFile
 
 		// Flag & 0x0010 = UseMarkFilteringSet
 		if ($flag & 0x0010) {
-			if (!isset($this->MarkGlyphSets[$MarkFilteringSet])) {
-				throw new \Mpdf\Exception\FontException(sprintf('Font "%s" uses mark filtering set %s, which GDEF does not define', $this->fontkey, $MarkFilteringSet));
-			}
 			$ignoreflag = $flag;
-			$str = $this->marksOutsideFilteringSet($this->GlyphClassMarks, $this->MarkGlyphSets[$MarkFilteringSet]);
+			$str = $this->marksOutsideFilteringSet($this->GlyphClassMarks, $this->markGlyphSet($MarkFilteringSet));
 		}
 
 		// If Ignore Marks set, supercedes any above
