@@ -4395,6 +4395,34 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 	}
 
+	/**
+	 * Whether an href names a destination in this document (written as /Dest) rather than a target
+	 * outside it (/URI).
+	 *
+	 * Known schemes are checked first. The dot fallback below is only a guess, and it misreads any
+	 * dotless URL — http://localhost/entry, mailto:admin@localhost, tel: — as an anchor matching nothing.
+	 *
+	 * @param string $href
+	 *
+	 * @return bool
+	 */
+	private function isNamedAnchorReference($href)
+	{
+		if (strpos($href, '@') === 0) {
+			return false; // "@3", an explicit page number
+		}
+
+		if (stripos($href, 'http://') === 0 || stripos($href, 'https://') === 0) {
+			return false;
+		}
+
+		if (stripos($href, 'mailto:') === 0 || stripos($href, 'tel:') === 0 || stripos($href, 'sms:') === 0) {
+			return false;
+		}
+
+		return strpos($href, '.') === false;
+	}
+
 	function AddLink()
 	{
 		// Create a new internal link
@@ -16263,7 +16291,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$this->ReqFontStyle = $vetor[12];
 			}
 			if (isset($vetor[1]) and $vetor[1] != '') { // LINK
-				if (strpos($vetor[1], ".") === false && strpos($vetor[1], "@") !== 0) { // assuming every external link has a dot indicating extension (e.g: .html .txt .zip www.somewhere.com etc.)
+				if ($this->isNamedAnchorReference($vetor[1])) {
 					// Repeated reference to same anchor?
 					while (array_key_exists($vetor[1], $this->internallink)) {
 						$vetor[1] = "#" . $vetor[1];
