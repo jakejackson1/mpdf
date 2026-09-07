@@ -27196,7 +27196,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (count($svgi[0])) {
 			for ($i = 0; $i < count($svgi[0]); $i++) {
 				$file = $this->cache->write('/_tempSVG' . uniqid(random_int(1, 100000), true) . '_' . $i . '.svg', $svgi[0][$i]);
-				$html = str_replace($svgi[0][$i], '<img src="' . $file . '" />', $html);
+				$class = $this->svgClassAttribute($svgi[0][$i]);
+				$html = str_replace($svgi[0][$i], '<img src="' . $file . '"' . ($class !== '' ? ' class="' . $class . '"' : '') . ' />', $html);
 			}
 		}
 
@@ -27340,6 +27341,28 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$html = preg_replace("/(&#[x]{0,1}[0-9a-f]{1,5})</i", "\\1;<", $html);
 
 		return $html;
+	}
+
+	/**
+	 * The class an embedded SVG was given, so the img element it becomes can still be reached by the
+	 * selectors written for it. The value may be double quoted, single quoted or unquoted, as any
+	 * attribute value may be; a double quote is dropped because no class name can hold one.
+	 *
+	 * @param string $svg
+	 *
+	 * @return string
+	 */
+	private function svgClassAttribute($svg)
+	{
+		$matches = [];
+		if (!preg_match('/^<svg\b[^>]*?\sclass\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>"\']+))/si', $svg, $matches)) {
+			return '';
+		}
+
+		// PCRE drops the groups after the one that took part
+		$class = array_pop($matches);
+
+		return str_replace('"', '', $class);
 	}
 
 	// mPDF 5.7+
