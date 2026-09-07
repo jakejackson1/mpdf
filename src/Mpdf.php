@@ -9497,7 +9497,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	function SetDisplayPreferences($preferences)
 	{
-		// String containing any or none of /HideMenubar/HideToolbar/HideWindowUI/DisplayDocTitle/CenterWindow/FitWindow
+		// String containing any or none of /HideMenubar/HideToolbar/HideWindowUI/DisplayDocTitle/CenterWindow/FitWindow/NoPrintScaling/FullScreen/UseAttachments
 
 		$this->DisplayPreferences .= $preferences;
 	}

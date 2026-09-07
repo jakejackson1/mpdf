@@ -379,12 +379,11 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		// Bookmarks
 		if (count($this->mpdf->BMoutlines) > 0) {
 			$this->writer->write('/Outlines ' . $this->mpdf->OutlineRoot . ' 0 R');
-			$this->writer->write('/PageMode /UseOutlines');
 		}
 
-		// Fullscreen
-		if (is_int(strpos($this->mpdf->DisplayPreferences, 'FullScreen'))) {
-			$this->writer->write('/PageMode /FullScreen');
+		$pageMode = $this->getPageMode();
+		if ($pageMode !== null) {
+			$this->writer->write('/PageMode /' . $pageMode);
 		}
 
 		// Metadata
@@ -463,10 +462,6 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('>>');
 		}
 
-		if ($this->mpdf->open_layer_pane && ($this->mpdf->hasOC || count($this->mpdf->layers))) {
-			$this->writer->write('/PageMode /UseOC');
-		}
-
 		if ($this->mpdf->hasOC || count($this->mpdf->layers)) {
 
 			$p = $v = $h = $l = $loff = $lall = $as = '';
@@ -508,6 +503,34 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 
 			$this->writer->write('>>>>');
 		}
+	}
+
+	/**
+	 * A catalog carries a single /PageMode, so the modes the document asks for explicitly take
+	 * precedence over the outline pane implied by simply having bookmarks.
+	 *
+	 * @return string|null
+	 */
+	private function getPageMode()
+	{
+		if ($this->mpdf->open_layer_pane && ($this->mpdf->hasOC || count($this->mpdf->layers))) {
+			return 'UseOC';
+		}
+
+		if (is_int(strpos($this->mpdf->DisplayPreferences, 'FullScreen'))) {
+			return 'FullScreen';
+		}
+
+		// UseAttachments is PDF 1.6 spec.
+		if (is_int(strpos($this->mpdf->DisplayPreferences, 'UseAttachments'))) {
+			return 'UseAttachments';
+		}
+
+		if (count($this->mpdf->BMoutlines) > 0) {
+			return 'UseOutlines';
+		}
+
+		return null;
 	}
 
 	/**
