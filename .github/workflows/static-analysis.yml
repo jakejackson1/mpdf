@@ -9,6 +9,7 @@ on:
       - "master"
       - "development"
       - "test"
+      - "gravitypdf"
 
 jobs:
 
