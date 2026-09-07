@@ -943,12 +943,13 @@ class OtlDump
 			// ULONG Version of the GDEF table-currently 0x00010000
 			$ver_maj = $this->read_ushort();
 			$ver_min = $this->read_ushort();
-			// Version 0x00010002 of GDEF header contains additional Offset to a list defining mark glyph set definitions (MarkGlyphSetDef)
 			$GlyphClassDef_offset = $this->read_ushort();
 			$AttachList_offset = $this->read_ushort();
 			$LigCaretList_offset = $this->read_ushort();
 			$MarkAttachClassDef_offset = $this->read_ushort();
-			if ($ver_min == 2) {
+
+			// GDEF 1.2 added the MarkGlyphSetsDef offset; 1.3 keeps it and appends an ItemVarStore after it
+			if ($ver_min >= 2) {
 				$MarkGlyphSetsDef_offset = $this->read_ushort();
 			}
 
@@ -1094,8 +1095,8 @@ class OtlDump
 				$this->MarkAttachmentType = [];
 			}
 
-			// MarkGlyphSets only in Version 0x00010002 of GDEF
-			if ($ver_min == 2 && $MarkGlyphSetsDef_offset) {
+			// MarkGlyphSets in Version 0x00010002 of GDEF and later
+			if ($ver_min >= 2 && $MarkGlyphSetsDef_offset) {
 				if ($this->mode == 'summary') {
 					$this->mpdf->WriteHTML('<h1>Mark Glyph Sets</h1>');
 				}
@@ -1107,7 +1108,8 @@ class OtlDump
 					$MarkSetOffset[] = $this->read_ulong();
 				}
 				for ($i = 0; $i < $MarkSetCount; $i++) {
-					$this->seek($MarkSetOffset[$i]);
+					// Coverage offsets are relative to the MarkGlyphSetsDef table, not the file
+					$this->seek($gdef_offset + $MarkGlyphSetsDef_offset + $MarkSetOffset[$i]);
 					$glyphs = $this->_getCoverage();
 					$this->MarkGlyphSets[$i] = $this->formatClassArr($glyphs);
 					if ($this->mode == 'summary') {
@@ -2702,12 +2704,26 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		if (($flag & 0xFF00) && strpos($this->MarkAttachmentType[($flag >> 8)], $glyph)) {
 			$ignore = true;
 		}
-		// Flag & 0x0010 = UseMarkFilteringSet
-		if (($flag & 0x0010) && strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
+		// Flag & 0x0010 = UseMarkFilteringSet: skip every mark *except* those in the set
+		if (($flag & 0x0010) && strpos($this->GlyphClassMarks, $glyph)
+				&& !strpos($this->markGlyphSet($MarkFilteringSet), $glyph)) {
 			$ignore = true;
 		}
 
 		return $ignore;
+	}
+
+	/**
+	 * A lookup's MarkFilteringSet indexes GDEF's mark glyph sets. A font naming a set GDEF does not define is
+	 * malformed, and guessing which marks it meant would dump silently wrong, so both callers fail loudly here.
+	 */
+	private function markGlyphSet($MarkFilteringSet)
+	{
+		if (!isset($this->MarkGlyphSets[$MarkFilteringSet])) {
+			throw new \Mpdf\Exception\FontException(sprintf('Font "%s" uses mark filtering set %s, which GDEF does not define', $this->fontkey, $MarkFilteringSet));
+		}
+
+		return $this->MarkGlyphSets[$MarkFilteringSet];
 	}
 
 	function _getGSUBignoreString($flag, $MarkFilteringSet)
@@ -2728,9 +2744,10 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 
 		// Flag & 0x0010 = UseMarkFilteringSet
 		if ($flag & 0x0010) {
-			throw new \Mpdf\Exception\FontException("This font " . $this->fontkey . " contains MarkGlyphSets");
-			$str = "Mark Glyph Set: ";
-			$str .= $this->MarkGlyphSets[$MarkFilteringSet];
+			// Fail here rather than dump a lookup whose filtering set GDEF never defined
+			$this->markGlyphSet($MarkFilteringSet);
+			$ignoreflag = $flag;
+			$str = "Marks outside Mark Glyph Set[" . $MarkFilteringSet . "] ";
 		}
 
 		// If Ignore Marks set, supercedes any above

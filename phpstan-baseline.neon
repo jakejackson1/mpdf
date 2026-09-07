@@ -997,12 +997,6 @@ parameters:
 			path: src/OtlDump.php
 
 		-
-			message: '#^Variable \$MarkGlyphSetsDef_offset might not be defined\.$#'
-			identifier: variable.undefined
-			count: 1
-			path: src/OtlDump.php
-
-		-
 			message: '#^Variable \$arr might not be defined\.$#'
 			identifier: variable.undefined
 			count: 1
