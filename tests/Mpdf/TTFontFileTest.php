@@ -47,4 +47,17 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertSame('NotoSansSinhala-Regular', $this->ttf->fullName);
 	}
 
+	/**
+	 * MarkGlyphSetsDef coverage offsets are relative to that table, not to the file. Seeking to them as
+	 * absolute offsets lands in the table directory and yields empty sets, which silently disables every
+	 * UseMarkFilteringSet lookup. U+0DCA/U+0DD2/U+0DD3 are the subset's Sinhala marks; the second set's
+	 * glyph has no cmap entry, so it is mapped into the Private Use Area.
+	 */
+	public function testGetMetricsReadsMarkGlyphSetsCoverage()
+	{
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSansSinhala-Subset.ttf', (string) time(), 0, false, false, 0xFF);
+
+		$this->assertSame([' 00DCA| 00DD2| 00DD3', ' 0E00A'], $this->ttf->MarkGlyphSets);
+	}
+
 }

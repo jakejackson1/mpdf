@@ -4474,6 +4474,33 @@ class Otl
 		return $MarkRecord;
 	}
 
+	/**
+	 * UseMarkFilteringSet means "skip every mark except those in the given mark glyph set", so the glyphs to
+	 * ignore are GlyphClassMarks minus that set - not the set itself.
+	 *
+	 * @param string $marks Space-prefixed, "|"-separated glyph list, e.g. " 00DCA| 00DD2"
+	 * @param string $set   The mark glyph set, in the same format
+	 *
+	 * @return string
+	 */
+	private function marksOutsideFilteringSet($marks, $set)
+	{
+		$keep = [];
+		$inSet = [];
+		foreach (explode('|', $set) as $glyph) {
+			$inSet[trim($glyph)] = true;
+		}
+
+		foreach (explode('|', $marks) as $glyph) {
+			$glyph = trim($glyph);
+			if ($glyph !== '' && !isset($inSet[$glyph])) {
+				$keep[] = $glyph;
+			}
+		}
+
+		return $keep ? ' ' . implode('| ', $keep) : '';
+	}
+
 	private function _getGCOMignoreString($flag, $MarkFilteringSet)
 	{
 		// If ignoreFlag set, combine all ignore glyphs into -> "(?:( 0FBA1| 0FBA2| 0FBA3)*)"
@@ -4496,7 +4523,8 @@ class Otl
 			if ($MarkFilteringSet === '' || !isset($this->MarkGlyphSets[$MarkFilteringSet])) {
 				throw new \Mpdf\MpdfException("This font [" . $this->fontkey . "] contains MarkGlyphSets - but MarkFilteringSet not set");
 			}
-			$str = $this->MarkGlyphSets[$MarkFilteringSet];
+			$ignoreflag = $flag;
+			$str = $this->marksOutsideFilteringSet($this->GlyphClassMarks, $this->MarkGlyphSets[$MarkFilteringSet]);
 		}
 
 		// If Ignore Marks set, supercedes any above
@@ -4550,8 +4578,9 @@ class Otl
 				$ignore = true;
 			}
 		}
-		// Flag & 0x0010 = UseMarkFilteringSet
-		if (($flag & 0x0010) && strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
+		// Flag & 0x0010 = UseMarkFilteringSet: skip every mark *except* those in the set
+		if (($flag & 0x0010) && strpos($this->GlyphClassMarks, $glyph)
+				&& !strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
 			$ignore = true;
 		}
 		return $ignore;
