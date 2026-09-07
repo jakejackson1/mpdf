@@ -60,4 +60,58 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertSame([' 00DCA| 00DD2| 00DD3', ' 0E00A'], $this->ttf->MarkGlyphSets);
 	}
 
+	/**
+	 * debugfont mode validates each table's version as it goes, so it walks the byte offsets by a
+	 * different route than normal mode and has its own chance to lose its place
+	 */
+	public function testGetMetricWithOtlAndFontDebug()
+	{
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/Poppins-Regular.ttf', uniqid('', true), 0, true, false, 0xFF);
+		$this->assertSame('Poppins-Regular', $this->ttf->fullName);
+
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSans-Regular.ttf', uniqid('', true), 0, true, false, 0xFF);
+		$this->assertSame('NotoSans-Regular', $this->ttf->fullName);
+	}
+
+	/**
+	 * Not throwing is not enough - a misplaced skip() can read plausible garbage. The two modes
+	 * differ only in what they validate, so everything they extract has to agree.
+	 *
+	 * @dataProvider fontProvider
+	 */
+	public function testFontDebugReadsTheSameMetricsAsNormalMode($file, $name)
+	{
+		$normal = $this->metrics($file, false);
+		$debug = $this->metrics($file, true);
+
+		// fontRevision is only read when validating the head table, so normal mode leaves it null
+		unset($normal['fontRevision'], $debug['fontRevision']);
+
+		$this->assertSame($name, $normal['fullName']);
+		$this->assertEquals($normal, $debug);
+	}
+
+	public function fontProvider()
+	{
+		return [
+			['Poppins-Regular.ttf', 'Poppins-Regular'],
+			['NotoSans-Regular.ttf', 'NotoSans-Regular'],
+			['Manjari-Regular.ttf', 'Manjari-Regular'],
+		];
+	}
+
+	/**
+	 * Everything the reader extracted, less its own position in the file
+	 */
+	private function metrics($file, $debug)
+	{
+		$ttf = new TTFontFile(new FontCache(new Cache(__DIR__ . '/tmp/mpdf/ttfontdata')), 'win');
+		$ttf->getMetrics(__DIR__ . '/../data/ttf/' . $file, uniqid('', true), 0, $debug, false, 0xFF);
+
+		$vars = get_object_vars($ttf);
+		unset($vars['fh'], $vars['fontkey'], $vars['fontCache']);
+
+		return $vars;
+	}
+
 }
