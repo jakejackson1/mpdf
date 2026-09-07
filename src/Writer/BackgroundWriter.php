@@ -163,18 +163,27 @@ final class BackgroundWriter
 				$this->writer->write('/Font <<');
 
 				foreach ($this->mpdf->fonts as $font) {
-					if (!$font['used'] && $font['type'] === 'TTF') {
+					// The 'used' and 'type' keys are only reachable once a font is flagged, as a
+					// core font that has drawn nothing yet carries neither
+					if (!isset($font['fo']) || !$font['fo']) {
 						continue;
 					}
-					if (isset($font['fo']) && $font['fo']) {
-						if ($font['type'] === 'TTF' && ($font['sip'] || $font['smp'])) {
+
+					if (isset($font['type']) && $font['type'] === 'TTF') {
+						if (!$font['used']) {
+							continue;
+						}
+
+						if ($font['sip'] || $font['smp']) {
 							foreach ($font['n'] as $k => $fid) {
-								$this->writer->write('/F' . $font['subsetfontids'][$k] . ' ' . $font['n'][$k] . ' 0 R');
+								$this->writer->write('/F' . $font['subsetfontids'][$k] . ' ' . $fid . ' 0 R');
 							}
-						} else {
-							$this->writer->write('/F' . $font['i'] . ' ' . $font['n'] . ' 0 R');
+
+							continue;
 						}
 					}
+
+					$this->writer->write('/F' . $font['i'] . ' ' . $font['n'] . ' 0 R');
 				}
 				$this->writer->write('>>');
 			} else {
