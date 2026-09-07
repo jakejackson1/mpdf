@@ -1344,7 +1344,8 @@ class TTFontFile
 					$MarkSetOffset[] = $this->read_ulong();
 				}
 				for ($i = 0; $i < $MarkSetCount; $i++) {
-					$this->seek($MarkSetOffset[$i]);
+					// Coverage offsets are relative to the MarkGlyphSetsDef table, not the file
+					$this->seek($gdef_offset + $MarkGlyphSetsDef_offset + $MarkSetOffset[$i]);
 					$glyphs = $this->_getCoverage();
 					$this->MarkGlyphSets[$i] = ' ' . implode('| ', $glyphs);
 				}
@@ -2441,6 +2442,10 @@ class TTFontFile
 					}
 				} // LookupType 2: Multiple Substitution Subtable
 				elseif ($Lookup[$i]['Type'] == 2) {
+					if (!isset($Lookup[$i]['Subtable'][$c]['subs'])) {
+						continue; // every entry was filtered out by the Ignore flags
+					}
+
 					for ($s = 0; $s < count($Lookup[$i]['Subtable'][$c]['subs']); $s++) {
 						$inputGlyphs = $Lookup[$i]['Subtable'][$c]['subs'][$s]['Replace'];
 						$substitute = implode(" ", $Lookup[$i]['Subtable'][$c]['subs'][$s]['substitute']);
@@ -2451,6 +2456,10 @@ class TTFontFile
 					}
 				} // LookupType 3: Alternate Forms
 				elseif ($Lookup[$i]['Type'] == 3) {
+					if (!isset($Lookup[$i]['Subtable'][$c]['subs'])) {
+						continue; // every entry was filtered out by the Ignore flags
+					}
+
 					for ($s = 0; $s < count($Lookup[$i]['Subtable'][$c]['subs']); $s++) {
 						$inputGlyphs = $Lookup[$i]['Subtable'][$c]['subs'][$s]['Replace'];
 						$substitute = $Lookup[$i]['Subtable'][$c]['subs'][$s]['substitute'][0];
@@ -2461,6 +2470,10 @@ class TTFontFile
 					}
 				} // LookupType 4: Ligature Substitution Subtable
 				elseif ($Lookup[$i]['Type'] == 4) {
+					if (!isset($Lookup[$i]['Subtable'][$c]['subs'])) {
+						continue; // every entry was filtered out by the Ignore flags
+					}
+
 					for ($s = 0; $s < count($Lookup[$i]['Subtable'][$c]['subs']); $s++) {
 						$inputGlyphs = $Lookup[$i]['Subtable'][$c]['subs'][$s]['Replace'];
 						$substitute = $Lookup[$i]['Subtable'][$c]['subs'][$s]['substitute'][0];
@@ -2497,7 +2510,7 @@ class TTFontFile
 
 									// $Lookup[$lup] = secondary Lookup
 									for ($lus = 0; $lus < $Lookup[$lup]['SubtableCount']; $lus++) {
-										if (count($Lookup[$lup]['Subtable'][$lus]['subs'])) {
+										if (!empty($Lookup[$lup]['Subtable'][$lus]['subs'])) {
 											foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
 												$lookupGlyphs = $luss['Replace'];
 												$mLen = count($lookupGlyphs);
@@ -2628,7 +2641,7 @@ class TTFontFile
 							$lup = $Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['LookupListIndex'];
 							$seqIndex = $Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['SequenceIndex'];
 							for ($lus = 0; $lus < $Lookup[$lup]['SubtableCount']; $lus++) {
-								if (count($Lookup[$lup]['Subtable'][$lus]['subs'])) {
+								if (!empty($Lookup[$lup]['Subtable'][$lus]['subs'])) {
 									foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
 										$lookupGlyphs = $luss['Replace'];
 										$mLen = count($lookupGlyphs);
@@ -2707,7 +2720,7 @@ class TTFontFile
 
 									// $Lookup[$lup] = secondary Lookup
 									for ($lus = 0; $lus < $Lookup[$lup]['SubtableCount']; $lus++) {
-										if (count($Lookup[$lup]['Subtable'][$lus]['subs'])) {
+										if (!empty($Lookup[$lup]['Subtable'][$lus]['subs'])) {
 											foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
 												$lookupGlyphs = $luss['Replace'];
 												$mLen = count($lookupGlyphs);
@@ -2823,7 +2836,7 @@ class TTFontFile
 
 									// $Lookup[$lup] = secondary Lookup
 									for ($lus = 0; $lus < $Lookup[$lup]['SubtableCount']; $lus++) {
-										if (count($Lookup[$lup]['Subtable'][$lus]['subs'])) {
+										if (!empty($Lookup[$lup]['Subtable'][$lus]['subs'])) {
 											foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
 												$lookupGlyphs = $luss['Replace'];
 												$mLen = count($lookupGlyphs);
@@ -2946,12 +2959,41 @@ class TTFontFile
 				$ignore = true;
 			}
 		}
-		// Flag & 0x0010 = UseMarkFilteringSet
-		if (($flag & 0x0010) && strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
+		// Flag & 0x0010 = UseMarkFilteringSet: skip every mark *except* those in the set
+		if (($flag & 0x0010) && strpos($this->GlyphClassMarks, $glyph)
+				&& !strpos($this->MarkGlyphSets[$MarkFilteringSet], $glyph)) {
 			$ignore = true;
 		}
 
 		return $ignore;
+	}
+
+
+	/**
+	 * UseMarkFilteringSet means "skip every mark except those in the given mark glyph set", so the glyphs to
+	 * ignore are GlyphClassMarks minus that set - not the set itself.
+	 *
+	 * @param string $marks Space-prefixed, "|"-separated glyph list, e.g. " 00DCA| 00DD2"
+	 * @param string $set   The mark glyph set, in the same format
+	 *
+	 * @return string
+	 */
+	private function marksOutsideFilteringSet($marks, $set)
+	{
+		$keep = [];
+		$inSet = [];
+		foreach (explode('|', $set) as $glyph) {
+			$inSet[trim($glyph)] = true;
+		}
+
+		foreach (explode('|', $marks) as $glyph) {
+			$glyph = trim($glyph);
+			if ($glyph !== '' && !isset($inSet[$glyph])) {
+				$keep[] = $glyph;
+			}
+		}
+
+		return $keep ? ' ' . implode('| ', $keep) : '';
 	}
 
 	function _getGSUBignoreString($flag, $MarkFilteringSet)
@@ -2976,7 +3018,8 @@ class TTFontFile
 			if (!isset($this->MarkGlyphSets[$MarkFilteringSet])) {
 				throw new \Mpdf\Exception\FontException(sprintf('Font "%s" uses mark filtering set %s, which GDEF does not define', $this->fontkey, $MarkFilteringSet));
 			}
-			$str = $this->MarkGlyphSets[$MarkFilteringSet];
+			$ignoreflag = $flag;
+			$str = $this->marksOutsideFilteringSet($this->GlyphClassMarks, $this->MarkGlyphSets[$MarkFilteringSet]);
 		}
 
 		// If Ignore Marks set, supercedes any above
