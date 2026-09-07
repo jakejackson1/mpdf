@@ -14978,9 +14978,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if (count($prop) == 1) {
 			$bsize = $this->sizeConverter->convert($prop[0], $refw, $this->FontSize, false);
 			if ($bsize > 0) {
-				return ['s' => 1, 'w' => $bsize, 'c' => $this->colorConverter->convert(0, $this->PDFAXwarnings), 'style' => 'solid'];
+				return ['s' => 1, 'w' => $bsize, 'c' => $this->colorConverter->convert(0, $this->PDFAXwarnings), 'style' => 'solid', 'dom' => 0];
 			} else {
-				return ['w' => 0, 's' => 0];
+				return ['s' => 0, 'w' => 0, 'c' => '', 'style' => '', 'dom' => 0];
 			}
 		} elseif (count($prop) == 2) {
 			// 1px solid
@@ -15016,7 +15016,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$prop[1] = $tmp;
 			}
 		} else {
-			return ['w' => 0, 's' => 0];
+			return ['s' => 0, 'w' => 0, 'c' => '', 'style' => '', 'dom' => 0];
 		}
 		// Size
 		$bsize = $this->sizeConverter->convert($prop[0], $refw, $this->FontSize, false);
