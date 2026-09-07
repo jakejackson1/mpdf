@@ -265,12 +265,6 @@ parameters:
 			path: src/Image/Wmf.php
 
 		-
-			message: '#^Binary operation "\*" between string and 100 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Mpdf.php
-
-		-
 			message: '#^Binary operation "\*" between string and 2 results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1

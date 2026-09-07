@@ -7420,18 +7420,19 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								$tr2 .= $this->transformTranslate(0, $translate_y, true) . ' ';
 							} elseif ($c == 'scale' && count($vv) && is_numeric($vv[0])) {
 								$scale_x = $vv[0] * 100;
-								if (count($vv) == 2) {
+								if (count($vv) == 2 && is_numeric($vv[1])) {
 									$scale_y = $vv[1] * 100;
 								} else {
 									$scale_y = $scale_x;
 								}
 								$tr2 .= $this->transformScale($scale_x, $scale_y, $cx, $cy, true) . ' ';
 							} elseif ($c == 'scalex' && count($vv) && is_numeric($vv[0])) {
+								// The axis a one-axis scale leaves alone is scaled by 100%, not by nothing
 								$scale_x = $vv[0] * 100;
-								$tr2 .= $this->transformScale($scale_x, 0, $cx, $cy, true) . ' ';
+								$tr2 .= $this->transformScale($scale_x, 100, $cx, $cy, true) . ' ';
 							} elseif ($c == 'scaley' && count($vv) && is_numeric($vv[0])) {
 								$scale_y = $vv[0] * 100;
-								$tr2 .= $this->transformScale(0, $scale_y, $cx, $cy, true) . ' ';
+								$tr2 .= $this->transformScale(100, $scale_y, $cx, $cy, true) . ' ';
 							} elseif ($c == 'skew' && count($vv)) {
 								$angle_x = $this->ConvertAngle($vv[0], false);
 								if (count($vv) == 2) {
