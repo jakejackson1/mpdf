@@ -5747,10 +5747,11 @@ class Otl
 
 	public function sliceOTLdata($OTLdata, $pos, $len)
 	{
+		// applyOTL() leaves OTLdata empty for a blank string, so every key here is optional
 		$newOTLdata = ['GPOSinfo' => [], 'char_data' => []];
-		$newOTLdata['group'] = substr($OTLdata['group'], $pos, $len);
+		$newOTLdata['group'] = isset($OTLdata['group']) ? substr($OTLdata['group'], $pos, $len) : '';
 
-		if ($OTLdata['GPOSinfo']) {
+		if (!empty($OTLdata['GPOSinfo'])) {
 			foreach ($OTLdata['GPOSinfo'] as $k => $val) {
 				if ($k >= $pos && $k < ($pos + $len)) {
 					$newOTLdata['GPOSinfo'][($k - $pos)] = $val;
