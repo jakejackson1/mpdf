@@ -276,7 +276,7 @@ class Svg
 
 		$srcpath = $attribs['xlink:href'];
 		$orig_srcpath = '';
-		if (trim($srcpath) != '' && substr($srcpath, 0, 4) == 'var:') {
+		if (trim($srcpath) != '' && substr($srcpath, 0, 4) != 'var:') {
 			$orig_srcpath = $srcpath;
 			$this->mpdf->GetFullPath($srcpath);
 		}
