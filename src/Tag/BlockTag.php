@@ -1039,6 +1039,20 @@ abstract class BlockTag extends Tag
 			$this->mpdf->listitem = [];
 
 			// Listitem-type
+			// A LI with no UL or OL around it was never given these, so fall back to what a UL would have
+			// set for a first level list
+			if (empty($currblk['list_style_type'])) {
+				$currblk['list_style_type'] = 'disc';
+			}
+
+			if (empty($currblk['list_style_image'])) {
+				$currblk['list_style_image'] = 'none';
+			}
+
+			if (empty($currblk['list_style_position'])) {
+				$currblk['list_style_position'] = 'outside';
+			}
+
 			$this->mpdf->_setListMarker($currblk['list_style_type'], $currblk['list_style_image'], $currblk['list_style_position']);
 		}
 
