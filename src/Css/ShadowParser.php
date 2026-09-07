@@ -44,7 +44,8 @@ class ShadowParser
 	{
 		$c = preg_match_all('/(rgba|rgb|device-cmyka|cmyka|device-cmyk|cmyk|hsla|hsl)\(.*?\)/', $value, $x); // mPDF 5.6.05
 		for ($i = 0; $i < $c; $i++) {
-			$col = preg_replace('/,\s/', '*', $x[0][$i]);
+			// The separator has to go with the comma, or the component split below finds it
+			$col = preg_replace('/,\s*/', '*', $x[0][$i]);
 			$value = str_replace($x[0][$i], $col, $value);
 		}
 
@@ -96,55 +97,22 @@ class ShadowParser
 			$s = preg_replace('/\s*inset\s*/', '', $s);
 		}
 
-		$p = explode(' ', trim($s));
-		if (isset($p[0])) {
-			$parentWidth = 0;
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])) {
-				$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']);
-			} elseif (isset($this->mpdf->blk[0]['inner_width'])) {
-				$parentWidth = $this->mpdf->blk[0]['inner_width'];
-			}
+		$parentWidth = $this->parentWidth();
 
-			$boxShadow['x'] = $this->sizeConverter->convert(
-				trim($p[0]),
-				$parentWidth,
-				$this->mpdf->FontSize,
-				false
-			);
+		// Any run of whitespace separates two components, and a newline is as good as a space
+		$p = preg_split('/\s+/', trim($s));
+
+		if (isset($p[0])) {
+			$boxShadow['x'] = $this->sizeConverter->convert($p[0], $parentWidth, $this->mpdf->FontSize, false);
 		}
 
 		if (isset($p[1])) {
-			$parentWidth = 0;
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])) {
-				$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']);
-			} elseif (isset($this->mpdf->blk[0]['inner_width'])) {
-				$parentWidth = $this->mpdf->blk[0]['inner_width'];
-			}
-
-			$boxShadow['y'] = $this->sizeConverter->convert(
-				trim($p[1]),
-				$parentWidth,
-				$this->mpdf->FontSize,
-				false
-			);
-
+			$boxShadow['y'] = $this->sizeConverter->convert($p[1], $parentWidth, $this->mpdf->FontSize, false);
 		}
 
 		if (isset($p[2])) {
 			if (preg_match('/^\s*[\.\-0-9]/', $p[2])) {
-				$parentWidth = 0;
-				if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])) {
-					$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']);
-				} elseif (isset($this->mpdf->blk[0]['inner_width'])) {
-					$parentWidth = $this->mpdf->blk[0]['inner_width'];
-				}
-
-				$boxShadow['blur'] = $this->sizeConverter->convert(
-					trim($p[2]),
-					$parentWidth,
-					$this->mpdf->FontSize,
-					false
-				);
+				$boxShadow['blur'] = $this->sizeConverter->convert($p[2], $parentWidth, $this->mpdf->FontSize, false);
 			} else {
 				$boxShadow['col'] = $this->colorConverter->convert(
 					preg_replace('/\*/', ',', $p[2]),
@@ -155,19 +123,7 @@ class ShadowParser
 
 		if (isset($p[3])) {
 			if (preg_match('/^\s*[\.\-0-9]/', $p[3])) {
-				$parentWidth = 0;
-				if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])) {
-					$parentWidth = isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width']);
-				} elseif (isset($this->mpdf->blk[0]['inner_width'])) {
-					$parentWidth = $this->mpdf->blk[0]['inner_width'];
-				}
-
-				$boxShadow['spread'] = $this->sizeConverter->convert(
-					trim($p[3]),
-					$parentWidth,
-					$this->mpdf->FontSize,
-					false
-				);
+				$boxShadow['spread'] = $this->sizeConverter->convert($p[3], $parentWidth, $this->mpdf->FontSize, false);
 			} else {
 				$boxShadow['col'] = $this->colorConverter->convert(
 					preg_replace('/\*/', ',', $p[3]),
@@ -188,6 +144,24 @@ class ShadowParser
 		}
 
 		return isset($boxShadow['y']) ? $boxShadow : null;
+	}
+
+	/**
+	 * The width a percentage length is measured against - the containing block's content width
+	 *
+	 * @return float|int
+	 */
+	private function parentWidth()
+	{
+		if (isset($this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'])) {
+			return $this->mpdf->blk[$this->mpdf->blklvl - 1]['inner_width'];
+		}
+
+		if (isset($this->mpdf->blk[0]['inner_width'])) {
+			return $this->mpdf->blk[0]['inner_width'];
+		}
+
+		return 0;
 	}
 
 	/**
@@ -226,7 +200,7 @@ class ShadowParser
 	protected function parseSingleTextShadow($s)
 	{
 		$textShadow = ['blur' => 0];
-		$p = explode(' ', trim($s));
+		$p = preg_split('/\s+/', trim($s));
 
 		if (isset($p[0])) {
 			$textShadow['x'] = $this->sizeConverter->convert(

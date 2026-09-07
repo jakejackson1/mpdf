@@ -107,4 +107,79 @@ class ShadowParserTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertCount(1, $result);
 		$this->assertEqualsWithDelta(0.793, $result[0]['blur'], 0.001);
 	}
+
+	public function testNormalizeShadowColorsTakesTheSpaceWithTheComma()
+	{
+		$input = '1px 1px 1px rgba(0, 0, 0, 0.5), 2px 2px rgb(1,2,3)';
+		$expected = '1px 1px 1px rgba(0*0*0*0.5), 2px 2px rgb(1*2*3)';
+
+		$this->assertSame($expected, $this->shadowParser->normalizeShadowColors($input));
+	}
+
+	public function testShadowComponentsMayBeSeparatedByAnyWhitespace()
+	{
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
+
+		$this->assertEquals(
+			$this->shadowParser->parseBoxShadow('2px 2px 4px 1px #000'),
+			$this->shadowParser->parseBoxShadow("2px  2px\t4px\n 1px   #000")
+		);
+	}
+
+	public function testAColourFunctionNeedsNoSpaceAfterItsCommas()
+	{
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
+
+		$tight = $this->shadowParser->parseBoxShadow('2px 2px 4px rgba(255,0,0,0.5)');
+		$fallback = $this->shadowParser->parseBoxShadow('2px 2px 4px');
+
+		$this->assertEquals($this->shadowParser->parseBoxShadow('2px 2px 4px rgba(255, 0, 0, 0.5)'), $tight);
+		$this->assertNotEquals($fallback[0]['col'], $tight[0]['col'], 'the colour fell back to the default');
+	}
+
+	/**
+	 * Not that a percentage is valid CSS here, but it is the only length whose conversion can
+	 * show that the containing block's width reaches the size converter at all
+	 */
+	public function testAPercentageIsMeasuredAgainstTheContainingBlock()
+	{
+		$this->mpdf->blk    = [0 => ['inner_width' => 100]];
+		$this->mpdf->blklvl = 1;
+
+		$result = $this->shadowParser->parseBoxShadow('10% 20%');
+
+		$this->assertEqualsWithDelta(10.0, $result[0]['x'], 0.001);
+		$this->assertEqualsWithDelta(20.0, $result[0]['y'], 0.001);
+	}
+
+	public function testTextShadowComponentsMayBeSeparatedByAnyWhitespace()
+	{
+		$this->assertEquals(
+			$this->shadowParser->parseTextShadow('2px 2px 3px #000'),
+			$this->shadowParser->parseTextShadow("2px  2px\t3px   #000")
+		);
+	}
+
+	public function testATextShadowColourFunctionNeedsNoSpaceAfterItsCommas()
+	{
+		$tight = $this->shadowParser->parseTextShadow('2px 2px 3px rgba(255,0,0,0.5)');
+		$fallback = $this->shadowParser->parseTextShadow('2px 2px 3px');
+
+		$this->assertEquals($this->shadowParser->parseTextShadow('2px 2px 3px rgba(255, 0, 0, 0.5)'), $tight);
+		$this->assertNotEquals($fallback[0]['col'], $tight[0]['col'], 'the colour fell back to the default');
+	}
+
+	/**
+	 * The colour has to survive the whole way to the page, not just out of the parser
+	 */
+	public function testATightColourFunctionIsPaintedOnThePage()
+	{
+		$mpdf = new Mpdf();
+		$mpdf->compress = false;
+		$mpdf->WriteHTML('<div style="width: 40mm; height: 20mm; box-shadow: 5mm 5mm 2mm rgba(255,0,0,0.5)">x</div>');
+
+		$this->assertStringContainsString('1.000 0.000 0.000 rg', $mpdf->Output('', 'S'));
+	}
 }
