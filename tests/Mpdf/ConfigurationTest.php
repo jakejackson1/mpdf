@@ -14,6 +14,17 @@ class ConfigurationTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$this->assertFalse($mpdf->autoPadding);
 	}
 
+	/**
+	 * The writers count() this before anything has drawn, so an instance that never ran the
+	 * constructor - a partial mock, say - must still find an array here
+	 */
+	public function testExtgstatesDefaultsToAnArray()
+	{
+		$mpdf = (new \ReflectionClass(Mpdf::class))->newInstanceWithoutConstructor();
+
+		$this->assertSame([], $mpdf->extgstates);
+	}
+
 	public function testOverwrittenSettings()
 	{
 		$mpdf = new Mpdf([
