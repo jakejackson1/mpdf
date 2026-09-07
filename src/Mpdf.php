@@ -13591,7 +13591,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					continue;
 				}
 
-				if ($this->ignorefollowingspaces && !$this->ispre) {
+				// A form element is drawn by the text node between its tags, and an empty textarea is
+				// given a single space to stand in for one, so that space has to survive
+				if ($this->ignorefollowingspaces && !$this->ispre && !$this->specialcontent) {
 					if (strlen(ltrim($e)) == 0) {
 						continue;
 					}
