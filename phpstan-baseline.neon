@@ -163,12 +163,6 @@ parameters:
 			path: src/Image/ImageProcessor.php
 
 		-
-			message: '#^Variable \$ncols might not be defined\.$#'
-			identifier: variable.undefined
-			count: 2
-			path: src/Image/ImageProcessor.php
-
-		-
 			message: '#^Binary operation "\*" between 0\.3333333333333333 and string results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 2
