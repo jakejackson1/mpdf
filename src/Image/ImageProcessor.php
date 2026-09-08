@@ -314,12 +314,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 								$r = ($rgb >> 16) & 0xFF;
 								$g = ($rgb >> 8) & 0xFF;
 								$b = $rgb & 0xFF;
-								if ($colspace === 'DeviceGray' && $b == $trns[0]) {
+								if ($colspace === 'DeviceGray') { // ct===0
+									$alpha = $b == $trns[0] ? 0 : 255;
+								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) { // ct==2
 									$alpha = 0;
-								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) {
-									$alpha = 0;
-								} // ct==2
-								else {
+								} else {
 									$alpha = 255;
 								}
 								$mimgdata .= chr($alpha);
@@ -957,11 +956,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 								$r = ($rgb >> 16) & 0xFF;
 								$g = ($rgb >> 8) & 0xFF;
 								$b = $rgb & 0xFF;
-								if ($colspace === 'DeviceGray' && $b == $trns[0]) {
+								if ($colspace === 'DeviceGray') { // ct===0
+									$alpha = $b == $trns[0] ? 0 : 255;
+								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) { // ct==2
 									$alpha = 0;
-								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) {
-									$alpha = 0;
-								} else { // ct==2
+								} else {
 									$alpha = 255;
 								}
 								if ($alpha > 0) {
