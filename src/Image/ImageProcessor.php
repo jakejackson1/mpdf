@@ -23,6 +23,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	use PsrLogAwareTrait;
 
 	/**
+	 * The most a PNG's deflated colour profile may inflate to, in bytes: libpng's PNG_USER_CHUNK_MALLOC_MAX
+	 */
+	const PNG_ICC_PROFILE_MAX = 8000000;
+
+	/**
 	 * @var \Mpdf\Mpdf
 	 */
 	private $mpdf;
@@ -260,6 +265,8 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		$im = @imagecreatefromstring($data);
 		$info = [];
 		$bpc = ord(substr($data, 24, 1));
+		$chunks = $this->pngChunksBeforeImageData($data); // Empty for the JPEG callers, which pass no mask
+		$tRNS = isset($chunks['tRNS']) ? $chunks['tRNS'] : null; // PNG 11.3.1.1
 
 		if ($im) {
 			$imgdata = '';
@@ -271,12 +278,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			if ($mask) { // i.e. $pngalpha for PNG
 				// mPDF 6
 				if ($colspace === 'Indexed') { // generate Alpha channel values from tRNS - only from PNG
-					//Read transparency info
+					// Read transparency info: PNG 11.3.1.1, one alpha value per palette entry
 					$transparency = '';
-					$p = strpos($data, 'tRNS');
-					if ($p) {
-						$n = $this->fourBytesToInt(substr($data, $p - 4, 4));
-						$transparency = substr($data, $p + 4, $n);
+					if ($tRNS) {
+						$n = $tRNS['size'];
+						$transparency = substr($data, $tRNS['payload'], $n);
 						// ord($transparency[$index]) = the alpha value for that index
 						// generate alpha channel
 						for ($ypx = 0; $ypx < $h; ++$ypx) {
@@ -292,12 +298,10 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 						}
 					}
 				} elseif ($pngcolortype === 0 || $pngcolortype === 2) { // generate Alpha channel values from tRNS
-					// Get transparency as array of RGB
-					$p = strpos($data, 'tRNS');
-					if ($p) {
+					// Get transparency as array of RGB: PNG 11.3.1.1, one sample per channel
+					if ($tRNS) {
 						$trns = '';
-						$n = $this->fourBytesToInt(substr($data, $p - 4, 4));
-						$t = substr($data, $p + 4, $n);
+						$t = substr($data, $tRNS['payload'], $tRNS['size']);
 						if ($colspace === 'DeviceGray') {  // ct===0
 							$trns = [$this->translateValue(substr($t, 0, 2), $bpc)];
 						} else /* $colspace=='DeviceRGB' */ {  // ct==2
@@ -308,15 +312,16 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 						}
 
 						// generate alpha channel
+						$gray = $colspace === 'DeviceGray'; // ct===0, as against ct==2
 						for ($ypx = 0; $ypx < $h; ++$ypx) {
 							for ($xpx = 0; $xpx < $w; ++$xpx) {
 								$rgb = imagecolorat($im, $xpx, $ypx);
 								$r = ($rgb >> 16) & 0xFF;
 								$g = ($rgb >> 8) & 0xFF;
 								$b = $rgb & 0xFF;
-								if ($colspace === 'DeviceGray') { // ct===0
+								if ($gray) {
 									$alpha = $b == $trns[0] ? 0 : 255;
-								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) { // ct==2
+								} elseif ($r == $trns[0] && $g == $trns[1] && $b == $trns[2]) {
 									$alpha = 0;
 								} else {
 									$alpha = 255;
@@ -349,10 +354,8 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$trns = [];
 			$trnsrgb = false;
 			if (!$this->mpdf->PDFA && !$this->mpdf->PDFX && !$mask) {  // mPDF 6 added NOT mask
-				$p = strpos($data, 'tRNS');
-				if ($p) {
-					$n = $this->fourBytesToInt(substr($data, ($p - 4), 4));
-					$t = substr($data, $p + 4, $n);
+				if ($tRNS) {
+					$t = substr($data, $tRNS['payload'], $tRNS['size']);
 					if ($colspace === 'DeviceGray') {  // ct===0
 						$trns = [$this->translateValue(substr($t, 0, 2), $bpc)];
 					} elseif ($colspace === 'DeviceRGB') {  // ct==2
@@ -774,17 +777,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			// order and compact ICC segments
 			if (count($icc) > 0) {
 				ksort($icc);
-				$icc = implode('', $icc);
-				if (substr($icc, 36, 4) !== 'acsp') {
-					// invalid ICC profile
-					$icc = false;
-				}
-				$input = substr($icc, 16, 4);
-				$output = substr($icc, 20, 4);
-				// Ignore Color profiles for conversion to other colorspaces e.g. CMYK/Lab
-				if ($input !== 'RGB ' || $output !== 'XYZ ') {
-					$icc = false;
-				}
+				$icc = $this->usableIccProfile(implode('', $icc));
 			} else {
 				$icc = false;
 			}
@@ -811,17 +804,18 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	/**
 	 * Index a PNG's chunks
 	 *
-	 * Stops at the image data, which every chunk read from here has to precede.
-	 *
 	 * The signature is PNG (Third Edition) 5.2 and the chunk layout 5.3: a four-byte length, a four-byte
 	 * type, that many bytes of data, then a four-byte CRC. IDAT is 11.2.3 and IEND 11.2.4.
+	 *
+	 * Walks the whole file, up to and including IEND. A caller after metadata wants pngChunksBeforeImageData(), which
+	 * stops at the image data; because this yields, stopping early costs the caller nothing it has not already read.
 	 *
 	 * @param string $data
 	 *
 	 * Yields rather than returns, for the same reason as jpgSegments().
 	 *
-	 * @return \Generator Each entry has a type, an offset (of the type, which the chunk's data follows) and a
-	 *                    size (of that data, so not counting the length, the type or the CRC)
+	 * @return \Generator Each entry has a type, a size (of the chunk's data, so not counting the length, the type
+	 *                    or the CRC) and a payload offset, which is where that data starts
 	 */
 	private function pngChunks($data)
 	{
@@ -844,9 +838,9 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 			$type = substr($data, $p + 4, 4);
 
-			yield ['type' => $type, 'offset' => $p + 4, 'size' => $size];
+			yield ['type' => $type, 'size' => $size, 'payload' => $p + 8];
 
-			if ($type === 'IDAT' || $type === 'IEND') {
+			if ($type === 'IEND') { // PNG 5.6: nothing follows the end of the datastream
 				break;
 			}
 
@@ -855,22 +849,96 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
-	 * The first chunk of a type, or null where the PNG has none
+	 * The first chunk of each type the metadata is read from, keyed by type
+	 *
+	 * Gives up at the image data, which PNG 5.6 has every one of those chunks precede. That is what keeps
+	 * a name appearing in a text chunk or among the compressed samples from being mistaken for a chunk header,
+	 * and one walk serves every lookup where a walk a lookup would cost a file of thousands of chunks dearly.
 	 *
 	 * @param string $data
-	 * @param string $type
 	 *
-	 * @return array|null
+	 * @return array
 	 */
-	private function pngChunk($data, $type)
+	private function pngChunksBeforeImageData($data)
 	{
+		// Only the types read out of the index; a file of chunks each under a type of its own is bounded by this
+		$wanted = ['tRNS' => true, 'iCCP' => true, 'pHYs' => true, 'gAMA' => true, 'sRGB' => true];
+		$chunks = [];
+
 		foreach ($this->pngChunks($data) as $chunk) {
-			if ($chunk['type'] === $type) {
-				return $chunk;
+
+			if ($chunk['type'] === 'IDAT') {
+				break;
+			}
+
+			if (isset($wanted[$chunk['type']]) && !isset($chunks[$chunk['type']])) {
+				$chunks[$chunk['type']] = $chunk;
 			}
 		}
 
-		return null;
+		return $chunks;
+	}
+
+	/**
+	 * A colour profile if it is one this class can embed, false if it is not
+	 *
+	 * ICC.1 7.2 puts the profile's size at byte 0, the data and connection spaces at 16 and 20, and
+	 * 'acsp' at 36; the header is 128 bytes and a tag count follows it. Only a profile taking RGB to the
+	 * XYZ connection space is any use here; converting from CMYK or Lab is work this class does not do.
+	 *
+	 * @param string $icc
+	 *
+	 * @return string|false
+	 */
+	private function usableIccProfile($icc)
+	{
+		if (!$icc || strlen($icc) < 132 || substr($icc, 36, 4) !== 'acsp' || substr($icc, 16, 4) !== 'RGB ' || substr($icc, 20, 4) !== 'XYZ ') {
+			return false;
+		}
+
+		$size = $this->fourBytesToInt(substr($icc, 0, 4));
+
+		if ($size < 132 || $size > strlen($icc)) { // Claiming more than is there means it was cut short
+			return false;
+		}
+
+		return substr($icc, 0, $size); // What the size covers is the profile; anything past it is not
+	}
+
+	/**
+	 * A PNG's embedded ICC profile, where it carries one this class can use
+	 *
+	 * PNG 11.3.2.3: a profile name, a null, a one-byte compression method (only 0, deflate, is defined),
+	 * then the zlib-compressed profile. The inflate is capped at the 8,000,000 bytes libpng allows a
+	 * chunk, so a few kilobytes of zeros cannot expand into a profile that fills memory. gzuncompress()
+	 * treats its cap as a buffer size and can run a little past it, so the length is checked again after.
+	 *
+	 * @param array $chunks Out of pngChunksBeforeImageData()
+	 * @param string $data
+	 *
+	 * @return string|false
+	 */
+	private function pngIccProfile(array $chunks, $data)
+	{
+		if (!isset($chunks['iCCP'])) {
+			return false;
+		}
+
+		$chunk = $chunks['iCCP'];
+		$nullsep = strpos(substr($data, $chunk['payload'], min(80, $chunk['size'])), chr(0)); // 11.3.2.3 caps the name at 79 bytes
+
+		if ($nullsep === false || $nullsep + 2 > $chunk['size'] || $data[$chunk['payload'] + $nullsep + 1] !== "\0") {
+			return false;
+		}
+
+		$deflated = substr($data, $chunk['payload'] + $nullsep + 2, $chunk['size'] - $nullsep - 2);
+		$icc = @gzuncompress($deflated, self::PNG_ICC_PROFILE_MAX); // False if the inflate fails
+
+		if ($icc === false || strlen($icc) > self::PNG_ICC_PROFILE_MAX) {
+			return false;
+		}
+
+		return $this->usableIccProfile($icc);
 	}
 
 	public function processPng($data, $file, $firstTime, $interpolation)
@@ -893,6 +961,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		$errpng = false;
 		$pngalpha = false;
 		$channels = 0;
+		$chunks = $this->pngChunksBeforeImageData($data); // PNG 5.6 has every chunk read below precede the image data
 
 		//	if($bpc>8) { $errpng = 'not 8-bit depth'; }	// mPDF 6 Allow through to be handled as native PNG
 		$ct = ord(substr($data, 25, 1));
@@ -918,12 +987,12 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$pngalpha = true;
 		}
 
-		if ($ct < 4 && $this->pngChunk($data, 'tRNS')) { // PNG 11.3.1.1, transparency without an alpha channel
+		if ($ct < 4 && isset($chunks['tRNS'])) { // PNG 11.3.1.1, transparency without an alpha channel
 			$errpng = 'transparency';
 			$pngalpha = true;
 		} // mPDF 6
 
-		if ($ct === 3 && $this->pngChunk($data, 'iCCP')) { // PNG 11.3.2.3, an embedded ICC profile
+		if ($ct === 3 && isset($chunks['iCCP'])) { // PNG 11.3.2.3, an embedded ICC profile
 			$errpng = 'indexed plus ICC';
 		} // mPDF 6
 
@@ -941,12 +1010,12 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$errpng = 'interlaced file';
 		}
 
-		$pHYs = $this->pngChunk($data, 'pHYs'); // PNG 11.3.4.3: two four-byte densities, then the unit
-		if ($pHYs) {
+		if (isset($chunks['pHYs'])) { // PNG 11.3.4.3: two four-byte densities, then the unit
+			$pHYs = $chunks['pHYs'];
 			//Read resolution
-			$unitSp = ord(substr($data, $pHYs['offset'] + 12, 1));
+			$unitSp = ord(substr($data, $pHYs['payload'] + 8, 1));
 			if ($unitSp === 1) {
-				$ppUx = $this->fourBytesToInt(substr($data, $pHYs['offset'] + 4, 4)); // horizontal pixels per meter, usually set to zero
+				$ppUx = $this->fourBytesToInt(substr($data, $pHYs['payload'], 4)); // horizontal pixels per meter, usually set to zero
 				$ppUx = round($ppUx / 1000 * 25.4);
 			}
 		}
@@ -954,9 +1023,8 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		// mPDF 6 Gamma correction
 		$gamma = 0;
 		$gAMA = 0;
-		$chunk = $this->pngChunk($data, 'gAMA'); // PNG 11.3.2.2, four bytes of gamma times 100000
-		if ($chunk && !$this->pngChunk($data, 'sRGB')) { // sRGB (PNG 11.3.2.5) colorspace - overrides gAMA
-			$gAMA = $this->fourBytesToInt(substr($data, $chunk['offset'] + 4, 4)); // Gamma value times 100000
+		if (isset($chunks['gAMA']) && !isset($chunks['sRGB'])) { // PNG 11.3.2.2, four bytes of gamma times 100000; sRGB (PNG 11.3.2.5) overrides it
+			$gAMA = $this->fourBytesToInt(substr($data, $chunks['gAMA']['payload'], 4)); // Gamma value times 100000
 			$gAMA /= 100000;
 
 			// http://www.libpng.org/pub/png/spec/1.2/PNG-Encoders.html
@@ -1046,11 +1114,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 				// mPDF 6
 				if ($colspace === 'Indexed') { // generate Alpha channel values from tRNS
-					// Read transparency info
-					$p = strpos($data, 'tRNS');
-					if ($p) {
-						$n = $this->fourBytesToInt(substr($data, $p - 4, 4));
-						$transparency = substr($data, $p + 4, $n);
+					// Read transparency info: PNG 11.3.1.1, one alpha value per palette entry
+					if (isset($chunks['tRNS'])) {
+						$chunk = $chunks['tRNS'];
+						$n = $chunk['size'];
+						$transparency = substr($data, $chunk['payload'], $n);
 						// ord($transparency[$index]) = the alpha value for that index
 						// generate alpha channel
 						for ($ypx = 0; $ypx < $h; ++$ypx) {
@@ -1068,12 +1136,11 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 						}
 					}
 				} elseif ($ct === 0 || $ct === 2) { // generate Alpha channel values from tRNS
-					// Get transparency as array of RGB
-					$p = strpos($data, 'tRNS');
-					if ($p) {
+					// Get transparency as array of RGB: PNG 11.3.1.1, one sample per channel
+					if (isset($chunks['tRNS'])) {
+						$chunk = $chunks['tRNS'];
 						$trns = '';
-						$n = $this->fourBytesToInt(substr($data, $p - 4, 4));
-						$t = substr($data, $p + 4, $n);
+						$t = substr($data, $chunk['payload'], $chunk['size']);
 						if ($colspace === 'DeviceGray') {  // ct===0
 							$trns = [$this->translateValue(substr($t, 0, 2), $bpc)];
 						} else /* $colspace=='DeviceRGB' */ {  // ct==2
@@ -1130,6 +1197,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				}
 
 				$this->destroyImage($imgalpha);
+
 				// extract image without alpha channel
 				$imgplain = imagecreatetruecolor($w, $h);
 				imagealphablending($imgplain, false); // mPDF 5.7.2
@@ -1187,26 +1255,8 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			// No alpha/transparency set (but cannot read directly because e.g. bit-depth != 8, interlaced etc)
 			// ICC profile
 			$icc = false;
-			$p = strpos($data, 'iCCP');
-			if ($p && $colspace === "Indexed") { // Cannot have ICC profile and Indexed together
-				$p += 4;
-				$n = $this->fourBytesToInt(substr($data, ($p - 8), 4));
-				$nullsep = strpos(substr($data, $p, 80), chr(0));
-				$icc = substr($data, ($p + $nullsep + 2), ($n - ($nullsep + 2)));
-				$icc = @gzuncompress($icc); // Ignored if fails
-				if ($icc) {
-					if (substr($icc, 36, 4) !== 'acsp') {
-						$icc = false;
-					} // invalid ICC profile
-					else {
-						$input = substr($icc, 16, 4);
-						$output = substr($icc, 20, 4);
-						// Ignore Color profiles for conversion to other colorspaces e.g. CMYK/Lab
-						if ($input !== 'RGB ' || $output !== 'XYZ ') {
-							$icc = false;
-						}
-					}
-				}
+			if ($colspace === "Indexed") { // Cannot have ICC profile and Indexed together
+				$icc = $this->pngIccProfile($chunks, $data);
 				// Convert to RGB colorspace so can use ICC Profile
 				if ($icc) {
 					imagepalettetotruecolor($im);
@@ -1261,23 +1311,17 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$pal = '';
 			$trns = '';
 			$pngdata = '';
-			$icc = false;
-			$p = 33;
+			// mPDF 6 cannot have ICC profile and Indexed in a PDF document as both use the colorspace tag
+			$icc = $colspace === 'Indexed' ? false : $this->pngIccProfile($chunks, $data);
 
-			do {
-				$n = $this->fourBytesToInt(substr($data, $p, 4));
-				$p += 4;
-				$type = substr($data, $p, 4);
-				$p += 4;
-				if ($type === 'PLTE') {
-					//Read palette
-					$pal = substr($data, $p, $n);
-					$p += $n;
-					$p += 4;
-				} elseif ($type === 'tRNS') {
-					//Read transparency info
-					$t = substr($data, $p, $n);
-					$p += $n;
+			foreach ($this->pngChunks($data) as $chunk) {
+
+				$offset = $chunk['payload'];
+
+				if ($chunk['type'] === 'PLTE') { // Read palette, PNG 11.2.2
+					$pal = substr($data, $offset, $chunk['size']);
+				} elseif ($chunk['type'] === 'tRNS') { // Read transparency info, PNG 11.3.1.1
+					$t = substr($data, $offset, $chunk['size']);
 					if ($ct === 0) {
 						$trns = [ord(substr($t, 1, 1))];
 					} elseif ($ct === 2) {
@@ -1288,39 +1332,10 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 							$trns = [$pos];
 						}
 					}
-					$p += 4;
-				} elseif ($type === 'IDAT') {
-					$pngdata.=substr($data, $p, $n);
-					$p += $n;
-					$p += 4;
-				} elseif ($type === 'iCCP') {
-					$nullsep = strpos(substr($data, $p, 80), chr(0));
-					$icc = substr($data, $p + $nullsep + 2, $n - ($nullsep + 2));
-					$icc = @gzuncompress($icc); // Ignored if fails
-					if ($icc) {
-						if (substr($icc, 36, 4) !== 'acsp') {
-							$icc = false;
-						} // invalid ICC profile
-						else {
-							$input = substr($icc, 16, 4);
-							$output = substr($icc, 20, 4);
-							// Ignore Color profiles for conversion to other colorspaces e.g. CMYK/Lab
-							if ($input !== 'RGB ' || $output !== 'XYZ ') {
-								$icc = false;
-							}
-						}
-					}
-					$p += $n;
-					$p += 4;
-				} elseif ($type === 'IEND') {
-					break;
-				} elseif (preg_match('/[a-zA-Z]{4}/', $type)) {
-					$p += $n + 4;
-				} else {
-					return $this->imageError($file, $firstTime, 'Error parsing PNG image data');
+				} elseif ($chunk['type'] === 'IDAT') { // PNG 11.2.3 lets the image data run over as many chunks as it likes
+					$pngdata .= substr($data, $offset, $chunk['size']);
 				}
-
-			} while ($n);
+			}
 
 			if (!$pngdata) {
 				return $this->imageError($file, $firstTime, 'Error parsing PNG image data - no IDAT data found');
@@ -1328,11 +1343,6 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 			if ($colspace === 'Indexed' && empty($pal)) {
 				return $this->imageError($file, $firstTime, 'Error parsing PNG image data - missing colour palette');
-			}
-
-			// mPDF 6 cannot have ICC profile and Indexed in a PDF document as both use the colorspace tag.
-			if ($colspace === 'Indexed' && $icc) {
-				$icc = false;
 			}
 
 			$info = [
