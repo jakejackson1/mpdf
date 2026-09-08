@@ -19,6 +19,11 @@ class ExifOrientationTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	 */
 	private static $on = ['useImageExifOrientation' => true];
 
+	/**
+	 * The middle of each quadrant, clockwise from the top left, as a fraction of the width and height
+	 */
+	private static $quadrants = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]];
+
 	private $mpdf;
 
 	protected function tear_down()
@@ -124,23 +129,26 @@ class ExifOrientationTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
-	 * GD decodes everything but CMYK to RGB and cannot write a one-component JPEG, so this is the one
-	 * way a corrected image differs from its original beyond the correction: it grows to three channels
+	 * GD decodes everything but CMYK to RGB and cannot write a one-component JPEG, so a corrected greyscale
+	 * image is embedded as the samples GD decoded, deflated, rather than as a JPEG with three channels.
+	 * The fixture is dark down its left side as stored, which a quarter turn clockwise puts at the top
 	 */
-	public function testAGreyscaleImageIsCorrectedAndComesBackWithThreeChannels()
+	public function testAGreyscaleImageIsCorrectedAndStaysGreyscale()
 	{
-		$file = $this->fixture('exif-orientation-6-gray.jpg');
+		$data = $this->withJfifDensity(file_get_contents($this->fixture('exif-orientation-6-gray.jpg')), 300);
 
-		$asStored = $this->render($file);
-		$corrected = $this->render($file, self::$on);
+		$asStored = $this->renderData($data);
+		$corrected = $this->renderData($data, self::$on);
 
 		$this->assertSame('DeviceGray', $asStored['cs']);
-		$this->assertSame(1, $asStored['ch']);
+		$this->assertSame('DCTDecode', $asStored['f']);
 
 		$this->assertSame(40, $corrected['w']);
 		$this->assertSame(20, $corrected['h']);
-		$this->assertSame('DeviceRGB', $corrected['cs']);
-		$this->assertSame(3, $corrected['ch']);
+		$this->assertSame('DeviceGray', $corrected['cs']);
+		$this->assertSame('FlateDecode', $corrected['f']);
+		$this->assertSame(300, $corrected['set-dpi'], 'Density read off the original');
+		$this->assertGreyCorners([61, 61, 180, 180], gzuncompress($corrected['data']), 40, 20);
 	}
 
 	/**
@@ -260,9 +268,7 @@ class ExifOrientationTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$width = imagesx($image);
 		$height = imagesy($image);
 
-		$points = [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]];
-
-		foreach ($points as $i => $point) {
+		foreach (self::$quadrants as $i => $point) {
 
 			$rgb = imagecolorsforindex($image, imagecolorat($image, (int) ($width * $point[0]), (int) ($height * $point[1])));
 			$actual = [$rgb['red'], $rgb['green'], $rgb['blue']];
@@ -271,6 +277,19 @@ class ExifOrientationTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 				// JPEG is lossy, and 95 leaves ringing well inside a quadrant that is a solid colour
 				$this->assertEqualsWithDelta($value, $actual[$channel], 32, sprintf('Quadrant %d, channel %d, got %s', $i, $channel, implode(',', $actual)));
 			}
+		}
+	}
+
+	/**
+	 * Assert the four quadrants of a stream of 8-bit grey samples, clockwise from the top left
+	 */
+	private function assertGreyCorners(array $expected, $samples, $width, $height)
+	{
+		$this->assertSame($width * $height, strlen($samples), 'One byte a pixel');
+
+		foreach (self::$quadrants as $i => $point) {
+			$actual = ord($samples[(int) ($height * $point[1]) * $width + (int) ($width * $point[0])]);
+			$this->assertEqualsWithDelta($expected[$i], $actual, 8, sprintf('Quadrant %d, got %d', $i, $actual));
 		}
 	}
 

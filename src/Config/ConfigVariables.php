@@ -297,7 +297,7 @@ class ConfigVariables
 			'img_dpi' => 96,
 			// Rotate and mirror JPEGs to match their Exif Orientation tag, the way browsers do
 			// Off by default: it costs a GD re-encode of each image that carries an orientation to correct,
-			// and GD writes RGB, so a greyscale JPEG that needed correcting is embedded with three channels
+			// and a greyscale JPEG that needed correcting is embedded as deflated samples, which are larger
 			'useImageExifOrientation' => false,
 			// Quality GD writes a JPEG at when it has to re-encode one: correcting an Exif orientation,
 			// or converting a WebP or AVIF. 75 is GD's own default, so raising it grows every existing
