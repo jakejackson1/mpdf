@@ -190,6 +190,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $allow_html_optional_endtags;
 
 	var $img_dpi;
+	var $useImageExifOrientation;
+	var $imageJpegQuality;
 	var $whitelistStreamWrappers;
 
 	var $defaultheaderfontsize;

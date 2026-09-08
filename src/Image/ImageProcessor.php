@@ -528,6 +528,16 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
+	 * The quality to hand imagejpeg(), clamped to the -1 to 100 PHP 8 insists on with an exception @ does not catch
+	 *
+	 * @return int
+	 */
+	private function jpegQuality()
+	{
+		return max(-1, min(100, (int) $this->mpdf->imageJpegQuality));
+	}
+
+	/**
 	 * Decode an image with GD, unless its header says the result would not fit memory_limit
 	 *
 	 * The check is against PHP's own limit because a build with an external libgd allocates the pixels
@@ -634,6 +644,239 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
+	 * Read the Orientation tag out of a JPEG's Exif APP1 segment
+	 *
+	 * The segment is CIPA DC-008 (Exif 2.32) 4.7.2: the APP1 marker and size, the "Exif\0\0" identifier,
+	 * then a TIFF header every offset inside is relative to.
+	 *
+	 * @param string $data
+	 *
+	 * @return int 1 to 8, 1 being the identity that images without an orientation are shown at
+	 */
+	private function jpgExifOrientation($data)
+	{
+		foreach ($this->jpgSegments($data) as $segment) {
+
+			// A segment shorter than its own header cannot hold a TIFF structure, whatever it starts with
+			if ($segment['marker'] !== 0xE1 || $segment['size'] < 8 || substr($data, $segment['payload'], 6) !== "Exif\0\0") { // APP1
+				continue;
+			}
+
+			return $this->exifOrientationFromTiff(substr($data, $segment['payload'] + 6, $segment['size'] - 8));
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Read the Orientation tag out of the TIFF structure an Exif segment wraps
+	 *
+	 * Orientation is tag 274 (0x0112) of type SHORT, CIPA DC-008 4.6.4 Table 4. The IFD around it is
+	 * TIFF Rev. 6.0: a byte order mark, the number 42, an offset to IFD0, then a count of 12-byte entries.
+	 *
+	 * @param string $tiff Starting at the byte order mark, which every offset inside is relative to
+	 *
+	 * @return int
+	 */
+	private function exifOrientationFromTiff($tiff)
+	{
+		$length = strlen($tiff);
+
+		if ($length < 8) {
+			return 1;
+		}
+
+		$byteOrder = substr($tiff, 0, 2);
+
+		if ($byteOrder !== 'II' && $byteOrder !== 'MM') {
+			return 1;
+		}
+
+		$bigEndian = $byteOrder === 'MM';
+
+		if ($this->tiffValue(substr($tiff, 2, 2), $bigEndian) !== 42) {
+			return 1;
+		}
+
+		$ifd = $this->tiffValue(substr($tiff, 4, 4), $bigEndian);
+
+		if ($ifd < 8 || $ifd + 2 > $length) {
+			return 1;
+		}
+
+		$entries = $this->tiffValue(substr($tiff, $ifd, 2), $bigEndian);
+
+		for ($i = 0; $i < $entries; $i++) {
+
+			$entry = $ifd + 2 + ($i * 12);
+
+			if ($entry + 12 > $length) {
+				break;
+			}
+
+			if ($this->tiffValue(substr($tiff, $entry, 2), $bigEndian) !== 0x0112) { // Orientation
+				continue;
+			}
+
+			if ($this->tiffValue(substr($tiff, $entry + 2, 2), $bigEndian) !== 3) { // SHORT, TIFF Rev. 6.0 type 3
+				break;
+			}
+
+			// A SHORT is left-justified in the four bytes the entry gives its value, either byte order
+			$orientation = $this->tiffValue(substr($tiff, $entry + 8, 2), $bigEndian);
+
+			return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Read a 2- or 4-byte TIFF integer of either byte order
+	 *
+	 * The bounds checks in exifOrientationFromTiff() are what guarantee a whole 2 or 4 bytes to read
+	 *
+	 * @param string $bytes
+	 * @param bool $bigEndian
+	 *
+	 * @return int
+	 */
+	private function tiffValue($bytes, $bigEndian)
+	{
+		if (!$bigEndian) {
+			$bytes = strrev($bytes);
+		}
+
+		return strlen($bytes) === 4 ? $this->fourBytesToInt($bytes) : $this->twoBytesToInt($bytes);
+	}
+
+	/**
+	 * Re-encode a JPEG so its samples sit the way its Exif Orientation tag says they should be shown
+	 *
+	 * Orientation records where row 0 and column 0 of the stored samples belong on screen, which comes to
+	 * a rotation, a mirror, or one of each. The eight cases are drawn in CIPA DC-008 Figure 11.
+	 *
+	 * GD writes a JFIF segment of its own in place of the one it read, so the density has to be handed back
+	 * to it, or the re-encoded image would come out at GD's default of 96 whatever the original said.
+	 *
+	 * @param string $data
+	 * @param int $orientation
+	 * @param int $dpi 0 where the image has none
+	 *
+	 * @return string|null Null when the image is already the right way up, or GD cannot read or rewrite it,
+	 *                     leaving the caller its original data
+	 */
+	private function applyJpgExifOrientation($data, $orientation, $dpi)
+	{
+		// The rotation and mirror each orientation needs; one missing from the table is already the right way up
+		$transforms = [
+			2 => [0, IMG_FLIP_HORIZONTAL],
+			3 => [180, 0],
+			4 => [0, IMG_FLIP_VERTICAL],
+			5 => [270, IMG_FLIP_HORIZONTAL],
+			6 => [270, 0],
+			7 => [90, IMG_FLIP_HORIZONTAL],
+			8 => [90, 0],
+		];
+
+		if (!isset($transforms[$orientation])) {
+			return null;
+		}
+
+		list($rotation, $mirror) = $transforms[$orientation];
+
+		// A quarter turn is a second image the size of the first; a flip is done in place
+		$image = $this->imageFromString($data, $rotation === 90 || $rotation === 270 ? 2 : 1);
+
+		if (!$image) {
+			return null;
+		}
+
+		if ($rotation === 180) {
+
+			// A half turn is both flips, which imageflip() does in place where imagerotate() would copy the image
+			if (!@imageflip($image, IMG_FLIP_BOTH)) {
+				$this->destroyImage($image);
+				return null;
+			}
+
+		} elseif ($rotation) {
+
+			$rotated = @imagerotate($image, $rotation, 0);
+			$this->destroyImage($image);
+
+			if (!$rotated) {
+				return null;
+			}
+
+			$image = $rotated;
+		}
+
+		if ($mirror && !@imageflip($image, $mirror)) {
+			$this->destroyImage($image);
+			return null;
+		}
+
+		if ($dpi > 0 && function_exists('imageresolution')) { // PHP 7.2
+			@imageresolution($image, $dpi, $dpi);
+		}
+
+		ob_start();
+
+		try {
+			$written = @imagejpeg($image, null, $this->jpegQuality());
+		} finally {
+			$rotatedData = ob_get_clean();
+			$this->destroyImage($image);
+			$image = null; // destroyImage() does nothing on PHP 8+, and the pixels are dead from here
+		}
+
+		if (!$written || !$rotatedData) {
+			return null;
+		}
+
+		return $this->copyJpgIccProfile($data, $rotatedData);
+	}
+
+	/**
+	 * Carry an ICC profile over to a re-encoded JPEG
+	 *
+	 * GD keeps the samples but drops every application segment, and the samples are still in whatever
+	 * space the profile describes, so the profile has to travel with them. The APP2 chunks the profile is
+	 * split into are ICC Technical Note 10-21.
+	 *
+	 * @param string $source
+	 * @param string $target
+	 *
+	 * @return string
+	 */
+	private function copyJpgIccProfile($source, $target)
+	{
+		$profile = '';
+
+		foreach ($this->jpgSegments($source) as $segment) {
+			if ($segment['marker'] === 0xE2 && substr($source, $segment['payload'], 12) === "ICC_PROFILE\0") { // APP2
+				$profile .= substr($source, $segment['offset'], 2 + $segment['size']);
+			}
+		}
+
+		if ($profile === '') {
+			return $target;
+		}
+
+		// An APP2 segment is legal anywhere before the frame, but JFIF wants its own APP0 to come
+		// first, and that is what GD writes
+		$p = 2;
+
+		foreach ($this->jpgSegments($target) as $first) {
+			$p = $first['marker'] === 0xE0 ? $first['offset'] + 2 + $first['size'] : 2;
+			break;
+		}
+
+		return substr_replace($target, $profile, $p, 0);
+	}
+
+	/**
 	 * Corrects 2-byte integer to 8-bit depth value
 	 * If original image is bpc != 8, tRNS will be in this bpc
 	 * $im from imagecreatefromstring will always be in bpc=8
@@ -723,7 +966,30 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		}
 
 		$a = $this->jpgDataFromHeader($hdr);
-		$ppUx = $this->jpgDensity($data);
+		$ppUx = $this->jpgDensity($data); // Read before any re-encode, which replaces the segment it lives in
+
+		// GD reads the samples but not the colour space, so a CMYK image would come back inverted. It also
+		// decodes everything else to RGB, so a greyscale image comes back with three channels
+		if ($this->mpdf->useImageExifOrientation && $a[2] !== 'DeviceCMYK') {
+
+			$orientation = $this->jpgExifOrientation($data);
+			$rotated = $this->applyJpgExifOrientation($data, $orientation, $ppUx);
+
+			if ($rotated !== null) {
+
+				$data = $rotated;
+				$hdr = $this->jpgHeaderFromString($data);
+
+				if (!$hdr) {
+					return $this->imageError($file, $firstTime, 'Error parsing JPG header after applying Exif orientation');
+				}
+
+				$a = $this->jpgDataFromHeader($hdr);
+
+			} elseif ($orientation !== 1) {
+				$this->logger->warning(sprintf('Exif orientation %d not applied, image embedded as stored (%s)', $orientation, $file), ['context' => LogContext::IMAGES]);
+			}
+		}
 
 		$channels = (int) $a[4];
 
@@ -1447,7 +1713,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			return $this->imageError($file, $firstTime, sprintf('Error creating temporary file "%s" when using GD library to parse %s image', $checkfile, $format));
 		}
 
-		@imagejpeg($im, $tempfile);
+		@imagejpeg($im, $tempfile, $this->jpegQuality());
 		$data = file_get_contents($tempfile);
 		$this->destroyImage($im);
 		unlink($tempfile);
