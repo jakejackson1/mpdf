@@ -25,6 +25,17 @@ trait BuildsImageFixtures
 	}
 
 	/**
+	 * Rewrite the dimensions in a JPEG's frame header: T.81 B.2.2 puts the lines, then the samples per line,
+	 * five bytes past the SOF0 marker
+	 */
+	protected function withFrameDimensions($data, $w, $h)
+	{
+		$sof = strpos($data, "\xFF\xC0");
+
+		return substr_replace($data, pack('nn', $h, $w), $sof + 5, 4);
+	}
+
+	/**
 	 * Put JPEG segments straight after the SOI, ahead of everything the image really carries
 	 */
 	protected function afterSoi($data, $segments)

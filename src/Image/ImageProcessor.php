@@ -262,7 +262,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$mask = false;
 		}
 
-		$im = @imagecreatefromstring($data);
+		$im = $this->imageFromString($data, 3); // libgd's PNG reader holds a second copy while decoding, then the samples are rewritten into a string, and a mask
 		$info = [];
 		$bpc = ord(substr($data, 24, 1));
 		$chunks = $this->pngChunksBeforeImageData($data); // Empty for the JPEG callers, which pass no mask
@@ -527,6 +527,38 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		return 0;
 	}
 
+	/**
+	 * Decode an image with GD, unless its header says the result would not fit memory_limit
+	 *
+	 * The check is against PHP's own limit because a build with an external libgd allocates the pixels
+	 * outside it, where nothing else would say no. An image PHP cannot size (AVIF before 8.2, GD2) goes
+	 * to GD unchecked.
+	 *
+	 * @param string $data
+	 * @param float $copies How many images the size of this one the caller goes on to hold at once
+	 *
+	 * @return resource|\GdImage|false False when GD cannot read it, or should not be asked to
+	 */
+	private function imageFromString($data, $copies = 1)
+	{
+		$size = @getimagesizefromstring($data);
+
+		if ($size) {
+			$limit = (string) ini_get('memory_limit'); // -1, or a number with an optional K, M or G shorthand
+			$units = ['k' => 1024, 'm' => 1048576, 'g' => 1073741824];
+			$unit = strtolower(substr($limit, -1));
+			$bytes = (int) $limit * (isset($units[$unit]) ? $units[$unit] : 1);
+			$bytesPerPixel = $size[2] === IMAGETYPE_GIF ? 1 : 4; // A GIF decodes to a palette image, everything else to truecolor
+
+			if ($bytes > 0 && $size[0] * $size[1] * $bytesPerPixel * $copies > $bytes - memory_get_usage()) {
+				$this->logger->warning(sprintf('Not decoding a %dx%d image, which would take more than memory_limit leaves', $size[0], $size[1]), ['context' => LogContext::IMAGES]);
+				return false;
+			}
+		}
+
+		return @imagecreatefromstring($data);
+	}
+
 	private function jpgDataFromHeader($hdr)
 	{
 		$bpc = ord(substr($hdr, 2, 1));
@@ -706,7 +738,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				$this->mpdf->PDFAXwarnings[] = sprintf('JPG image "%s" may not use CMYK color space. Image converted to RGB. The colour profile was altered', $file);
 			}
 
-			$im = @imagecreatefromstring($data);
+			$im = $this->imageFromString($data);
 
 			if ($im) {
 
@@ -1088,7 +1120,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				return $this->imageError($file, $firstTime, sprintf('GD library with PNG support required for image (%s)', $errpng));
 			}
 
-			$im = @imagecreatefromstring($data);
+			$im = $this->imageFromString($data, 3); // libgd's PNG reader holds a second copy while decoding, then the alpha channel is drawn into a palette image and both are written back out
 			if (!$im) {
 				return $this->imageError($file, $firstTime, sprintf('Error creating GD image from PNG file (%s)', $errpng));
 			}
@@ -1381,18 +1413,38 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 	public function processWebp($data, $file, $firstTime)
 	{
-		$im = @imagecreatefromstring($data);
+		return $this->jpgViaGd($data, $file, $firstTime, 'imagewebp', 'WEBP');
+	}
 
-		if (!function_exists('imagewebp') || false === $im) {
-			return $this->imageError($file, $firstTime, 'Missing GD support for WEBP images.');
+	/**
+	 * Convert a format GD can read and write, but the PDF cannot carry, into a JPEG
+	 *
+	 * @param string $data
+	 * @param string $file
+	 * @param bool $firstTime
+	 * @param string $writer The GD function that writes the format, which is also how its support is told
+	 * @param string $format For the error messages
+	 *
+	 * @return string|null
+	 */
+	private function jpgViaGd($data, $file, $firstTime, $writer, $format)
+	{
+		if (!function_exists($writer)) {
+			return $this->imageError($file, $firstTime, sprintf('Missing GD support for %s images.', $format));
+		}
+
+		$im = $this->imageFromString($data);
+
+		if (!$im) {
+			return $this->imageError($file, $firstTime, sprintf('Error creating GD image from %s image', $format));
 		}
 
 		$tempfile = $this->cache->tempFilename('_tempImgPNG' . md5($file) . random_int(1, 10000) . '.jpg');
 		$checkfile = $this->cache->tempFilename('_tempImgPNG' . md5($file) . random_int(1, 10000) . '.jpg');
 
-		$check = imagewebp($im, $checkfile);
+		$check = $writer($im, $checkfile);
 		if (!$check) {
-			return $this->imageError($file, $firstTime, sprintf('Error creating temporary file "%s" when using GD library to parse WEBP image', $checkfile));
+			return $this->imageError($file, $firstTime, sprintf('Error creating temporary file "%s" when using GD library to parse %s image', $checkfile, $format));
 		}
 
 		@imagejpeg($im, $tempfile);
@@ -1406,27 +1458,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 	public function processAvif($data, $file, $firstTime)
 	{
-		$im = @imagecreatefromstring($data);
-
-		if (!function_exists('imageavif') || false === $im) {
-			return $this->imageError($file, $firstTime, 'Missing GD support for AVIF images.');
-		}
-
-		$tempfile = $this->cache->tempFilename('_tempImgPNG' . md5($file) . random_int(1, 10000) . '.jpg');
-		$checkfile = $this->cache->tempFilename('_tempImgPNG' . md5($file) . random_int(1, 10000) . '.jpg');
-
-		$check = imageavif($im, $checkfile);
-		if (!$check) {
-			return $this->imageError($file, $firstTime, sprintf('Error creating temporary file "%s" when using GD library to parse AVIF image', $checkfile));
-		}
-
-		@imagejpeg($im, $tempfile);
-		$data = file_get_contents($tempfile);
-		$this->destroyImage($im);
-		unlink($tempfile);
-		unlink($checkfile);
-
-		return $data;
+		return $this->jpgViaGd($data, $file, $firstTime, 'imageavif', 'AVIF');
 	}
 
 	public function processSvg($data, $file, $firstTime)
@@ -1463,7 +1495,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 		if (isset($gd['GIF Read Support']) && $gd['GIF Read Support']) {
 
-			$im = @imagecreatefromstring($data);
+			$im = $this->imageFromString($data);
 
 			if ($im) {
 
@@ -1612,7 +1644,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 		if (isset($gd['PNG Support']) && $gd['PNG Support']) {
 
-			$im = @imagecreatefromstring($data);
+			$im = $this->imageFromString($data);
 
 			if (!$im) {
 				return $this->imageError($file, $firstTime, 'Error parsing image file - image type not recognised and/or not supported by GD imagecreate');
