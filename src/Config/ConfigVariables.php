@@ -295,6 +295,14 @@ class ConfigVariables
 			// Default dpi to output images if size not defined
 			// See also above "dpi"
 			'img_dpi' => 96,
+			// Rotate and mirror JPEGs to match their Exif Orientation tag, the way browsers do
+			// Off by default: it costs a GD re-encode of each image that carries an orientation to correct,
+			// and GD writes RGB, so a greyscale JPEG that needed correcting is embedded with three channels
+			'useImageExifOrientation' => false,
+			// Quality GD writes a JPEG at when it has to re-encode one: correcting an Exif orientation,
+			// or converting a WebP or AVIF. 75 is GD's own default, so raising it grows every existing
+			// document that carries one of those; 85 is the knee if you would rather have the quality
+			'imageJpegQuality' => 75,
 			// Specify whitelisted PHP streams to be used for images
 			// Useful to add custom streams like `s3`
 			// Note: for security reasons the `phar` stream cannot be used @see https://github.com/mpdf/mpdf/issues/949
