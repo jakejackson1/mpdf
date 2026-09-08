@@ -27425,7 +27425,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// Get xref into array
 		$xref = [];
-		preg_match("/xref\n0 (\d+)\n(.*?)\ntrailer/s", $pdf, $m);
+		if (!preg_match("/xref\n0 (\d+)\n(.*?)\ntrailer/s", $pdf, $m)) {
+			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no cross-reference table of the kind mPDF writes was found in it', $file_in));
+		}
 		$xref_objid = $m[1];
 		preg_match_all('/(\d{10}) (\d{5}) (f|n)/', $m[2], $x);
 		for ($i = 0; $i < count($x[0]); $i++) {
@@ -27433,20 +27435,29 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 
 		$changes = [];
-		preg_match("/<<\s*\/Type\s*\/Pages\s*\/Kids\s*\[(.*?)\]\s*\/Count/s", $pdf, $m);
+		if (!preg_match("/<<\s*\/Type\s*\/Pages\s*\/Kids\s*\[(.*?)\]\s*\/Count/s", $pdf, $m)) {
+			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no page tree was found in it', $file_in));
+		}
 		preg_match_all("/(\d+) 0 R /s", $m[1], $o);
 		$objlist = $o[1];
 
+		$filter = $this->compress ? '\/Filter\s*\/FlateDecode\s*' : '';
+		$found = 0;
+
 		foreach ($objlist as $obj) {
-			if ($this->compress) {
-				preg_match("/" . ($obj + 1) . " 0 obj\n<<\s*\/Filter\s*\/FlateDecode\s*\/Length (\d+)>>\nstream\n(.*?)\nendstream\n/s", $pdf, $m);
-			} else {
-				preg_match("/" . ($obj + 1) . " 0 obj\n<<\s*\/Length (\d+)>>\nstream\n(.*?)\nendstream\n/s", $pdf, $m);
+			if (!preg_match("/" . ($obj + 1) . " 0 obj\n<<\s*" . $filter . "\/Length (\d+)>>\nstream\n(.*?)\nendstream\n/s", $pdf, $m)) {
+				continue;
 			}
+
+			$found++;
 
 			$s = $m[2];
 			if (!$s) {
 				continue;
+			}
+
+			if (!isset($xref[$obj + 1])) {
+				throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": object %d is not in its cross-reference table', $file_in, $obj + 1));
 			}
 
 			$oldlen = $m[1];
@@ -27484,6 +27495,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$pdf = str_replace($m[0], $newstr, $pdf);
 		}
 
+		if ($objlist && !$found) {
+			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no page content of the kind mPDF writes with compression %s was found in it', $file_in, $this->compress ? 'on' : 'off'));
+		}
+
 		// Update xref in PDF
 		krsort($changes);
 		$newxref = "xref\n0 " . $xref_objid . "\n";
@@ -27499,7 +27514,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$pdf = preg_replace("/xref\n0 \d+\n.*?\ntrailer/s", $newxref, $pdf);
 
 		// Update startxref in PDF
-		preg_match("/startxref\n(\d+)\n%%EOF/s", $pdf, $m);
+		if (!preg_match("/startxref\n(\d+)\n%%EOF/s", $pdf, $m)) {
+			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no startxref was found in it', $file_in));
+		}
 		$startxref = $m[1];
 		$startxref += array_sum($changes);
 		$pdf = preg_replace("/startxref\n(\d+)\n%%EOF/s", "startxref\n" . $startxref . "\n%%EOF", $pdf);

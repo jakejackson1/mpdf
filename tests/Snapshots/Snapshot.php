@@ -43,6 +43,17 @@ abstract class Snapshot extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
+	 * Write the document to compare to $file. Override when the document is not the one $this->mpdf renders.
+	 *
+	 * @param string $file
+	 * @return void
+	 */
+	protected function outputPdf($file)
+	{
+		$this->mpdf->OutputFile($file);
+	}
+
+	/**
 	 * Test the snapshot
 	 *
 	 * @return void
@@ -61,7 +72,7 @@ abstract class Snapshot extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 
 		/* Generate a new snapshot using the current codebase */
 		$temporaryFile = tempnam(sys_get_temp_dir(), 'Pdf');
-		$this->mpdf->OutputFile($temporaryFile);
+		$this->outputPdf($temporaryFile);
 
 		/* Create artifact directory for failed test results */
 		$failedDir = $this->mpdf->tempDir . '/artifacts/' . $this->getName(false) . '/';
