@@ -6698,16 +6698,18 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		foreach ($content as $k => $chunk) {
 			$this->restoreFont($font[$k], false);
 			if (!isset($this->objectbuffer[$k]) || (isset($this->objectbuffer[$k]) && !$this->objectbuffer[$k])) {
-				// Soft Hyphens chr(173)
+				// Soft Hyphens chr(173) + U+200B word boundaries
 				if (!$this->usingCoreFont) {
 					/* -- OTL -- */
 					// mPDF 5.7.1
 					if (isset($this->CurrentFont['useOTL']) && $this->CurrentFont['useOTL']) {
 						$this->otl->removeChar($chunk, $cOTLdata[$k], "\xc2\xad");
+						$this->otl->removeChar($chunk, $cOTLdata[$k], "\xe2\x80\x8b");
 						$this->otl->replaceSpace($chunk, $cOTLdata[$k]);
 						$content[$k] = $chunk;
 					} /* -- END OTL -- */ else {  // *OTL*
 						$content[$k] = $chunk = str_replace("\xc2\xad", '', $chunk);
+						$content[$k] = $chunk = str_replace("\xe2\x80\x8b", '', $chunk);
 						$content[$k] = $chunk = str_replace(chr(194) . chr(160), chr(32), $chunk);
 					} // *OTL*
 				} elseif ($this->FontFamily != 'csymbol' && $this->FontFamily != 'czapfdingbats') {
@@ -8451,11 +8453,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 							$content[$k] = $chunk = mb_substr($chunk, 0, mb_strlen($chunk, $this->mb_enc) - 1, $this->mb_enc);
 						}
 
-						// Soft Hyphens chr(173) + Replace NBSP with SPACE + Set inclcursive if includes CURSIVE TEXT
+						// Soft Hyphens chr(173) + U+200B word boundaries + Replace NBSP with SPACE + Set inclcursive if includes CURSIVE TEXT
 						if (!$this->usingCoreFont) {
 							/* -- OTL -- */
 							if ((isset($this->CurrentFont['useOTL']) && $this->CurrentFont['useOTL']) || !empty($sOTLdata)) {
 								$this->otl->removeChar($chunk, $cOTLdata[$k], "\xc2\xad");
+								$this->otl->removeChar($chunk, $cOTLdata[$k], "\xe2\x80\x8b");
 								$this->otl->replaceSpace($chunk, $cOTLdata[$k]); // NBSP -> space
 								if (preg_match("/([" . $this->pregCURSchars . "])/u", $chunk)) {
 									$inclCursive = true;
@@ -8463,6 +8466,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								$content[$k] = $chunk;
 							} /* -- END OTL -- */ else {  // *OTL*
 								$content[$k] = $chunk = str_replace("\xc2\xad", '', $chunk);
+								$content[$k] = $chunk = str_replace("\xe2\x80\x8b", '', $chunk);
 								$content[$k] = $chunk = str_replace(chr(194) . chr(160), chr(32), $chunk);
 							} // *OTL*
 						} elseif ($this->FontFamily != 'csymbol' && $this->FontFamily != 'czapfdingbats') {

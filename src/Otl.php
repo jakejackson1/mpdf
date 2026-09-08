@@ -978,8 +978,10 @@ class Otl
 
 			// Shapers - KHMER & THAI & LAO - Replace Word boundary marker with U+200B
 			// Also TIBETAN (no shaper)
+			// Gated on the same flags as the line breaking above, which is what set the word boundaries
 			//=======================================================
-			if (($this->shaper == "K" || $this->shaper == "T" || $this->shaper == "L") || $scriptblock == Ucdn::SCRIPT_TIBETAN) {
+			if (($this->mpdf->useDictionaryLBR && ($this->shaper == "K" || $this->shaper == "T" || $this->shaper == "L"))
+				|| ($this->mpdf->useTibetanLBR && $scriptblock == Ucdn::SCRIPT_TIBETAN)) {
 				// Set up properties to insert a U+200B character
 				$newinfo = [];
 				//$newinfo[0] = array('general_category' => 1, 'bidi_type' => 14, 'group' => 'S', 'uni' => 0x200B, 'hex' => '0200B');
