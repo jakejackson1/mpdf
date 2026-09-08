@@ -482,21 +482,48 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 	private function jpgHeaderFromString(&$data)
 	{
-		$p = 4;
-		$p += $this->twoBytesToInt(substr($data, $p, 2)); // Length of initial marker block
-		$marker = substr($data, $p, 2);
-
-		while ($marker !== chr(255) . chr(192) && $marker !== chr(255) . chr(194)  && $marker !== chr(255) . chr(193) && $p < strlen($data)) {
-			// Start of frame marker (FFC0) (FFC1) or (FFC2)
-			$p += $this->twoBytesToInt(substr($data, $p + 2, 2)) + 2; // Length of marker block
-			$marker = substr($data, $p, 2);
+		foreach ($this->jpgSegments($data) as $segment) {
+			// Baseline, extended sequential and progressive DCT, T.81 Table B.1
+			if ($segment['marker'] >= 0xC0 && $segment['marker'] <= 0xC2) {
+				// T.81 B.2.2 makes the frame header 8 bytes plus 3 a component; shorter and the dimensions
+				// would be read out of whatever follows it, which is where libjpeg's get_sof() draws the line too
+				return $segment['size'] < 8 ? false : substr($data, $segment['offset'] + 2, 10);
+			}
 		}
 
-		if ($marker !== chr(255) . chr(192) && $marker !== chr(255) . chr(194) && $marker !== chr(255) . chr(193)) {
-			return false;
+		return false;
+	}
+
+	/**
+	 * The density a JPEG's JFIF segment gives it, in dots per inch, or 0 where it has none
+	 *
+	 * The APP0 segment is ITU-T T.871 6.3: the identifier, two version bytes, then units and density.
+	 * Its length is 16 plus the thumbnail, so anything shorter has no density field to read.
+	 *
+	 * @param string $data
+	 *
+	 * @return int
+	 */
+	private function jpgDensity($data)
+	{
+		foreach ($this->jpgSegments($data) as $segment) {
+
+			if ($segment['marker'] !== 0xE0 || $segment['size'] < 16 || substr($data, $segment['payload'], 5) !== "JFIF\0") { // APP0
+				continue;
+			}
+
+			$unitSp = ord($data[$segment['payload'] + 7]);
+
+			if ($unitSp === 0) { // An aspect ratio, not a density
+				return 0;
+			}
+
+			$density = $this->twoBytesToInt(substr($data, $segment['payload'] + 8, 2));
+
+			return $unitSp === 2 ? (int) round($density / 10 * 25.4) : $density; // 2 is dots per centimetre, 1 per inch
 		}
 
-		return substr($data, $p + 2, 10);
+		return 0;
 	}
 
 	private function jpgDataFromHeader($hdr)
@@ -521,6 +548,56 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		}
 
 		return [$w, $h, $colspace, $bpc, $channels];
+	}
+
+	/**
+	 * Index a JPEG's marker segments
+	 *
+	 * Stops at the scan, past which "Exif" and "ICC_PROFILE" are as likely to be pixels as markers.
+	 *
+	 * Marker codes are ITU-T T.81 Table B.1, and the size field is T.81 B.1.1.4: it counts itself and
+	 * excludes the two marker bytes, which is why a payload starts four bytes past the marker.
+	 *
+	 * @param string $data
+	 *
+	 * Yields rather than returns, so a file made of nothing but empty segments costs one entry at a time.
+	 *
+	 * @return \Generator Each entry has an offset (of the marker), a marker byte, a size (counting the two bytes
+	 *                    the size itself occupies) and a payload offset, which is where the size field leaves off
+	 */
+	private function jpgSegments($data)
+	{
+		$length = strlen($data);
+
+		if ($length < 4 || substr($data, 0, 2) !== "\xFF\xD8") { // SOI
+			return;
+		}
+
+		$p = 2;
+
+		while ($p + 4 <= $length && $data[$p] === "\xFF") {
+
+			$marker = ord($data[$p + 1]);
+
+			if ($marker === 0xFF) { // Fill byte
+				$p++;
+				continue;
+			}
+
+			// SOS, EOI, and the markers Table B.1 stars as standalone (RSTn and SOI) have no size to step over
+			if (($marker >= 0xD0 && $marker <= 0xDA) || $marker === 0x01) { // TEM is X'FF01'
+				break;
+			}
+
+			$size = $this->twoBytesToInt(substr($data, $p + 2, 2));
+
+			if ($size < 2 || $p + 2 + $size > $length) {
+				break;
+			}
+
+			yield ['offset' => $p, 'marker' => $marker, 'size' => $size, 'payload' => $p + 4];
+			$p += 2 + $size;
+		}
 	}
 
 	/**
@@ -613,19 +690,9 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		}
 
 		$a = $this->jpgDataFromHeader($hdr);
-		$channels = (int) $a[4];
-		$j = strpos($data, 'JFIF');
+		$ppUx = $this->jpgDensity($data);
 
-		if ($j) {
-			// Read resolution
-			$unitSp = ord(substr($data, $j + 7, 1));
-			if ($unitSp > 0) {
-				$ppUx = $this->twoBytesToInt(substr($data, $j + 8, 2)); // horizontal pixels per meter, usually set to zero
-				if ($unitSp === 2) { // = dots per cm (if == 1 set as dpi)
-					$ppUx = round($ppUx / 10 * 25.4);
-				}
-			}
-		}
+		$channels = (int) $a[4];
 
 		if ($a[2] === 'DeviceCMYK' && ($this->mpdf->restrictColorSpace === 2 || ($this->mpdf->PDFA && $this->mpdf->restrictColorSpace !== 3))) {
 
@@ -692,15 +759,17 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			//if ($pos !== false) {
 			//}
 			// mPDF 6 ICC profile
-			$offset = 0;
 			$icc = [];
-			while (($pos = strpos($data, "ICC_PROFILE\0", $offset)) !== false) {
-				// get ICC sequence length
-				$length = $this->twoBytesToInt(substr($data, $pos - 2, 2)) - 16;
-				$sn = max(1, ord($data[$pos + 12]));
-				$nom = max(1, ord($data[$pos + 13]));
-				$icc[$sn - 1] = substr($data, $pos + 14, $length);
-				$offset = ($pos + 14 + $length);
+			foreach ($this->jpgSegments($data) as $segment) {
+
+				// APP2 profile chunks, ICC Technical Note 10-21: the identifier, this chunk's number and the count
+				if ($segment['marker'] !== 0xE2 || $segment['size'] < 16 || substr($data, $segment['payload'], 12) !== "ICC_PROFILE\0") { // APP2
+					continue;
+				}
+
+				// The size counts itself and the 14-byte ICC header, so the chunk of profile is what is left
+				$sn = max(1, ord($data[$segment['payload'] + 12]));
+				$icc[$sn - 1] = substr($data, $segment['payload'] + 14, $segment['size'] - 16);
 			}
 			// order and compact ICC segments
 			if (count($icc) > 0) {
@@ -737,6 +806,71 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		}
 
 		return $info;
+	}
+
+	/**
+	 * Index a PNG's chunks
+	 *
+	 * Stops at the image data, which every chunk read from here has to precede.
+	 *
+	 * The signature is PNG (Third Edition) 5.2 and the chunk layout 5.3: a four-byte length, a four-byte
+	 * type, that many bytes of data, then a four-byte CRC. IDAT is 11.2.3 and IEND 11.2.4.
+	 *
+	 * @param string $data
+	 *
+	 * Yields rather than returns, for the same reason as jpgSegments().
+	 *
+	 * @return \Generator Each entry has a type, an offset (of the type, which the chunk's data follows) and a
+	 *                    size (of that data, so not counting the length, the type or the CRC)
+	 */
+	private function pngChunks($data)
+	{
+		$length = strlen($data);
+
+		if (substr($data, 0, 8) !== chr(137) . 'PNG' . chr(13) . chr(10) . chr(26) . chr(10)) {
+			return;
+		}
+
+		$p = 8;
+
+		// Length, type and CRC come to 12 bytes around each chunk's data
+		while ($p + 12 <= $length) {
+
+			$size = $this->fourBytesToInt(substr($data, $p, 4));
+
+			if ($size < 0 || $p + 12 + $size > $length) {
+				break;
+			}
+
+			$type = substr($data, $p + 4, 4);
+
+			yield ['type' => $type, 'offset' => $p + 4, 'size' => $size];
+
+			if ($type === 'IDAT' || $type === 'IEND') {
+				break;
+			}
+
+			$p += 12 + $size;
+		}
+	}
+
+	/**
+	 * The first chunk of a type, or null where the PNG has none
+	 *
+	 * @param string $data
+	 * @param string $type
+	 *
+	 * @return array|null
+	 */
+	private function pngChunk($data, $type)
+	{
+		foreach ($this->pngChunks($data) as $chunk) {
+			if ($chunk['type'] === $type) {
+				return $chunk;
+			}
+		}
+
+		return null;
 	}
 
 	public function processPng($data, $file, $firstTime, $interpolation)
@@ -784,12 +918,12 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$pngalpha = true;
 		}
 
-		if ($ct < 4 && strpos($data, 'tRNS') !== false) {
+		if ($ct < 4 && $this->pngChunk($data, 'tRNS')) { // PNG 11.3.1.1, transparency without an alpha channel
 			$errpng = 'transparency';
 			$pngalpha = true;
 		} // mPDF 6
 
-		if ($ct === 3 && strpos($data, 'iCCP') !== false) {
+		if ($ct === 3 && $this->pngChunk($data, 'iCCP')) { // PNG 11.3.2.3, an embedded ICC profile
 			$errpng = 'indexed plus ICC';
 		} // mPDF 6
 
@@ -807,12 +941,12 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			$errpng = 'interlaced file';
 		}
 
-		$j = strpos($data, 'pHYs');
-		if ($j) {
+		$pHYs = $this->pngChunk($data, 'pHYs'); // PNG 11.3.4.3: two four-byte densities, then the unit
+		if ($pHYs) {
 			//Read resolution
-			$unitSp = ord(substr($data, $j + 12, 1));
+			$unitSp = ord(substr($data, $pHYs['offset'] + 12, 1));
 			if ($unitSp === 1) {
-				$ppUx = $this->fourBytesToInt(substr($data, $j + 4, 4)); // horizontal pixels per meter, usually set to zero
+				$ppUx = $this->fourBytesToInt(substr($data, $pHYs['offset'] + 4, 4)); // horizontal pixels per meter, usually set to zero
 				$ppUx = round($ppUx / 1000 * 25.4);
 			}
 		}
@@ -820,9 +954,9 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		// mPDF 6 Gamma correction
 		$gamma = 0;
 		$gAMA = 0;
-		$j = strpos($data, 'gAMA');
-		if ($j && strpos($data, 'sRGB') === false) { // sRGB colorspace - overrides gAMA
-			$gAMA = $this->fourBytesToInt(substr($data, $j + 4, 4)); // Gamma value times 100000
+		$chunk = $this->pngChunk($data, 'gAMA'); // PNG 11.3.2.2, four bytes of gamma times 100000
+		if ($chunk && !$this->pngChunk($data, 'sRGB')) { // sRGB (PNG 11.3.2.5) colorspace - overrides gAMA
+			$gAMA = $this->fourBytesToInt(substr($data, $chunk['offset'] + 4, 4)); // Gamma value times 100000
 			$gAMA /= 100000;
 
 			// http://www.libpng.org/pub/png/spec/1.2/PNG-Encoders.html
