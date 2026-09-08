@@ -751,22 +751,18 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 	}
 
 	/**
-	 * Re-encode a JPEG so its samples sit the way its Exif Orientation tag says they should be shown
+	 * Read a JPEG into GD, turned the way its Exif Orientation tag says it should be shown
 	 *
 	 * Orientation records where row 0 and column 0 of the stored samples belong on screen, which comes to
 	 * a rotation, a mirror, or one of each. The eight cases are drawn in CIPA DC-008 Figure 11.
 	 *
-	 * GD writes a JFIF segment of its own in place of the one it read, so the density has to be handed back
-	 * to it, or the re-encoded image would come out at GD's default of 96 whatever the original said.
-	 *
 	 * @param string $data
 	 * @param int $orientation
-	 * @param int $dpi 0 where the image has none
 	 *
-	 * @return string|null Null when the image is already the right way up, or GD cannot read or rewrite it,
-	 *                     leaving the caller its original data
+	 * @return resource|\GdImage|null Null when the image is already the right way up, or GD cannot read or
+	 *                                turn it, leaving the caller its original data
 	 */
-	private function applyJpgExifOrientation($data, $orientation, $dpi)
+	private function applyJpgExifOrientation($data, $orientation)
 	{
 		// The rotation and mirror each orientation needs; one missing from the table is already the right way up
 		$transforms = [
@@ -785,8 +781,9 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 		list($rotation, $mirror) = $transforms[$orientation];
 
-		// A quarter turn is a second image the size of the first; a flip is done in place
-		$image = $this->imageFromString($data, $rotation === 90 || $rotation === 270 ? 2 : 1);
+		// A quarter turn is a second image the size of the first; a flip is done in place, and what comes back
+		// out of GD after either (the samples of a greyscale image and their deflate buffer, or a JPEG) is half
+		$image = $this->imageFromString($data, $rotation === 90 || $rotation === 270 ? 2 : 1.5);
 
 		if (!$image) {
 			return null;
@@ -817,6 +814,23 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			return null;
 		}
 
+		return $image;
+	}
+
+	/**
+	 * Write a GD image back out as a JPEG, with the density and the ICC profile of the one it was read from
+	 *
+	 * GD writes a JFIF segment of its own in place of the one it read, so the density has to be handed back
+	 * to it, or the re-encoded image would come out at GD's default of 96 whatever the original said.
+	 *
+	 * @param resource|\GdImage $image Destroyed on the way out
+	 * @param string $source The JPEG the image was read from
+	 * @param int $dpi 0 where the source has none
+	 *
+	 * @return string|null Null when GD cannot write it
+	 */
+	private function jpgFromGd($image, $source, $dpi)
+	{
 		if ($dpi > 0 && function_exists('imageresolution')) { // PHP 7.2
 			@imageresolution($image, $dpi, $dpi);
 		}
@@ -826,16 +840,52 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		try {
 			$written = @imagejpeg($image, null, $this->jpegQuality());
 		} finally {
-			$rotatedData = ob_get_clean();
+			$data = ob_get_clean();
 			$this->destroyImage($image);
-			$image = null; // destroyImage() does nothing on PHP 8+, and the pixels are dead from here
 		}
 
-		if (!$written || !$rotatedData) {
+		if (!$written || !$data) {
 			return null;
 		}
 
-		return $this->copyJpgIccProfile($data, $rotatedData);
+		return $this->copyJpgIccProfile($source, $data);
+	}
+
+	/**
+	 * Take a greyscale image's samples back out of GD as an image stream of their own
+	 *
+	 * GD decodes to RGB and writes nothing else, so a greyscale JPEG that went through it would come out
+	 * with three channels. The samples it decoded are still one value a pixel, so they go into the PDF as
+	 * they are, deflated where they were DCT-coded: larger than the JPEG was, but in the same colour space.
+	 *
+	 * @param resource|\GdImage $image Destroyed on the way out
+	 * @param int $dpi 0 where the image has none
+	 *
+	 * @return array The image, as processJpg() describes one
+	 */
+	private function grayImageFromGd($image, $dpi)
+	{
+		$w = imagesx($image);
+		$h = imagesy($image);
+		$samples = '';
+
+		for ($y = 0; $y < $h; $y++) {
+			$row = [];
+			for ($x = 0; $x < $w; $x++) {
+				$row[] = imagecolorat($image, $x, $y) & 0xFF; // The three channels are equal, and blue is the cheapest to reach
+			}
+			$samples .= pack('C*', ...$row);
+		}
+
+		$this->destroyImage($image);
+
+		$info = ['w' => $w, 'h' => $h, 'cs' => 'DeviceGray', 'bpc' => 8, 'f' => 'FlateDecode', 'data' => $this->gzCompress($samples), 'type' => 'jpg'];
+
+		if ($dpi) {
+			$info['set-dpi'] = $dpi;
+		}
+
+		return $info;
 	}
 
 	/**
@@ -968,12 +1018,18 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 		$a = $this->jpgDataFromHeader($hdr);
 		$ppUx = $this->jpgDensity($data); // Read before any re-encode, which replaces the segment it lives in
 
-		// GD reads the samples but not the colour space, so a CMYK image would come back inverted. It also
-		// decodes everything else to RGB, so a greyscale image comes back with three channels
+		// GD reads the samples but not the colour space, so a CMYK image would come back inverted
 		if ($this->mpdf->useImageExifOrientation && $a[2] !== 'DeviceCMYK') {
 
 			$orientation = $this->jpgExifOrientation($data);
-			$rotated = $this->applyJpgExifOrientation($data, $orientation, $ppUx);
+			$image = $this->applyJpgExifOrientation($data, $orientation);
+
+			// GD would write it back as RGB, so a greyscale image goes in as the samples it decoded to instead
+			if ($image && $a[4] === 1) {
+				return $this->keepImage($this->grayImageFromGd($image, $ppUx), $file, $firstTime, $interpolation);
+			}
+
+			$rotated = $image ? $this->jpgFromGd($image, $data, $ppUx) : null;
 
 			if ($rotated !== null) {
 
@@ -1029,13 +1085,8 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				unlink($tempfile);
 
 				$info['type'] = 'jpg';
-				if ($firstTime) {
-					$info['i'] = count($this->mpdf->images) + 1;
-					$info['interpolation'] = $interpolation; // mPDF 6
-					$this->mpdf->images[$file] = $info;
-				}
 
-				return $info;
+				return $this->keepImage($info, $file, $firstTime, $interpolation);
 			}
 
 			return $this->imageError($file, $firstTime, 'Error creating GD image file from JPG(CMYK) image');
@@ -1088,6 +1139,21 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 			return $this->imageError($file, $firstTime, 'Error parsing or converting JPG image');
 		}
 
+		return $this->keepImage($info, $file, $firstTime, $interpolation);
+	}
+
+	/**
+	 * Add an image to the document's collection the first time it is read
+	 *
+	 * @param array $info
+	 * @param string $file
+	 * @param bool $firstTime
+	 * @param bool $interpolation
+	 *
+	 * @return array
+	 */
+	private function keepImage(array $info, $file, $firstTime, $interpolation)
+	{
 		if ($firstTime) {
 			$info['i'] = count($this->mpdf->images) + 1;
 			$info['interpolation'] = $interpolation; // mPDF 6
