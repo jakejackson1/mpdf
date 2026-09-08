@@ -399,61 +399,59 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				}
 			}
 
+			// None of this changes from one pixel to the next, so decide it here rather than in a loop that runs
+			// once per pixel: three string comparisons, and the two array literals the transparency check built
+			$indexed = $colspace === 'Indexed';
+			$toCmyk = $targetcs === 'DeviceCMYK';
+			$toGray = $targetcs === 'DeviceGray';
+			$toRgb = $targetcs === 'DeviceRGB';
+			$ncols = $toCmyk ? 4 : ($toGray ? 1 : 3);
+			list($tr, $tg, $tb) = $trnsrgb ? $trnsrgb : [null, null, null];
+
 			for ($i = 0; $i < $h; $i++) {
 				for ($j = 0; $j < $w; $j++) {
 					$rgb = imagecolorat($im, $j, $i);
 					$r = ($rgb >> 16) & 0xFF;
 					$g = ($rgb >> 8) & 0xFF;
 					$b = $rgb & 0xFF;
-					if ($colspace === 'Indexed') {
+					if ($indexed) {
 						$pal = imagecolorsforindex($im, $rgb);
 						$r = $pal['red'];
 						$g = $pal['green'];
 						$b = $pal['blue'];
 					}
 
-					if ($targetcs === 'DeviceCMYK') {
+					if ($toCmyk) {
 						$col = $this->colorModeConverter->rgb2cmyk([3, $r, $g, $b]);
 						$c1 = (int) ($col[1] * 2.55);
 						$c2 = (int) ($col[2] * 2.55);
 						$c3 = (int) ($col[3] * 2.55);
 						$c4 = (int) ($col[4] * 2.55);
-						if ($trnsrgb) {
-							// original pixel was not set as transparent but processed color does match
-							if ($trnsrgb !== [$r, $g, $b] && $trns === [$c1, $c2, $c3, $c4]) {
-								if ($c4 === 0) {
-									$c4 = 1;
-								} else {
-									$c4--;
-								}
+						// original pixel was not set as transparent but processed color does match
+						if ($trnsrgb && ($r !== $tr || $g !== $tg || $b !== $tb)
+							&& $c1 === $trns[0] && $c2 === $trns[1] && $c3 === $trns[2] && $c4 === $trns[3]) {
+							if ($c4 === 0) {
+								$c4 = 1;
+							} else {
+								$c4--;
 							}
 						}
 						$imgdata .= chr($c1) . chr($c2) . chr($c3) . chr($c4);
-					} elseif ($targetcs === 'DeviceGray') {
+					} elseif ($toGray) {
 						$c = (int) (($r * .21) + ($g * .71) + ($b * .07));
-						if ($trnsrgb) {
-							// original pixel was not set as transparent but processed color does match
-							if ($trnsrgb !== [$r, $g, $b] && $trns === [$c]) {
-								if ($c === 0) {
-									$c = 1;
-								} else {
-									$c--;
-								}
+						// original pixel was not set as transparent but processed color does match
+						if ($trnsrgb && ($r !== $tr || $g !== $tg || $b !== $tb) && $c === $trns[0]) {
+							if ($c === 0) {
+								$c = 1;
+							} else {
+								$c--;
 							}
 						}
 						$imgdata .= chr($c);
-					} elseif ($targetcs === 'DeviceRGB') {
+					} elseif ($toRgb) {
 						$imgdata .= chr($r) . chr($g) . chr($b);
 					}
 				}
-			}
-
-			if ($targetcs === 'DeviceGray') {
-				$ncols = 1;
-			} elseif ($targetcs === 'DeviceRGB') {
-				$ncols = 3;
-			} elseif ($targetcs === 'DeviceCMYK') {
-				$ncols = 4;
 			}
 
 			$imgdata = $this->gzCompress($imgdata);
@@ -1198,18 +1196,24 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 				$this->destroyImage($imgalpha);
 
-				// extract image without alpha channel
-				$imgplain = imagecreatetruecolor($w, $h);
-				imagealphablending($imgplain, false); // mPDF 5.7.2
-				imagecopy($imgplain, $im, 0, 0, 0, 0, $w, $h);
+				// Extract the image without its alpha channel. A truecolor one can be written out in place, rather than
+				// copied into a second full-size image; a palette one still has to be copied, because writing it as it
+				// stands would give processPng() a paletted image to read back where it had a truecolor one before
+				if (imageistruecolor($im)) {
+					$check = $this->writeFlatPng($im, $tempfile);
+				} else {
+					$imgplain = imagecreatetruecolor($w, $h);
+					imagealphablending($imgplain, false); // mPDF 5.7.2
+					imagecopy($imgplain, $im, 0, 0, 0, 0, $w, $h);
+					$check = @imagepng($imgplain, $tempfile);
+					$this->destroyImage($imgplain);
+				}
 
-				// create temp image file
-				$check = @imagepng($imgplain, $tempfile);
+				$this->destroyImage($im); // Both temp files are written, so the decoded pixels are no longer needed
+
 				if (!$check) {
 					return $this->imageError($file, $firstTime, 'Failed to create temporary image file (' . $tempfile . ') parsing PNG image with alpha channel (' . $errpng . ')');
 				}
-
-				$this->destroyImage($imgplain);
 
 				// embed mask image
 				//$minfo = $this->getImage($tempfile_alpha, false);
@@ -1269,11 +1273,7 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 				imagegammacorrect($im, $gamma, 2.2);
 			}
 
-			imagealphablending($im, false);
-			imagesavealpha($im, false);
-			imageinterlace($im, false);
-
-			$check = @imagepng($im, $tempfile);
+			$check = $this->writeFlatPng($im, $tempfile);
 			if (!$check) {
 				return $this->imageError($file, $firstTime, 'Failed to create temporary image file (' . $tempfile . ') parsing PNG image (' . $errpng . ')');
 			}
@@ -1650,6 +1650,27 @@ class ImageProcessor implements \Psr\Log\LoggerAwareInterface
 
 			return $info;
 		}
+	}
+
+	/**
+	 * Write an image out as a PNG for processPng() to read back
+	 *
+	 * Flat, because that is all the caller wants from it: no alpha channel, no interlacing (which processPng()
+	 * cannot read back) and no transparent colour, which any mask the caller built already carries.
+	 *
+	 * @param resource|\GdImage $im
+	 * @param string $tempfile
+	 *
+	 * @return bool
+	 */
+	private function writeFlatPng($im, $tempfile)
+	{
+		imagealphablending($im, false);
+		imagesavealpha($im, false);
+		imageinterlace($im, false);
+		imagecolortransparent($im, -1);
+
+		return (bool) @imagepng($im, $tempfile);
 	}
 
 	private function destroyImage($im)
