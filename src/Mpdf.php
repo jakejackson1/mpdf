@@ -5338,7 +5338,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$tx = $this->writer->escape($tx);
 					$sub .=sprintf('(%s) ', $tx);
 					if (($i + 1) < $numt) {
-						$adj = -($this->ws) * 1000 / $this->FontSizePt;
+						$adj = $this->FontSizePt ? -($this->ws) * 1000 / $this->FontSizePt : 0;
 						$sub .=sprintf('%d(%s) ', $adj, $space);
 					}
 				}
@@ -5562,8 +5562,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$unicode = $this->UTF8StringToArray($txt);
 
 		$GPOSinfo = (isset($OTLdata['GPOSinfo']) ? $OTLdata['GPOSinfo'] : []);
-		$charspacing = ($this->charspacing * 1000 / $this->FontSizePt);
-		$wordspacing = ($this->ws * 1000 / $this->FontSizePt);
+		// A font size of zero is legal CSS, and both of these are per mille of it
+		$charspacing = $this->FontSizePt ? ($this->charspacing * 1000 / $this->FontSizePt) : 0;
+		$wordspacing = $this->FontSizePt ? ($this->ws * 1000 / $this->FontSizePt) : 0;
 
 		$XshiftBefore = 0;
 		$XshiftAfter = 0;
@@ -5757,7 +5758,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if (isset($this->CurrentFont['subset'])) {
 					$this->CurrentFont['subset'][$c] = $c;
 				}
-				$kashida *= 1000 / $this->FontSizePt;
+				$kashida = $this->FontSizePt ? $kashida * 1000 / $this->FontSizePt : 0;
 				$tatw = $this->_getCharWidth($this->CurrentFont['cw'], 0x0640);
 
 				// Get YPlacement from next Base character
@@ -16245,7 +16246,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 
 			// Activating buffer properties
-			if (isset($vetor[11]) && $vetor[11] != '') {   // Font Size
+			// Slot 11 is the empty string when no size has been set, and a strict test is needed to tell that
+			// from a font size of zero, which is legal CSS. PHP 7 and earlier read the two as the same thing.
+			if (isset($vetor[11]) && $vetor[11] !== '') {   // Font Size
 				if ($is_table && $this->shrin_k) {
 					$this->SetFontSize($vetor[11] / $this->shrin_k, false);
 				} else {
