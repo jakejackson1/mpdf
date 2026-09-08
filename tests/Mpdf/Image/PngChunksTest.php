@@ -6,7 +6,7 @@ namespace Mpdf\Image;
  * A PNG's metadata lives in its chunks. Searching the whole file for a chunk's name finds it just as
  * readily in a text chunk, or among the compressed samples.
  */
-class PngChunksTest extends \Mpdf\BaseMpdfTest
+class PngChunksTest extends PngChunkTestCase
 {
 
 	public function testTheDensityComesFromThePhysChunkAndNotATextChunkThatSaysPhys()
@@ -79,34 +79,6 @@ class PngChunksTest extends \Mpdf\BaseMpdfTest
 		return $this->chunk('gAMA', pack('N', 100000));
 	}
 
-	private function text($comment)
-	{
-		return $this->chunk('tEXt', "Comment\0" . $comment);
-	}
-
-	private function chunk($type, $data)
-	{
-		return pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
-	}
-
-	/**
-	 * Put chunks straight after the header, ahead of everything the image really carries
-	 */
-	private function withChunks($chunks, $data = null)
-	{
-		$data = $data === null ? $this->source() : $data;
-		$end = 8 + 12 + $this->fourBytesToInt(substr($data, 8, 4)); // Past IHDR
-
-		return substr($data, 0, $end) . $chunks . substr($data, $end);
-	}
-
-	private function fourBytesToInt($bytes)
-	{
-		$value = unpack('N', $bytes);
-
-		return $value[1];
-	}
-
 	/**
 	 * What the image comes out as when nothing has been added to it
 	 */
@@ -137,25 +109,6 @@ class PngChunksTest extends \Mpdf\BaseMpdfTest
 		imagepng($image, null, 9);
 
 		return ob_get_clean();
-	}
-
-	private function source()
-	{
-		$image = imagecreatetruecolor(24, 16);
-		imagefilledrectangle($image, 0, 0, 11, 15, imagecolorallocate($image, 200, 30, 30));
-		imagefilledrectangle($image, 12, 0, 23, 15, imagecolorallocate($image, 30, 30, 200));
-
-		ob_start();
-		imagepng($image);
-
-		return ob_get_clean();
-	}
-
-	private function render($data)
-	{
-		$this->mpdf->WriteHTML('<img src="data:image/png;base64,' . base64_encode($data) . '">');
-
-		return end($this->mpdf->images);
 	}
 
 }
