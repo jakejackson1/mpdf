@@ -27441,17 +27441,16 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		preg_match_all("/(\d+) 0 R /s", $m[1], $o);
 		$objlist = $o[1];
 
-		$filter = $this->compress ? '\/Filter\s*\/FlateDecode\s*' : '';
 		$found = 0;
 
 		foreach ($objlist as $obj) {
-			if (!preg_match("/" . ($obj + 1) . " 0 obj\n<<\s*" . $filter . "\/Length (\d+)>>\nstream\n(.*?)\nendstream\n/s", $pdf, $m)) {
+			if (!preg_match("/" . ($obj + 1) . " 0 obj\n<<\s*(\/Filter\s*\/FlateDecode\s*)?\/Length (\d+)>>\nstream\n(.*?)\nendstream\n/s", $pdf, $m)) {
 				continue;
 			}
 
 			$found++;
 
-			$s = $m[2];
+			$s = $m[3];
 			if (!$s) {
 				continue;
 			}
@@ -27460,13 +27459,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": object %d is not in its cross-reference table', $file_in, $obj + 1));
 			}
 
-			$oldlen = $m[1];
+			// Each stream says whether it is compressed; the setting on this instance only describes what it would write
+			$compressed = $m[1] !== '';
+			$oldlen = $m[2];
 
 			if ($this->encrypted) {
 				$s = $this->protection->rc4($this->protection->objectKey($obj + 1), $s);
 			}
 
-			if ($this->compress) {
+			if ($compressed) {
 				$s = gzuncompress($s);
 			}
 
@@ -27474,7 +27475,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$s = str_replace($search[$k], $replacement[$k], $s);
 			}
 
-			if ($this->compress) {
+			if ($compressed) {
 				$s = gzcompress($s);
 			}
 
@@ -27486,17 +27487,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 			$changes[($xref[$obj + 1][0])] = ($newlen - $oldlen) + (strlen($newlen) - strlen($oldlen));
 
-			if ($this->compress) {
-				$newstr = ($obj + 1) . " 0 obj\n<</Filter /FlateDecode /Length " . $newlen . ">>\nstream\n" . $s . "\nendstream\n";
-			} else {
-				$newstr = ($obj + 1) . " 0 obj\n<</Length " . $newlen . ">>\nstream\n" . $s . "\nendstream\n";
-			}
+			$newstr = ($obj + 1) . " 0 obj\n<<" . ($compressed ? '/Filter /FlateDecode ' : '') . "/Length " . $newlen . ">>\nstream\n" . $s . "\nendstream\n";
 
 			$pdf = str_replace($m[0], $newstr, $pdf);
 		}
 
 		if ($objlist && !$found) {
-			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no page content of the kind mPDF writes with compression %s was found in it', $file_in, $this->compress ? 'on' : 'off'));
+			throw new \Mpdf\MpdfException(sprintf('Cannot overwrite "%s": no page content of the kind mPDF writes was found in it', $file_in));
 		}
 
 		// Update xref in PDF

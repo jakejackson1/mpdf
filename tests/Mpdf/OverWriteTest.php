@@ -64,19 +64,44 @@ class OverWriteTest extends BaseMpdfTest
 		return $this->mpdf->OverWrite($file, ['MAIN HEADING'], ['replacement'], Destination::STRING_RETURN);
 	}
 
-	public function testTextIsReplacedOnEveryPage()
+	/**
+	 * The [filter, text] of each content stream in $pdf, inflating the ones that say they are compressed
+	 */
+	private function streams($pdf)
 	{
-		$pdf = $this->overWrite($this->file($this->source()));
+		preg_match_all("/<<(\/Filter \/FlateDecode )?\/Length \d+>>\nstream\n(.*?)\nendstream/s", $pdf, $matches, PREG_SET_ORDER);
 
-		$this->assertSame(2, substr_count($pdf, 'replacement'));
-		$this->assertStringNotContainsString('MAIN HEADING', $pdf);
+		return array_map(function ($match) {
+			return [$match[1], $match[1] ? gzuncompress($match[2]) : $match[2]];
+		}, $matches);
 	}
 
-	public function testTextIsReplacedInACompressedDocument()
+	public function compressionProvider()
 	{
-		$pdf = $this->overWrite($this->file($this->source(true)), true);
+		return [
+			'uncompressed document, uncompressed instance' => [false, false],
+			'compressed document, compressed instance' => [true, true],
+			'uncompressed document, compressed instance' => [false, true],
+			'compressed document, uncompressed instance' => [true, false],
+		];
+	}
 
-		$this->assertStringNotContainsString('MAIN HEADING', $pdf);
+	/**
+	 * Whether a stream is compressed is read from the document, not from the instance doing the overwriting
+	 *
+	 * @dataProvider compressionProvider
+	 */
+	public function testTextIsReplacedHoweverTheDocumentAndInstanceAreCompressed($documentCompressed, $instanceCompressed)
+	{
+		$pdf = $this->overWrite($this->file($this->source($documentCompressed)), $instanceCompressed);
+		$streams = $this->streams($pdf);
+		$text = implode("\n", array_column($streams, 1));
+
+		$this->assertSame(2, substr_count($text, 'replacement'));
+		$this->assertStringNotContainsString('MAIN HEADING', $text);
+
+		$filter = $documentCompressed ? '/Filter /FlateDecode ' : '';
+		$this->assertSame([$filter, $filter], array_column($streams, 0));
 	}
 
 	/**
@@ -112,18 +137,6 @@ class OverWriteTest extends BaseMpdfTest
 		$this->expectExceptionMessage('Cannot overwrite');
 
 		$this->overWrite(__DIR__ . '/../data/pdfs/compressed-xref.pdf');
-	}
-
-	/**
-	 * The content streams are matched the way this instance would write them, so a document
-	 * compressed the other way used to come back untouched with no word of why
-	 */
-	public function testADocumentCompressedTheOtherWayIsRefused()
-	{
-		$this->expectException(MpdfException::class);
-		$this->expectExceptionMessage('no page content of the kind mPDF writes with compression on was found in it');
-
-		$this->overWrite($this->file($this->source()), true);
 	}
 
 	public function testRefusingRaisesNothingOfItsOwn()
