@@ -590,12 +590,8 @@ abstract class BlockTag extends Tag
 		}
 
 		/* -- CSS-FLOAT -- */
-		if (isset($properties['FLOAT']) && strtoupper($properties['FLOAT']) === 'RIGHT' && !$this->mpdf->ColActive) {
-
-			// Cancel Keep-Block-together
-			$currblk['keep_block_together'] = false;
-			$this->mpdf->kt_y00 = 0;
-			$this->mpdf->keep_block_together = 0;
+		$float = isset($properties['FLOAT']) ? strtoupper($properties['FLOAT']) : '';
+		if ($float === 'RIGHT' && !$this->mpdf->ColActive) {
 
 			$this->mpdf->blockContext++;
 			$currblk['blockContext'] = $this->mpdf->blockContext;
@@ -642,12 +638,7 @@ abstract class BlockTag extends Tag
 				$currblk['float_width'] = ($currblk['css_set_width'] + $bdl + $pdl + $bdr + $pdr + $currblk['margin_right']);
 			}
 
-		} elseif (isset($properties['FLOAT']) && strtoupper($properties['FLOAT']) === 'LEFT' && !$this->mpdf->ColActive) {
-			// Cancel Keep-Block-together
-			$currblk['keep_block_together'] = false;
-			$this->mpdf->kt_y00 = 0;
-			$this->mpdf->keep_block_together = 0;
-
+		} elseif ($float === 'LEFT' && !$this->mpdf->ColActive) {
 			$this->mpdf->blockContext++;
 			$currblk['blockContext'] = $this->mpdf->blockContext;
 
@@ -1299,7 +1290,10 @@ abstract class BlockTag extends Tag
 		}
 
 		/* -- CSS-FLOAT -- */
-		if ($this->mpdf->blk[$this->mpdf->blklvl]['float'] === 'R') {
+		// A block measured for page-break-inside:avoid leaves nothing behind, so its own float close is skipped;
+		// that also leaves the position where the float ended for the check below
+		$float = $this->mpdf->blk[$this->mpdf->blklvl]['float'];
+		if (($float === 'R' || $float === 'L') && !$this->mpdf->blk[$this->mpdf->blklvl]['keep_block_together']) {
 			// If width not set, here would need to adjust and output buffer
 			$s = $this->mpdf->PrintPageBackgrounds();
 			// Writes after the marker so not overwritten later by page background etc.
@@ -1317,42 +1311,7 @@ abstract class BlockTag extends Tag
 			}
 
 			$this->mpdf->addFloatDiv([
-				'side' => 'R',
-				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
-				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
-				'startpos' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'] * 1000 + $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
-				'endpage' => $this->mpdf->page,
-				'y1' => $this->mpdf->y,
-				'endpos' => $this->mpdf->page * 1000 + $this->mpdf->y,
-				'w' => $this->mpdf->blk[$this->mpdf->blklvl]['float_width'],
-				'blklvl' => $this->mpdf->blklvl,
-				'blockContext' => $this->mpdf->blk[$this->mpdf->blklvl - 1]['blockContext']
-			]);
-
-			$this->mpdf->y = $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'];
-			$this->mpdf->page = $this->mpdf->blk[$this->mpdf->blklvl]['startpage'];
-			$this->mpdf->ResetMargins();
-			$this->mpdf->pageoutput[$this->mpdf->page] = [];
-		}
-		if ($this->mpdf->blk[$this->mpdf->blklvl]['float'] === 'L') {
-			// If width not set, here would need to adjust and output buffer
-			$s = $this->mpdf->PrintPageBackgrounds();
-			// Writes after the marker so not overwritten later by page background etc.
-			$this->mpdf->pages[$this->mpdf->page] = preg_replace('/(___BACKGROUND___PATTERNS' . $this->mpdf->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->mpdf->pages[$this->mpdf->page]);
-			$this->mpdf->pageBackgrounds = [];
-			$this->mpdf->Reset();
-			$this->mpdf->pageoutput[$this->mpdf->page] = [];
-
-			for ($i = ($this->mpdf->blklvl - 1); $i >= 0; $i--) {
-				if (isset($this->mpdf->blk[$i]['float_endpos'])) {
-					$this->mpdf->blk[$i]['float_endpos'] = max($this->mpdf->blk[$i]['float_endpos'], $this->mpdf->page * 1000 + $this->mpdf->y);
-				} else {
-					$this->mpdf->blk[$i]['float_endpos'] = $this->mpdf->page * 1000 + $this->mpdf->y;
-				}
-			}
-
-			$this->mpdf->addFloatDiv([
-				'side' => 'L',
+				'side' => $float,
 				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
 				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
 				'startpos' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'] * 1000 + $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
