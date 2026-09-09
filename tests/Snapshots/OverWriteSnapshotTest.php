@@ -20,6 +20,14 @@ class OverWriteSnapshotTest extends Snapshot
 		return 'overwrite';
 	}
 
+	/**
+	 * Whether the source document is written compressed, which is not how the instance overwriting it is set
+	 */
+	protected function sourceCompressed()
+	{
+		return true;
+	}
+
 	protected function tear_down()
 	{
 		parent::tear_down();
@@ -33,7 +41,8 @@ class OverWriteSnapshotTest extends Snapshot
 	 * A three page letter with a placeholder wherever a name, policy number or date belongs, written with core
 	 * fonts so its text sits in the content streams as typed. The snapshot is what OverWrite() makes of it: the
 	 * name is longer than its placeholder and carries a character outside ASCII, the policy number is shorter,
-	 * and the last page has nothing to replace.
+	 * and the last page has nothing to replace. The instance overwriting the source has the opposite compression
+	 * setting to the one that wrote it, so each stream has to be read the way the document says.
 	 */
 	public function generatePdf()
 	{
@@ -61,6 +70,7 @@ class OverWriteSnapshotTest extends Snapshot
 		$html = ob_get_clean();
 
 		$this->mpdf = new Mpdf(['mode' => 'c']);
+		$this->mpdf->compress = $this->sourceCompressed();
 		$this->mpdf->WriteHTML($html);
 
 		$this->source = tempnam(sys_get_temp_dir(), 'OverWriteSource');
@@ -69,6 +79,7 @@ class OverWriteSnapshotTest extends Snapshot
 
 	protected function outputPdf($file)
 	{
+		$this->mpdf->compress = !$this->sourceCompressed();
 		$this->mpdf->OverWrite(
 			$this->source,
 			['[NAME]', '[POLICY]', '[DATE]'],
