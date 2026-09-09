@@ -200,4 +200,21 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 		$this->assertCount(1, $pages);
 		$this->assertTextCount(1, 'Footer para', $pages[0]);
 	}
+
+	/**
+	 * mpdf/mpdf#2075: a substituted character is spliced into the token stream as a span, and the text
+	 * before it trimmed from the current token. The trim was lost on the token itself, so the second pass
+	 * printed the whole text and then the span and the rest of it again. Text in a TrueType font is written
+	 * as UTF-16
+	 */
+	public function testASubstitutedCharacterIsNotDuplicatedWhenTheBlockIsParsedAgain()
+	{
+		$html = '<style>body { font-family: ocrb }</style>' . $this->filler(5) . '<div style="page-break-inside: avoid"><p>HÄẞLICH</p></div>';
+
+		$pdf = $this->render($html, ['mode' => 'utf-8', 'useSubstitutions' => true, 'backupSubsFont' => ['dejavusans']]);
+
+		foreach (['HÄ' => 'before', 'LICH' => 'after'] as $text => $side) {
+			$this->assertSame(1, substr_count($pdf, mb_convert_encoding($text, 'UTF-16BE', 'UTF-8')), "The letters $side the substituted one should be printed once");
+		}
+	}
 }

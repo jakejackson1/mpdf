@@ -25895,7 +25895,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} else {
 					if ($l == 0 && $bsfctr == (count($this->backupSubsFont) - 1)) { // Not found even in last backup font
 						$cont = mb_substr($writehtml_e, $start + 1);
-						$writehtml_e = mb_substr($writehtml_e, 0, $start + 1, 'UTF-8');
+						// Write the trim back into the token too, here and at every splice below, as SubstituteCharsSIP()
+						// does: a page-break-inside:avoid block's second parse otherwise prints the untrimmed text (mpdf/mpdf#2075)
+						$writehtml_a[$writehtml_i] = $writehtml_e = mb_substr($writehtml_e, 0, $start + 1, 'UTF-8');
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['', $cont]);
 						$this->subPos = $writehtml_i + 1;
 
@@ -25909,7 +25911,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($l > 0) {
 				$patt = mb_substr($writehtml_e, $start, $l, 'UTF-8');
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 					$this->subPos = $writehtml_i + 3;
 
@@ -26016,7 +26018,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($l > 0) {
 					$patt = mb_substr($writehtml_e, $start, $l);
 					if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-						$writehtml_e = $m[1];
+						$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 						$this->subPos = $writehtml_i + 3;
 						return 4;
@@ -26065,7 +26067,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($l > 0) {
 					$patt = mb_substr($writehtml_e, $start, $l);
 					if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-						$writehtml_e = $m[1];
+						$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 						$this->subPos = $writehtml_i + 3;
 						return 4;
@@ -26119,7 +26121,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($ftype == 'C') {
 				$patt = mb_substr($writehtml_e, $start, count($repl));
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, [$font, implode('|', $repl), '/' . $font, $m[3]]); // e.g. <tts>
 					$this->subPos = $writehtml_i + 3;
 					return 4;
@@ -26169,7 +26171,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} else {
 					if ($l == 0 && $bsfctr == (count($this->backupSubsFont) - 1)) { // Not found even in last backup font
 						$cont = mb_substr($writehtml_e, $start + 1);
-						$writehtml_e = mb_substr($writehtml_e, 0, $start + 1);
+						$writehtml_a[$writehtml_i] = $writehtml_e = mb_substr($writehtml_e, 0, $start + 1);
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['', $cont]);
 						$this->subPos = $writehtml_i + 1;
 						return 2;
@@ -26182,7 +26184,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($l > 0) {
 				$patt = mb_substr($writehtml_e, $start, $l);
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 					$this->subPos = $writehtml_i + 3;
 					return 4;
