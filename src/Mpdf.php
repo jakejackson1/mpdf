@@ -27331,7 +27331,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$html = str_replace("<innerpre", "<pre", $html);
 
 		$html = preg_replace('/<textarea([^>]*)><\/textarea>/si', '<textarea\\1> </textarea>', $html);
-		$html = preg_replace('/(<table[^>]*>)\s*(<caption)(.*?<\/caption>)(.*?<\/table>)/si', '\\2 position="top"\\3\\1\\4\\2 position="bottom"\\3', $html); // *TABLES*
+		// With use_kwt, a caption above its table is kept with it the same way as a heading (mpdf/mpdf#1666)
+		$kwt = $this->use_kwt ? ' keep-with-table="1"' : '';
+		$html = preg_replace('/(<table[^>]*>)\s*(<caption)(.*?<\/caption>)(.*?<\/table>)/si', '\\2 position="top"' . $kwt . '\\3\\1\\4\\2 position="bottom"\\3', $html); // *TABLES*
 
 		if ($this->use_kwt) {
 			$returnHtml = preg_replace('/<(h[1-6])([^>]*(?<!\/))(>[^>]*<\/\\1>\s*<table)/si', '<\\1\\2 keep-with-table="1"\\3', $html);

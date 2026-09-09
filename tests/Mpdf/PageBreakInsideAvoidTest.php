@@ -219,6 +219,29 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 	}
 
 	/**
+	 * mpdf/mpdf#1666: a caption is written as a block above its table, so when a table with
+	 * page-break-inside:avoid moved to the next page the caption stayed behind. With keep-with-table on, a
+	 * caption is now carried the same way as a heading
+	 */
+	public function testACaptionMovesWithItsKeptTogetherTableWhenKeepWithTableIsOn()
+	{
+		$table = '<table style="page-break-inside: avoid"><caption>Table Caption</caption><tr><td>Cell' . str_repeat('<br />', 20) . 'Bottom</td></tr></table>';
+
+		foreach ([true, false] as $useKwt) {
+			$mpdf = $this->mpdf();
+			$mpdf->use_kwt = $useKwt;
+			$mpdf->WriteHTML($this->filler(27) . $table);
+
+			$pages = $this->pages($this->output($mpdf));
+
+			$this->assertCount(2, $pages);
+			$this->assertTextCount(1, 'Cell', $pages[1]);
+			$this->assertTextCount($useKwt ? 0 : 1, 'Table Caption', $pages[0]);
+			$this->assertTextCount($useKwt ? 1 : 0, 'Table Caption', $pages[1]);
+		}
+	}
+
+	/**
 	 * mpdf/mpdf#1801: page-break-after:avoid asks for room for one more line as tall as the block after it.
 	 * A tall image could never have that, on any page, and each check pushed it on to yet another one
 	 */
