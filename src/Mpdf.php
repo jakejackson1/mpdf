@@ -22073,6 +22073,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 	}
 
+	/**
+	 * Splice the backgrounds collected for a table in behind the placeholder it wrote to $buffer, and spend the
+	 * placeholder whether or not anything was put behind it: one left in place takes a copy of the next table's
+	 * backgrounds as well, so a table with no background of its own left the one after it painted twice
+	 */
+	function spendTableBackgrounds($buffer)
+	{
+		$s = $this->tableBackgrounds ? "\n" . $this->PrintTableBackgrounds() . "\n" : '';
+		$placeholder = '___TABLE___BACKGROUNDS' . $this->uniqstr;
+
+		if ($buffer === 'pages') {
+			$this->pages[$this->page] = str_replace($placeholder, ' ' . $s, $this->pages[$this->page]);
+		} else {
+			$this->$buffer = str_replace($placeholder, ' ' . $s, $this->$buffer);
+		}
+
+		$this->tableBackgrounds = [];
+	}
+
 	function _tableWrite(&$table, $split = false, $startrow = 0, $startcol = 0, $splitpg = 0, $rety = 0)
 	{
 		$level = $table['level'];
@@ -22558,17 +22577,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								}
 
 								// $this->AcceptPageBreak() has moved tablebuffer to $this->pages content
-								if ($this->tableBackgrounds) {
-									$s = $this->PrintTableBackgrounds();
-									if ($this->bufferoutput) {
-										$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->headerbuffer);
-										$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->headerbuffer);
-									} else {
-										$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->pages[$this->page]);
-										$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->pages[$this->page]);
-									}
-									$this->tableBackgrounds = [];
-								}
+								$this->spendTableBackgrounds($this->bufferoutput ? 'headerbuffer' : 'pages');
 
 								if ($split) {
 									if ($i == 0 && $j == 0) {
@@ -23476,25 +23485,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			/* -- END BACKGROUNDS -- */
 		}
 
-		if ($this->tableBackgrounds && $level == 1) {
-			$s = $this->PrintTableBackgrounds();
+		if ($level == 1) {
+			// The same routing as BaseWriter::write() gave the placeholder
 			if ($this->table_rotate && !$this->processingHeader && !$this->processingFooter) {
-				$this->tablebuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->tablebuffer);
-				if ($level == 1) {
-					$this->tablebuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->tablebuffer);
-				}
-			} elseif ($this->bufferoutput) {
-				$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->headerbuffer);
-				if ($level == 1) {
-					$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->headerbuffer);
-				}
+				$this->spendTableBackgrounds('tablebuffer');
 			} else {
-				$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->pages[$this->page]);
-				if ($level == 1) {
-					$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->pages[$this->page]);
-				}
+				$this->spendTableBackgrounds($this->bufferoutput ? 'headerbuffer' : 'pages');
 			}
-			$this->tableBackgrounds = [];
 		}
 
 
