@@ -27395,7 +27395,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		return date($matches[1]);
 	}
 
-	// ========== OVERWRITE SEARCH STRING IN A PDF FILE ================
+	/**
+	 * Replace text inside the page content streams of a PDF that mPDF wrote
+	 *
+	 * Only documents mPDF itself produced are supported: page content must be uncompressed or FlateDecode,
+	 * exactly as PageWriter writes it, with a classic cross-reference table and "\n" line endings. Anything
+	 * else, including other stream filters, object streams or PDFs from other producers, throws. Whether each
+	 * stream is compressed is read from the document, but the search strings are still encoded the way this
+	 * instance would write them, so overwrite with the same fonts and mode as the instance that wrote the file.
+	 *
+	 * @param string          $file_in     Path to the PDF to read
+	 * @param string|string[] $search      Text to look for
+	 * @param string|string[] $replacement Text to put in its place, one entry per entry in $search
+	 * @param string          $dest        A Destination constant
+	 * @param string          $file_out    Filename for the browser, or the path to write when $dest is Destination::FILE
+	 *
+	 * @return string|void The PDF when $dest is Destination::STRING_RETURN
+	 *
+	 * @throws \Mpdf\MpdfException When the file is not an mPDF document of this shape, or cannot be written
+	 */
 	function OverWrite($file_in, $search, $replacement, $dest = Destination::DOWNLOAD, $file_out = "mpdf")
 	{
 		$pdf = file_get_contents($file_in);
