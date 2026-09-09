@@ -217,4 +217,36 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 			$this->assertSame(1, substr_count($pdf, mb_convert_encoding($text, 'UTF-16BE', 'UTF-8')), "The letters $side the substituted one should be printed once");
 		}
 	}
+
+	/**
+	 * mpdf/mpdf#1801: page-break-after:avoid asks for room for one more line as tall as the block after it.
+	 * A tall image could never have that, on any page, and each check pushed it on to yet another one
+	 */
+	public function testATallBlockWithPageBreakAfterAvoidDoesNotPushBlankPages()
+	{
+		$html = '<p>Before</p><div style="page-break-after: avoid"><img style="width: 501px" src="' . $this->pngImage() . '" /></div><p>After</p>';
+
+		$pages = $this->pages($this->render($html));
+
+		$this->assertCount(1, $pages);
+		$this->assertSame(1, $this->images($pages[0]));
+		$this->assertTextCount(1, 'Before', $pages[0]);
+		$this->assertTextCount(1, 'After', $pages[0]);
+	}
+
+	/**
+	 * The look-ahead still applies when a fresh page could satisfy it: a heading with only its own height
+	 * left on the page moves to the next one
+	 */
+	public function testAHeadingWithPageBreakAfterAvoidStillMovesToKeepItsNextLine()
+	{
+		$html = $this->filler(38) . '<h3 style="page-break-after: avoid; margin: 0">Heading</h3><p>After</p>';
+
+		$pages = $this->pages($this->render($html));
+
+		$this->assertCount(2, $pages);
+		$this->assertTextCount(0, 'Heading', $pages[0]);
+		$this->assertTextCount(1, 'Heading', $pages[1]);
+		$this->assertTextCount(1, 'After', $pages[1]);
+	}
 }

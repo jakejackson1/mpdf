@@ -4884,7 +4884,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				($this->y + $this->divheight > $this->PageBreakTrigger)
 				|| ($this->y + $h > $this->PageBreakTrigger)
 				|| (
+					// page-break-after:avoid wants room for one more line this tall after this one. When a fresh page
+					// has no such room either, breaking only adds empty pages (mpdf/mpdf#1801)
 					$this->y + ($h * 2) + $bottom > $this->PageBreakTrigger
+						&& $this->tMargin + ($h * 2) + $bottom <= $this->PageBreakTrigger
 						&& (isset($this->blk[$this->blklvl]['page_break_after_avoid']) && $this->blk[$this->blklvl]['page_break_after_avoid'])
 				)
 			)
@@ -6756,7 +6759,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		if ($this->blklvl > 0 && !$is_table) {
 			if ($endofblock && $blockstate > 1) {
-				if ($this->blk[$this->blklvl]['page_break_after_avoid']) {
+				// As in Cell(): only ask for the extra line if a fresh page could hold it (mpdf/mpdf#1801)
+				if ($this->blk[$this->blklvl]['page_break_after_avoid'] && $this->tMargin + $check_h + $stackHeight <= $this->PageBreakTrigger) {
 					$check_h += $stackHeight;
 				}
 				$check_h += ($this->blk[$this->blklvl]['padding_bottom'] + $this->blk[$this->blklvl]['border_bottom']['w']);
