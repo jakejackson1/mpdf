@@ -951,7 +951,7 @@ class Form
 			$this->SetFormTextJS($name, $js);
 		} // mPDF 5.3.25
 		if ($this->mpdf->keep_block_together) {
-			$this->mpdf->ktForms[] = $f;
+			// Fields live on this object, which a block's state snapshot does not put back
 		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {
@@ -1031,7 +1031,7 @@ class Form
 			$this->SetFormChoiceJS($name, $js);
 		}
 		if ($this->mpdf->keep_block_together) {
-			$this->mpdf->ktForms[] = $f;
+			// Fields live on this object, which a block's state snapshot does not put back
 		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {
@@ -1233,7 +1233,7 @@ class Form
 			]
 		];
 		if ($this->mpdf->keep_block_together) {
-			$this->mpdf->ktForms[] = $f;
+			// Fields live on this object, which a block's state snapshot does not put back
 		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {

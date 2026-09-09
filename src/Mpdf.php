@@ -3255,9 +3255,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->pageBackgrounds = [];
 		}
 
-		$save_kt = $this->keep_block_together;
-		$this->keep_block_together = 0;
-
 		$save_cols = false;
 
 		/* -- COLUMNS -- */
@@ -3414,8 +3411,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->table_rotate = $save_tr; // *TABLES*
 		$this->kwt = $save_kwt;
-
-		$this->keep_block_together = $save_kt;
 
 		$this->cMarginL = $bak_cml;
 		$this->cMarginR = $bak_cmr;
@@ -4459,9 +4454,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	function Link($x, $y, $w, $h, $link)
 	{
 		$l = [$x * Mpdf::SCALE, $this->hPt - $y * Mpdf::SCALE, $w * Mpdf::SCALE, $h * Mpdf::SCALE, $link];
-		if ($this->keep_block_together) { // don't write yet
-			return;
-		} elseif ($this->table_rotate) { // *TABLES*
+		if ($this->table_rotate) { // *TABLES*
 			$this->tbrot_Links[$this->page][] = $l; // *TABLES*
 			return; // *TABLES*
 		} // *TABLES*
@@ -9587,7 +9580,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$x = $this->x;
 					$this->Cell(($this->blk[$blvl]['width']), $h, '', '', 0, '', 1);
 					$this->x = $x;
-					if (!$this->keep_block_together && !$this->writingHTMLheader && !$this->writingHTMLfooter) {
+					if (!$this->writingHTMLheader && !$this->writingHTMLfooter) {
 						// $state = 0 normal; 1 top; 2 bottom; 3 top and bottom
 						if ($blvl == $this->blklvl) {
 							$this->PaintDivLnBorder($state, $blvl, $h);
@@ -10112,9 +10105,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$an = ['txt' => $text, 'x' => $x, 'y' => $y, 'opt' => ['Icon' => $icon, 'T' => $author, 'Subj' => $subject, 'C' => $colarray, 'CA' => $opacity, 'popup' => $popup, 'file' => $file]];
 
-		if ($this->keep_block_together) { // don't write yet
-			return;
-		} elseif ($this->table_rotate) {
+		if ($this->table_rotate) {
 			$this->tbrot_Annots[$this->page][] = $an;
 			return;
 		} elseif ($this->kwt) {
@@ -16318,7 +16309,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page, "kwt" => true];
 				} elseif ($this->ColActive) {
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page, "col" => $this->CurrCol];
-				} elseif (!$this->keep_block_together) {
+				} else {
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page];
 				}
 				if (empty($vetor[0])) { // Ignore empty text
@@ -16843,9 +16834,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if ($this->ColActive) {
 			return;
 		} // *COLUMNS*
-		if ($this->keep_block_together) {
-			return;
-		} // mPDF 6
 		$save_y = $this->y;
 		if (!$blvl) {
 			$blvl = $this->blklvl;
@@ -17333,8 +17321,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->y = $save_y;
 
 
-		// BACKGROUNDS are disabled in columns/kbt/headers - messes up the repositioning in printcolumnbuffer
-		if ($this->ColActive || $this->kwt || $this->keep_block_together) {
+		// BACKGROUNDS are disabled in columns/kwt - messes up the repositioning in printcolumnbuffer
+		if ($this->ColActive || $this->kwt) {
 			return;
 		}
 
@@ -23578,9 +23566,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// DIRECTIONALITY RTL
 		$bmo = ['t' => $txt, 'l' => $level, 'y' => $y, 'p' => $this->page];
 
-		if ($this->keep_block_together) {
-			// do nothing
-		} elseif ($this->table_rotate) {
+		if ($this->table_rotate) {
 			$this->tbrot_BMoutlines[] = $bmo;
 		} elseif ($this->kwt) {
 			$this->kwt_BMoutlines[] = $bmo;
@@ -23713,7 +23699,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page, "kwt" => true];
 		} elseif ($this->ColActive) {
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page, "col" => $this->CurrCol];
-		} elseif (!$this->keep_block_together) {
+		} else {
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page];
 		}
 		$this->internallink['#' . $uid] = $linkn;
@@ -23728,7 +23714,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		$btoc = ['t' => $txt, 'l' => $level, 'p' => $this->page, 'link' => $linkn, 'toc_id' => $toc_id];
 		if ($this->keep_block_together) {
-			// do nothing
+			// The entries live on the TableOfContents object, which a block's state snapshot does not put back
 		} /* -- TABLES -- */ elseif ($this->table_rotate) {
 			$this->tbrot_toc[] = $btoc;
 		} elseif ($this->kwt) {
@@ -24182,9 +24168,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// Search the reference (AND Ref/PageNo) in the array
 		$Present = false;
-		if ($this->keep_block_together) {
-			// do nothing
-		} /* -- TABLES -- */ elseif ($this->kwt) {
+		/* -- TABLES -- */
+		if ($this->kwt) {
 			$size = count($this->kwt_Reference);
 			for ($i = 0; $i < $size; $i++) {
 				if (isset($this->kwt_Reference[$i]['t']) && $this->kwt_Reference[$i]['t'] == $txt) {
@@ -27760,9 +27745,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 */
 	public function getStateSnapshot()
 	{
+		// The loader caches stay live: the pass being unwound only adds to them and the pass that follows needs every
+		// entry. So does the counter that numbers fonts alongside them, and the reference into one of them
+		$live = ['fonts', 'FontFiles', 'extraFontSubsets', 'images', 'formobjects', 'CurrentFont'];
+
 		$snapshot = [];
 		foreach (get_object_vars($this) as $key => $value) {
-			if (is_object($value) || is_resource($value)) {
+			if (is_object($value) || is_resource($value) || in_array($key, $live, true)) {
 				continue;
 			}
 
@@ -27785,6 +27774,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	{
 		foreach ($snapshot as $key => $value) {
 			$this->{$key} = $value;
+		}
+
+		// CurrentFont is a reference into fonts[], which stays live, so it is bound to the restored selection here:
+		// SetFont() will not do it while the family, style and size already match
+		$fontkey = $this->FontFamily . $this->FontStyle;
+		if (isset($this->fonts[$fontkey])) {
+			$this->CurrentFont = &$this->fonts[$fontkey];
 		}
 	}
 }
