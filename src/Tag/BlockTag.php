@@ -1290,10 +1290,12 @@ abstract class BlockTag extends Tag
 		}
 
 		/* -- CSS-FLOAT -- */
-		// A block measured for page-break-inside:avoid leaves nothing behind, so its own float close is skipped;
-		// that also leaves the position where the float ended for the check below
-		$float = $this->mpdf->blk[$this->mpdf->blklvl]['float'];
-		if (($float === 'R' || $float === 'L') && !$this->mpdf->blk[$this->mpdf->blklvl]['keep_block_together']) {
+		// A page-break-inside:avoid block that ran onto another page is unwound below, its own float close included:
+		// skipping it here also leaves the position where the float ended for the check
+		$blk = $this->mpdf->blk[$this->mpdf->blklvl];
+		$unwind = $blk['keep_block_together'] && $this->mpdf->page != $blk['kt_state']['page'];
+		$float = $blk['float'];
+		if (($float === 'R' || $float === 'L') && !$unwind) {
 			// If width not set, here would need to adjust and output buffer
 			$s = $this->mpdf->PrintPageBackgrounds();
 			// Writes after the marker so not overwritten later by page background etc.
@@ -1346,10 +1348,11 @@ abstract class BlockTag extends Tag
 			$this->mpdf->EndLayer();
 		}
 
-		// mPDF 6 page-break-inside:avoid
-		if ($this->mpdf->blk[$this->mpdf->blklvl]['keep_block_together']) {
-			$start = $this->mpdf->blk[$this->mpdf->blklvl]['kt_state'];
-			$i = $this->mpdf->blk[$this->mpdf->blklvl]['array_i'];
+		// mPDF 6 page-break-inside:avoid. The measuring pass wrote the block, and when it stayed on the page it opened
+		// on that is its layout. One that ran onto another page is unwound and laid out again from the same token
+		if ($unwind) {
+			$start = $blk['kt_state'];
+			$i = $blk['array_i'];
 			// If page-break-inside:avoid section has broken to new page but fits on one side - then move:
 			$movepage = ($this->mpdf->page - $start['page']) == 1 && $this->mpdf->y < $start['y'];
 
@@ -1363,6 +1366,9 @@ abstract class BlockTag extends Tag
 				$this->mpdf->AddPage();
 			}
 			return;
+		}
+		if ($blk['keep_block_together']) {
+			$this->mpdf->keep_block_together = false;
 		}
 
 		if ($this->mpdf->blklvl > 0) { // ==0 SHOULDN'T HAPPEN - NOT XHTML

@@ -4,7 +4,8 @@ namespace Mpdf;
 
 /**
  * A page-break-inside:avoid block is laid out once to measure it and, if that ran onto another page, thrown
- * away and laid out again from where it started. These pin down what the measuring pass must not leave behind.
+ * away and laid out again from where it started. These pin down what a thrown-away pass must not leave behind,
+ * and that a kept one is the layout.
  */
 class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
@@ -271,6 +272,20 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 		$this->assertTextCount(0, 'Heading', $pages[0]);
 		$this->assertTextCount(1, 'Heading', $pages[1]);
 		$this->assertTextCount(1, 'After', $pages[1]);
+	}
+
+	/**
+	 * The measuring pass writes the block, so one that stays on its page is not unwound and laid out again
+	 */
+	public function testABlockThatStaysOnItsPageIsLaidOutOnce()
+	{
+		$mpdf = new UnwindCountingMpdf(['mode' => 'c']);
+		$mpdf->WriteHTML($this->filler(3) . $this->keptBlock(12));
+		$this->assertSame(0, $mpdf->unwinds);
+
+		$mpdf = new UnwindCountingMpdf(['mode' => 'c']);
+		$mpdf->WriteHTML($this->movingBlock());
+		$this->assertSame(1, $mpdf->unwinds);
 	}
 
 	/**
