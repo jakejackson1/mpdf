@@ -40,36 +40,6 @@ class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\Te
 	}
 
 	/**
-	 * $needle appears $count times in the string for page $page and not at all in the others
-	 */
-	private function assertOnlyOnPage($page, $count, $needle, array $strings, $what)
-	{
-		foreach ($strings as $i => $string) {
-			$expected = $i === $page ? $count : 0;
-			$this->assertSame($expected, substr_count($string, $needle), 'Page ' . ($i + 1) . " should carry $what $expected time(s)");
-		}
-	}
-
-	/**
-	 * The annotation objects listed by each page, as one string per page
-	 */
-	private function annotations($pdf)
-	{
-		$annotations = [];
-		foreach ($this->pageObjects($pdf) as $i => $number) {
-			$annotations[$i] = '';
-			if (preg_match('/\/Annots \[([^\]]*)\]/', $this->object($pdf, $number), $list)) {
-				preg_match_all('/(\d+) 0 R/', $list[1], $refs);
-				foreach ($refs[1] as $ref) {
-					$annotations[$i] .= $this->object($pdf, $ref);
-				}
-			}
-		}
-
-		return $annotations;
-	}
-
-	/**
 	 * @dataProvider placements
 	 */
 	public function testALinkIsAnnotatedOnceOnTheBlocksPage($filler, $page)
@@ -108,8 +78,7 @@ class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\Te
 	{
 		list(, $pages) = $this->document($filler, $page, '<indexentry content="Kept term" />', '', '<pagebreak /><indexinsert />');
 
-		$this->assertSame(1, preg_match_all('/\(Kept term\s+(\d+)\)/', end($pages), $listed), 'The index should list the term once');
-		$this->assertSame((string) ($page + 1), $listed[1][0], 'The index should list the block\'s page');
+		$this->assertIndexLists($page + 1, 'Kept term', end($pages));
 	}
 
 	/**

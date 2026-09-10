@@ -87,6 +87,14 @@ class TableOfContents
 	}
 
 	/**
+	 * Whether a table of contents is registered to be written when the document closes
+	 */
+	public function hasToc()
+	{
+		return $this->TOCmark > 0 || count($this->m_TOC) > 0;
+	}
+
+	/**
 	 * Mark the TOC Paint as having begun
 	 */
 	public function beginTocPaint()

@@ -87,6 +87,25 @@ trait PageStreams
 		return $match[1];
 	}
 
+	/**
+	 * The annotation objects listed by each page, as one string per page
+	 */
+	private function annotations($pdf)
+	{
+		$annotations = [];
+		foreach ($this->pageObjects($pdf) as $i => $number) {
+			$annotations[$i] = '';
+			if (preg_match('/\/Annots \[([^\]]*)\]/', $this->object($pdf, $number), $list)) {
+				preg_match_all('/(\d+) 0 R/', $list[1], $refs);
+				foreach ($refs[1] as $ref) {
+					$annotations[$i] .= $this->object($pdf, $ref);
+				}
+			}
+		}
+
+		return $annotations;
+	}
+
 	private function pngImage()
 	{
 		return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
@@ -95,6 +114,26 @@ trait PageStreams
 	private function images($stream)
 	{
 		return preg_match_all('/\/I\d+ Do/', $stream);
+	}
+
+	/**
+	 * $needle appears $count times in the string for page $page and not at all in the others
+	 */
+	private function assertOnlyOnPage($page, $count, $needle, array $strings, $what)
+	{
+		foreach ($strings as $i => $string) {
+			$expected = $i === $page ? $count : 0;
+			$this->assertSame($expected, substr_count($string, $needle), 'Page ' . ($i + 1) . " should carry $what $expected time(s)");
+		}
+	}
+
+	/**
+	 * The index in $stream lists $term once, on page $page
+	 */
+	private function assertIndexLists($page, $term, $stream)
+	{
+		$this->assertSame(1, preg_match_all('/\(' . preg_quote($term, '/') . '\s+(\d+)\)/', $stream, $listed), "The index should list '$term' once");
+		$this->assertSame((string) $page, $listed[1][0], "The index should list '$term' on page $page");
 	}
 
 	private function assertTextCount($expected, $text, $stream, $message = '')
