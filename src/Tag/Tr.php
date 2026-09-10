@@ -17,7 +17,11 @@ class Tr extends Tag
 		$this->mpdf->col = -1;
 		$properties = $this->cssManager->MergeCSS('TABLE', 'TR', $attr);
 
-		// write pagebreak markers into row list, so _tableWrite can respect it
+		// write pagebreak markers into row list, so _tableWrite can respect it. Not while a page-break-inside:avoid
+		// block is measured: BlockTag::close() takes the block to fit on a fresh page when its measured end is higher
+		// than its start, and a marker breaks the table earlier than its rows would, so the end lands lower than the
+		// block is tall. (A table kept together inside the block defeats that decision the same way, unguarded.) A
+		// block that stays never consults the markers
 		if (isset($properties['PAGE-BREAK-BEFORE']) && strtoupper($properties['PAGE-BREAK-BEFORE']) === 'AVOID'
 			&& !$this->mpdf->ColActive && !$this->mpdf->keep_block_together && !isset($attr['PAGEBREAKAVOIDCHECKED'])) {
 			$this->mpdf->table[$this->mpdf->tableLevel][$this->mpdf->tbctr[$this->mpdf->tableLevel]]['pagebreak-before'][$this->mpdf->row] = 'avoid';

@@ -10,6 +10,8 @@ use Mpdf\Writer\FormWriter;
 class Form
 {
 
+	use StateSnapshot;
+
 	use Strict;
 
 	// Input flags
@@ -950,9 +952,7 @@ class Form
 		if (is_array($js) && count($js) > 0) {
 			$this->SetFormTextJS($name, $js);
 		} // mPDF 5.3.25
-		if ($this->mpdf->keep_block_together) {
-			// Fields live on this object, which a block's state snapshot does not put back
-		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
+		if ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {
 			if ($this->mpdf->ColActive) {
@@ -1030,9 +1030,7 @@ class Form
 		if ($js) {
 			$this->SetFormChoiceJS($name, $js);
 		}
-		if ($this->mpdf->keep_block_together) {
-			// Fields live on this object, which a block's state snapshot does not put back
-		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
+		if ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {
 			if ($this->mpdf->ColActive) {
@@ -1170,8 +1168,7 @@ class Form
 				throw new \Mpdf\MpdfException("Field '" . $name . "' must have a value, which can only contain letters, numbers, colon(:), underscore(_), hyphen(-) or period(.)");
 			}
 		}
-		// A radio group lives on this object too, so it is not registered while a block is only being measured
-		if ($type === 'radio' && !$this->mpdf->keep_block_together) {
+		if ($type === 'radio') {
 			if (!isset($this->form_radio_groups[$name])) {
 				$this->form_radio_groups[$name] = [
 					'page' => $this->mpdf->page,
@@ -1236,9 +1233,7 @@ class Form
 				'fontcolor' => $this->mpdf->TextColor,
 			]
 		];
-		if ($this->mpdf->keep_block_together) {
-			// Fields live on this object, which a block's state snapshot does not put back
-		} elseif ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
+		if ($this->mpdf->writingHTMLheader || $this->mpdf->writingHTMLfooter) {
 			$this->mpdf->HTMLheaderPageForms[] = $f;
 		} else {
 			if ($this->mpdf->ColActive) {

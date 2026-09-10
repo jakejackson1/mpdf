@@ -5,8 +5,7 @@ namespace Snapshots;
 /**
  * Active form fields inside a kept-together block, on a block that stays and one that moves: a text field, a
  * password, a text area, a select, checkboxes, radio buttons and the submit and reset buttons, in a form of their
- * own. Fields live on the Form object, which a block's state snapshot does not put back, so they are the one
- * kind of thing the measuring pass must not register at all. Each appears once, on the page its block ends up on.
+ * own. Each appears once, on the page its block ends up on.
  *
  * @group snapshot
  */

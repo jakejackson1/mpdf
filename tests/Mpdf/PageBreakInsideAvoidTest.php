@@ -4,7 +4,8 @@ namespace Mpdf;
 
 /**
  * A page-break-inside:avoid block is laid out once to measure it and, if that ran onto another page, thrown
- * away and laid out again from where it started. These pin down what the measuring pass must not leave behind.
+ * away and laid out again from where it started. These pin down what a thrown-away pass must not leave behind,
+ * and that a kept one is the layout.
  */
 class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 {
@@ -271,5 +272,68 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 		$this->assertTextCount(0, 'Heading', $pages[0]);
 		$this->assertTextCount(1, 'Heading', $pages[1]);
 		$this->assertTextCount(1, 'After', $pages[1]);
+	}
+
+	/**
+	 * The measuring pass writes the block, so one that stays on its page is not unwound and laid out again
+	 */
+	public function testABlockThatStaysOnItsPageIsLaidOutOnce()
+	{
+		$mpdf = new UnwindCountingMpdf(['mode' => 'c']);
+		$mpdf->WriteHTML($this->filler(3) . $this->keptBlock(12));
+		$this->assertSame(0, $mpdf->unwinds);
+
+		$mpdf = new UnwindCountingMpdf(['mode' => 'c']);
+		$mpdf->WriteHTML($this->movingBlock());
+		$this->assertSame(1, $mpdf->unwinds);
+	}
+
+	/**
+	 * A kept block that stays on its page is laid out by the measuring pass alone, so that pass must render $inner
+	 * exactly as it renders outside a kept block
+	 */
+	private function assertAKeptBlockThatStaysRendersAsAnUnkeptOne($inner, $config = [], $style = '')
+	{
+		$unkept = $this->pages($this->render($this->filler(3) . '<div style="' . $style . '">' . $inner . '</div>', $config));
+		$kept = $this->pages($this->render($this->filler(3) . $this->keptBlock(0, $inner, $style), $config));
+
+		$this->assertCount(1, $unkept);
+		$this->assertSame($unkept, $kept);
+	}
+
+	/**
+	 * Under use_kwt a heading marked keep-with-table is buffered until its table starts, and that path paints no
+	 * block background. The measuring pass used to skip keep-with-table, so it painted the heading's background
+	 */
+	public function testAKeepWithTableHeadingInsideAKeptBlockIsLaidOutAsItIsOutsideOne()
+	{
+		$inner = '<h2 keep-with-table="1" style="background-color: red">Heading</h2><table><tr><td>Cell</td></tr></table>';
+
+		$this->assertAKeptBlockThatStaysRendersAsAnUnkeptOne($inner, ['use_kwt' => true]);
+	}
+
+	/**
+	 * A block does not inherit its parent's background colour, but the measuring pass used to let it, as columns do
+	 */
+	public function testABlockInsideAKeptBlockDoesNotInheritItsBackground()
+	{
+		$this->assertAKeptBlockThatStaysRendersAsAnUnkeptOne('<div><p>Nested</p></div>', [], 'background-color: red');
+	}
+
+	/**
+	 * Rows that keep with the one before break the table early, and where the block's measuring pass ends is what
+	 * decides whether it moves whole. Measured with the markers, this block would end low on page 2 and be left
+	 * split; measured without them it moves, and the markers are honoured on the page it moves to
+	 */
+	public function testATableWhoseRowsKeepTogetherStillMovesWholeWithItsKeptBlock()
+	{
+		$table = '<table><tr><td>Row</td></tr>' . str_repeat('<tr style="page-break-before: avoid"><td>Row</td></tr>', 19) . '</table>';
+
+		$pages = $this->pages($this->render($this->filler(10) . '<div style="page-break-inside: avoid">' . str_repeat('<p>Kept</p>', 8) . $table . '</div>'));
+
+		$this->assertCount(2, $pages);
+		$this->assertTextCount(0, 'Kept', $pages[0]);
+		$this->assertTextCount(8, 'Kept', $pages[1]);
+		$this->assertTextCount(20, 'Row', $pages[1]);
 	}
 }

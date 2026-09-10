@@ -138,7 +138,7 @@ class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\Te
 
 	/**
 	 * A radio group and a submit button keep bookkeeping beside the field: the group's kids, and the button's
-	 * action. Neither may be written for a field the measuring pass did not register
+	 * action. Neither may be written for a field the unwind put back
 	 *
 	 * @dataProvider placements
 	 */

@@ -7,6 +7,8 @@ use Mpdf\Utils\Arrays;
 class TableOfContents
 {
 
+	use StateSnapshot;
+
 	private $mpdf;
 
 	private $sizeConverter;
@@ -313,7 +315,6 @@ class TableOfContents
 		$lookAheadPageNumSubstitutions = null;
 		if (!$this->tocTocPaintBegun) {
 			$mpdfState = $this->mpdf->getStateSnapshot();
-			$mTocState = $this->m_TOC;
 
 			$this->beginTocPaint();
 			$this->insertTOC();
@@ -322,8 +323,7 @@ class TableOfContents
 			$lookAheadPageNumSubstitutions = $this->mpdf->PageNumSubstitutions;
 
 			$this->mpdf->restoreStateSnapshot($mpdfState);
-			$this->m_TOC = $mTocState;
-			$this->tocTocPaintBegun = false;
+			$this->_toc = $lookAheadToc; // the real pass renders from the look-ahead's page numbers
 		}
 
 		$notocs = 0;
