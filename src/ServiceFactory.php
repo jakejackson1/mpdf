@@ -123,6 +123,8 @@ class ServiceFactory
 
 		$gradient = new Gradient($mpdf, $sizeConverter, $colorConverter, $writer);
 
+		$roundedBox = new RoundedBox();
+
 		$formWriter = new FormWriter($mpdf, $writer);
 
 		$form = new Form($mpdf, $otl, $colorConverter, $writer, $formWriter);
@@ -191,6 +193,7 @@ class ServiceFactory
 			'fontFileFinder' => $fontFileFinder,
 			'form' => $form,
 			'gradient' => $gradient,
+			'roundedBox' => $roundedBox,
 			'tableOfContents' => $tableOfContents,
 			'tag' => $tag,
 			'wmf' => $wmf,
@@ -233,6 +236,7 @@ class ServiceFactory
 			'fontFileFinder',
 			'form',
 			'gradient',
+			'roundedBox',
 			'tableOfContents',
 			'tag',
 			'wmf',

@@ -867,6 +867,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	private $gradient;
 
 	/**
+	 * @var \Mpdf\RoundedBox
+	 */
+	private $roundedBox;
+
+	/**
 	 * @var \Mpdf\Image\Bmp
 	 */
 	private $bmp;
@@ -7489,10 +7494,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($tr2) {
 					$this->writer->write('q ' . $tr2 . ' ');
 				}
+				$box = isset($objattr['border_radius']) ? $this->roundedBox->imageBox($objattr, $k) : null;
 				if (isset($objattr['bgcolor']) && $objattr['bgcolor']) {
 					$bgcol = $objattr['bgcolor'];
 					$this->SetFColor($bgcol);
-					$this->Rect($x, $y, $w, $h, 'F');
+					if ($box) {
+						$this->writer->write($this->roundedBox->path($this->h, $box['x0'], $box['y0'], $box['x1'], $box['y1'], $box['radii']) . 'f');
+					} else {
+						$this->Rect($x, $y, $w, $h, 'F'); // Kept as it was before radii: this fill covers the margins too
+					}
 					$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 				}
 				if ($tr2) {
@@ -7508,14 +7518,24 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					}
 				}
 				/* -- END BACKGROUNDS -- */
+				/* -- BORDER-RADIUS -- */
+				$clip = '';
+				if ($box) {
+					// The picture is trimmed to the content edge
+					$clip = $this->roundedBox->path($this->h, $objattr['INNER-X'], $objattr['INNER-Y'], $objattr['INNER-X'] + $objattr['INNER-WIDTH'], $objattr['INNER-Y'] + $objattr['INNER-HEIGHT'], $box['content']) . 'W n ';
+				}
+				/* -- END BORDER-RADIUS -- */
+				// The CSS transform goes outermost, about the box's centre as it does for the background and border; the
+				// clip is cut in page space inside it, before the rotation that turns the picture into that box
+				$pre = $tr2 . $clip . $tr;
 				/* -- IMAGES-WMF -- */
 				if (isset($objattr['itype']) && $objattr['itype'] == 'wmf') {
-					$outstring = sprintf('q ' . $tr . $tr2 . '%.3F 0 0 %.3F %.3F %.3F cm /FO%d Do Q', $sx, -$sy, $objattr['INNER-X'] * Mpdf::SCALE - $sx * $objattr['wmf_x'], (($this->h - $objattr['INNER-Y']) * Mpdf::SCALE) + $sy * $objattr['wmf_y'], $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
+					$outstring = sprintf('q ' . $pre . '%.3F 0 0 %.3F %.3F %.3F cm /FO%d Do Q', $sx, -$sy, $objattr['INNER-X'] * Mpdf::SCALE - $sx * $objattr['wmf_x'], (($this->h - $objattr['INNER-Y']) * Mpdf::SCALE) + $sy * $objattr['wmf_y'], $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
 				} else { 				/* -- END IMAGES-WMF -- */
 					if (isset($objattr['itype']) && $objattr['itype'] == 'svg') {
-						$outstring = sprintf('q ' . $tr . $tr2 . '%.3F 0 0 %.3F %.3F %.3F cm /FO%d Do Q', $sx, -$sy, $objattr['INNER-X'] * Mpdf::SCALE - $sx * $objattr['wmf_x'], (($this->h - $objattr['INNER-Y']) * Mpdf::SCALE) + $sy * $objattr['wmf_y'], $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
+						$outstring = sprintf('q ' . $pre . '%.3F 0 0 %.3F %.3F %.3F cm /FO%d Do Q', $sx, -$sy, $objattr['INNER-X'] * Mpdf::SCALE - $sx * $objattr['wmf_x'], (($this->h - $objattr['INNER-Y']) * Mpdf::SCALE) + $sy * $objattr['wmf_y'], $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
 					} else {
-						$outstring = sprintf("q " . $tr . $tr2 . "%.3F 0 0 %.3F %.3F %.3F cm " . $gradmask . "/I%d Do Q", $obiw * Mpdf::SCALE, $obih * Mpdf::SCALE, $objattr['INNER-X'] * Mpdf::SCALE, ($this->h - ($objattr['INNER-Y'] + $obih )) * Mpdf::SCALE, $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
+						$outstring = sprintf("q " . $pre . "%.3F 0 0 %.3F %.3F %.3F cm " . $gradmask . "/I%d Do Q", $obiw * Mpdf::SCALE, $obih * Mpdf::SCALE, $objattr['INNER-X'] * Mpdf::SCALE, ($this->h - ($objattr['INNER-Y'] + $obih )) * Mpdf::SCALE, $objattr['ID']); // mPDF 5.7.3 TRANSFORMS
 					}
 				}
 				$this->writer->write($outstring);
@@ -7533,7 +7553,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->writer->write('q ' . $tr2 . ' ');
 				}
 				if ((isset($objattr['border_top']) && $objattr['border_top'] > 0) || (isset($objattr['border_left']) && $objattr['border_left'] > 0) || (isset($objattr['border_right']) && $objattr['border_right'] > 0) || (isset($objattr['border_bottom']) && $objattr['border_bottom'] > 0)) {
-					$this->PaintImgBorder($objattr, $is_table);
+					$this->PaintImgBorder($objattr, $is_table, $box);
 				}
 				if ($tr2) {
 					$this->writer->write('Q');
@@ -16950,44 +16970,16 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$brBR_V = 0;
 		}
 
-		// Disallow border-radius if it is smaller than the border width.
-		if ($brTL_H < min($border_left, $border_top)) {
-			$brTL_H = $brTL_V = 0;
-		}
-		if ($brTL_V < min($border_left, $border_top)) {
-			$brTL_V = $brTL_H = 0;
-		}
-		if ($brTR_H < min($border_right, $border_top)) {
-			$brTR_H = $brTR_V = 0;
-		}
-		if ($brTR_V < min($border_right, $border_top)) {
-			$brTR_V = $brTR_H = 0;
-		}
-		if ($brBL_H < min($border_left, $border_bottom)) {
-			$brBL_H = $brBL_V = 0;
-		}
-		if ($brBL_V < min($border_left, $border_bottom)) {
-			$brBL_V = $brBL_H = 0;
-		}
-		if ($brBR_H < min($border_right, $border_bottom)) {
-			$brBR_H = $brBR_V = 0;
-		}
-		if ($brBR_V < min($border_right, $border_bottom)) {
-			$brBR_V = $brBR_H = 0;
-		}
-
-		// CHECK FOR radii that sum to > width or height of div ********
-		$f = min($h / ($brTL_V + $brBL_V + 0.001), $h / ($brTR_V + $brBR_V + 0.001), $w / ($brTL_H + $brTR_H + 0.001), $w / ($brBL_H + $brBR_H + 0.001));
-		if ($f < 1) {
-			$brTL_H *= $f;
-			$brTL_V *= $f;
-			$brTR_H *= $f;
-			$brTR_V *= $f;
-			$brBL_H *= $f;
-			$brBL_V *= $f;
-			$brBR_H *= $f;
-			$brBR_V *= $f;
-		}
+		$radii = $this->roundedBox->fit($w, $h, [
+			'TL' => [$brTL_H, $brTL_V],
+			'TR' => [$brTR_H, $brTR_V],
+			'BR' => [$brBR_H, $brBR_V],
+			'BL' => [$brBL_H, $brBL_V],
+		], ['top' => $border_top, 'right' => $border_right, 'bottom' => $border_bottom, 'left' => $border_left]);
+		list($brTL_H, $brTL_V) = $radii['TL'];
+		list($brTR_H, $brTR_V) = $radii['TR'];
+		list($brBR_H, $brBR_V) = $radii['BR'];
+		list($brBL_H, $brBL_V) = $radii['BL'];
 		/* -- END BORDER-RADIUS -- */
 
 		$tbcol = $this->colorConverter->convert(255, $this->PDFAXwarnings);
@@ -17068,7 +17060,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				}
 				$s = '';
 				if ($brTR_H && $brTR_V) {
-					$s .= ($this->_EllipseArc($x0 + $w - $brTR_H, $y0 + $brTR_V, $brTR_H - $border_top / 2, $brTR_V - $border_top / 2, 1, 2, true)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $w - $brTR_H, $y0 + $brTR_V, $brTR_H - $border_top / 2, $brTR_V - $border_top / 2, 1, 2, true)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F m ', ($x0 + $w) * Mpdf::SCALE, ($this->h - ($y0 + ($border_top / 2))) * Mpdf::SCALE)) . "\n";
@@ -17091,7 +17083,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					} else {
 						$s .= (sprintf('%.3F %.3F l ', ($x0 + $brTL_H ) * Mpdf::SCALE, ($this->h - ($y0 + ($border_top / 2))) * Mpdf::SCALE)) . "\n";
 					}
-					$s .= ($this->_EllipseArc($x0 + $brTL_H, $y0 + $brTL_V, $brTL_H - $border_top / 2, $brTL_V - $border_top / 2, 2, 1)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $brTL_H, $y0 + $brTL_V, $brTL_H - $border_top / 2, $brTL_V - $border_top / 2, 2, 1)) . "\n";
 				} else {
 					/* -- END BORDER-RADIUS -- */
 					if ($legend) {
@@ -17163,7 +17155,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				}
 				$s = '';
 				if ($brBL_H && $brBL_V) {
-					$s .= ($this->_EllipseArc($x0 + $brBL_H, $y0 + $h - $brBL_V, $brBL_H - $border_bottom / 2, $brBL_V - $border_bottom / 2, 3, 2, true)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $brBL_H, $y0 + $h - $brBL_V, $brBL_H - $border_bottom / 2, $brBL_V - $border_bottom / 2, 3, 2, true)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F m ', ($x0) * Mpdf::SCALE, ($this->h - ($y0 + $h - ($border_bottom / 2))) * Mpdf::SCALE)) . "\n";
@@ -17174,7 +17166,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				/* -- BORDER-RADIUS -- */
 				if ($brBR_H && $brBR_V) {
 					$s .= (sprintf('%.3F %.3F l ', ($x0 + $w - ($border_bottom / 2) - $brBR_H ) * Mpdf::SCALE, ($this->h - ($y0 + $h - ($border_bottom / 2))) * Mpdf::SCALE)) . "\n";
-					$s .= ($this->_EllipseArc($x0 + $w - $brBR_H, $y0 + $h - $brBR_V, $brBR_H - $border_bottom / 2, $brBR_V - $border_bottom / 2, 4, 1)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $w - $brBR_H, $y0 + $h - $brBR_V, $brBR_H - $border_bottom / 2, $brBR_V - $border_bottom / 2, 4, 1)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F l ', ($x0 + $w) * Mpdf::SCALE, ($this->h - ($y0 + $h - ($border_bottom / 2))) * Mpdf::SCALE)) . "\n";
@@ -17227,7 +17219,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				}
 				$s = '';
 				if ($brTL_V && $brTL_H) {
-					$s .= ($this->_EllipseArc($x0 + $brTL_H, $y0 + $brTL_V, $brTL_H - $border_left / 2, $brTL_V - $border_left / 2, 2, 2, true)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $brTL_H, $y0 + $brTL_V, $brTL_H - $border_left / 2, $brTL_V - $border_left / 2, 2, 2, true)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F m ', ($x0 + ($border_left / 2)) * Mpdf::SCALE, ($this->h - ($y0)) * Mpdf::SCALE)) . "\n";
@@ -17238,7 +17230,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				/* -- BORDER-RADIUS -- */
 				if ($brBL_V && $brBL_H) {
 					$s .= (sprintf('%.3F %.3F l ', ($x0 + ($border_left / 2)) * Mpdf::SCALE, ($this->h - ($y0 + $h - ($border_left / 2) - $brBL_V) ) * Mpdf::SCALE)) . "\n";
-					$s .= ($this->_EllipseArc($x0 + $brBL_H, $y0 + $h - $brBL_V, $brBL_H - $border_left / 2, $brBL_V - $border_left / 2, 3, 1)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $brBL_H, $y0 + $h - $brBL_V, $brBL_H - $border_left / 2, $brBL_V - $border_left / 2, 3, 1)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F l ', ($x0 + ($border_left / 2)) * Mpdf::SCALE, ($this->h - ($y0 + $h) ) * Mpdf::SCALE)) . "\n";
@@ -17288,7 +17280,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				}
 				$s = '';
 				if ($brBR_V && $brBR_H) {
-					$s .= ($this->_EllipseArc($x0 + $w - $brBR_H, $y0 + $h - $brBR_V, $brBR_H - $border_right / 2, $brBR_V - $border_right / 2, 4, 2, true)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $w - $brBR_H, $y0 + $h - $brBR_V, $brBR_H - $border_right / 2, $brBR_V - $border_right / 2, 4, 2, true)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F m ', ($x0 + $w - ($border_right / 2)) * Mpdf::SCALE, ($this->h - ($y0 + $h)) * Mpdf::SCALE)) . "\n";
@@ -17299,7 +17291,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				/* -- BORDER-RADIUS -- */
 				if ($brTR_V && $brTR_H) {
 					$s .= (sprintf('%.3F %.3F l ', ($x0 + $w - ($border_right / 2)) * Mpdf::SCALE, ($this->h - ($y0 + ($border_right / 2) + $brTR_V) ) * Mpdf::SCALE)) . "\n";
-					$s .= ($this->_EllipseArc($x0 + $w - $brTR_H, $y0 + $brTR_V, $brTR_H - $border_right / 2, $brTR_V - $border_right / 2, 1, 1)) . "\n";
+					$s .= ($this->roundedBox->arc($this->h, $x0 + $w - $brTR_H, $y0 + $brTR_V, $brTR_H - $border_right / 2, $brTR_V - $border_right / 2, 1, 1)) . "\n";
 				} else { 				/* -- END BORDER-RADIUS -- */
 					if ($tbd['style'] == 'solid' || $tbd['style'] == 'double') {
 						$s .= (sprintf('%.3F %.3F l ', ($x0 + $w - ($border_right / 2)) * Mpdf::SCALE, ($this->h - ($y0) ) * Mpdf::SCALE)) . "\n";
@@ -17345,15 +17337,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$bgy1 = $y1;
 
 		// Defined br values represent the radius of the outer curve - need to take border-width/2 from each radius for drawing the borders
+		$brbg = ['TL' => [$brTL_H, $brTL_V], 'TR' => [$brTR_H, $brTR_V], 'BR' => [$brBR_H, $brBR_V], 'BL' => [$brBL_H, $brBL_V]];
+		$borders = ['top' => $this->blk[$blvl]['border_top']['w'], 'right' => $this->blk[$blvl]['border_right']['w'], 'bottom' => $this->blk[$blvl]['border_bottom']['w'], 'left' => $this->blk[$blvl]['border_left']['w']];
 		if (isset($this->blk[$blvl]['background_clip']) && $this->blk[$blvl]['background_clip'] == 'padding-box') {
-			$brbgTL_H = max(0, $brTL_H - $this->blk[$blvl]['border_left']['w']);
-			$brbgTL_V = max(0, $brTL_V - $this->blk[$blvl]['border_top']['w']);
-			$brbgTR_H = max(0, $brTR_H - $this->blk[$blvl]['border_right']['w']);
-			$brbgTR_V = max(0, $brTR_V - $this->blk[$blvl]['border_top']['w']);
-			$brbgBL_H = max(0, $brBL_H - $this->blk[$blvl]['border_left']['w']);
-			$brbgBL_V = max(0, $brBL_V - $this->blk[$blvl]['border_bottom']['w']);
-			$brbgBR_H = max(0, $brBR_H - $this->blk[$blvl]['border_right']['w']);
-			$brbgBR_V = max(0, $brBR_V - $this->blk[$blvl]['border_bottom']['w']);
+			$brbg = $this->roundedBox->inset($brbg, $borders);
 			$bgx0 += $this->blk[$blvl]['border_left']['w'];
 			$bgx1 -= $this->blk[$blvl]['border_right']['w'];
 			if ($this->blk[$blvl]['border_top'] && $divider != 'pagetop' && !$continuingpage) {
@@ -17363,14 +17350,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$bgy1 -= $this->blk[$blvl]['border_bottom']['w'];
 			}
 		} elseif (isset($this->blk[$blvl]['background_clip']) && $this->blk[$blvl]['background_clip'] == 'content-box') {
-			$brbgTL_H = max(0, $brTL_H - $this->blk[$blvl]['border_left']['w'] - $this->blk[$blvl]['padding_left']);
-			$brbgTL_V = max(0, $brTL_V - $this->blk[$blvl]['border_top']['w'] - $this->blk[$blvl]['padding_top']);
-			$brbgTR_H = max(0, $brTR_H - $this->blk[$blvl]['border_right']['w'] - $this->blk[$blvl]['padding_right']);
-			$brbgTR_V = max(0, $brTR_V - $this->blk[$blvl]['border_top']['w'] - $this->blk[$blvl]['padding_top']);
-			$brbgBL_H = max(0, $brBL_H - $this->blk[$blvl]['border_left']['w'] - $this->blk[$blvl]['padding_left']);
-			$brbgBL_V = max(0, $brBL_V - $this->blk[$blvl]['border_bottom']['w'] - $this->blk[$blvl]['padding_bottom']);
-			$brbgBR_H = max(0, $brBR_H - $this->blk[$blvl]['border_right']['w'] - $this->blk[$blvl]['padding_right']);
-			$brbgBR_V = max(0, $brBR_V - $this->blk[$blvl]['border_bottom']['w'] - $this->blk[$blvl]['padding_bottom']);
+			$paddings = ['top' => $this->blk[$blvl]['padding_top'], 'right' => $this->blk[$blvl]['padding_right'], 'bottom' => $this->blk[$blvl]['padding_bottom'], 'left' => $this->blk[$blvl]['padding_left']];
+			$brbg = $this->roundedBox->inset($this->roundedBox->inset($brbg, $borders), $paddings);
 			$bgx0 += $this->blk[$blvl]['border_left']['w'] + $this->blk[$blvl]['padding_left'];
 			$bgx1 -= $this->blk[$blvl]['border_right']['w'] + $this->blk[$blvl]['padding_right'];
 			if (($this->blk[$blvl]['border_top']['w'] || $this->blk[$blvl]['padding_top']) && $divider != 'pagetop' && !$continuingpage) {
@@ -17379,44 +17360,15 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if (($this->blk[$blvl]['border_bottom']['w'] || $this->blk[$blvl]['padding_bottom']) && $blockstate != 1 && $divider != 'pagebottom') {
 				$bgy1 -= $this->blk[$blvl]['border_bottom']['w'] + $this->blk[$blvl]['padding_bottom'];
 			}
-		} else {
-			$brbgTL_H = $brTL_H;
-			$brbgTL_V = $brTL_V;
-			$brbgTR_H = $brTR_H;
-			$brbgTR_V = $brTR_V;
-			$brbgBL_H = $brBL_H;
-			$brbgBL_V = $brBL_V;
-			$brbgBR_H = $brBR_H;
-			$brbgBR_V = $brBR_V;
 		}
+		list($brbgTL_H, $brbgTL_V) = $brbg['TL'];
+		list($brbgTR_H, $brbgTR_V) = $brbg['TR'];
+		list($brbgBR_H, $brbgBR_V) = $brbg['BR'];
+		list($brbgBL_H, $brbgBL_V) = $brbg['BL'];
 
 		// Set clipping path
 		$s = ' q 0 w '; // Line width=0
-		$s .= sprintf('%.3F %.3F m ', ($bgx0 + $brbgTL_H ) * Mpdf::SCALE, ($this->h - $bgy0) * Mpdf::SCALE); // start point TL before the arc
-		/* -- BORDER-RADIUS -- */
-		if ($brbgTL_H || $brbgTL_V) {
-			$s .= $this->_EllipseArc($bgx0 + $brbgTL_H, $bgy0 + $brbgTL_V, $brbgTL_H, $brbgTL_V, 2); // segment 2 TL
-		}
-		/* -- END BORDER-RADIUS -- */
-		$s .= sprintf('%.3F %.3F l ', ($bgx0) * Mpdf::SCALE, ($this->h - ($bgy1 - $brbgBL_V )) * Mpdf::SCALE); // line to BL
-		/* -- BORDER-RADIUS -- */
-		if ($brbgBL_H || $brbgBL_V) {
-			$s .= $this->_EllipseArc($bgx0 + $brbgBL_H, $bgy1 - $brbgBL_V, $brbgBL_H, $brbgBL_V, 3); // segment 3 BL
-		}
-		/* -- END BORDER-RADIUS -- */
-		$s .= sprintf('%.3F %.3F l ', ($bgx1 - $brbgBR_H ) * Mpdf::SCALE, ($this->h - ($bgy1)) * Mpdf::SCALE); // line to BR
-		/* -- BORDER-RADIUS -- */
-		if ($brbgBR_H || $brbgBR_V) {
-			$s .= $this->_EllipseArc($bgx1 - $brbgBR_H, $bgy1 - $brbgBR_V, $brbgBR_H, $brbgBR_V, 4); // segment 4 BR
-		}
-		/* -- END BORDER-RADIUS -- */
-		$s .= sprintf('%.3F %.3F l ', ($bgx1) * Mpdf::SCALE, ($this->h - ($bgy0 + $brbgTR_V)) * Mpdf::SCALE); // line to TR
-		/* -- BORDER-RADIUS -- */
-		if ($brbgTR_H || $brbgTR_V) {
-			$s .= $this->_EllipseArc($bgx1 - $brbgTR_H, $bgy0 + $brbgTR_V, $brbgTR_H, $brbgTR_V, 1); // segment 1 TR
-		}
-		/* -- END BORDER-RADIUS -- */
-		$s .= sprintf('%.3F %.3F l ', ($bgx0 + $brbgTL_H ) * Mpdf::SCALE, ($this->h - $bgy0) * Mpdf::SCALE); // line to TL
+		$s .= $this->roundedBox->path($this->h, $bgx0, $bgy0, $bgx1, $bgy1, $brbg);
 		// Box Shadow
 		$shadow = '';
 		if (isset($this->blk[$blvl]['box_shadow']) && $this->blk[$blvl]['box_shadow'] && $h > 0) {
@@ -17963,80 +17915,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// Float DIV
 		$this->blk[$blvl]['bb_painted'][$this->page] = true;
 	}
-	/* -- BORDER-RADIUS -- */
-
-	function _EllipseArc($x0, $y0, $rx, $ry, $seg = 1, $part = false, $start = false)
-	{
-		// Anticlockwise segment 1-4 TR-TL-BL-BR (part=1 or 2)
-		$s = '';
-
-		if ($rx < 0) {
-			$rx = 0;
-		}
-
-		if ($ry < 0) {
-			$ry = 0;
-		}
-
-		$rx *= Mpdf::SCALE;
-		$ry *= Mpdf::SCALE;
-
-		$astart = 0;
-
-		if ($seg == 1) { // Top Right
-			$afinish = 90;
-			$nSeg = 4;
-		} elseif ($seg == 2) { // Top Left
-			$afinish = 180;
-			$nSeg = 8;
-		} elseif ($seg == 3) { // Bottom Left
-			$afinish = 270;
-			$nSeg = 12;
-		} else {   // Bottom Right
-			$afinish = 360;
-			$nSeg = 16;
-		}
-
-		$astart = deg2rad((float) $astart);
-		$afinish = deg2rad((float) $afinish);
-
-		$totalAngle = $afinish - $astart;
-		$dt = $totalAngle / $nSeg; // segment angle
-		$dtm = $dt / 3;
-		$x0 *= Mpdf::SCALE;
-		$y0 = ($this->h - $y0) * Mpdf::SCALE;
-		$t1 = $astart;
-		$a0 = $x0 + ($rx * cos($t1));
-		$b0 = $y0 + ($ry * sin($t1));
-		$c0 = -$rx * sin($t1);
-		$d0 = $ry * cos($t1);
-		$op = false;
-
-		for ($i = 1; $i <= $nSeg; $i++) {
-			// Draw this bit of the total curve
-			$t1 = ($i * $dt) + $astart;
-			$a1 = $x0 + ($rx * cos($t1));
-			$b1 = $y0 + ($ry * sin($t1));
-			$c1 = -$rx * sin($t1);
-			$d1 = $ry * cos($t1);
-			if ($i > ($nSeg - 4) && (!$part || ($part == 1 && $i <= $nSeg - 2) || ($part == 2 && $i > $nSeg - 2))) {
-				if ($start && !$op) {
-					$s .= sprintf('%.3F %.3F m ', $a0, $b0);
-				}
-				$s .= sprintf('%.3F %.3F %.3F %.3F %.3F %.3F c ', ($a0 + ($c0 * $dtm)), ($b0 + ($d0 * $dtm)), ($a1 - ($c1 * $dtm)), ($b1 - ($d1 * $dtm)), $a1, $b1);
-				$op = true;
-			}
-			$a0 = $a1;
-			$b0 = $b1;
-			$c0 = $c1;
-			$d0 = $d1;
-		}
-
-		return $s;
-	}
-
-	/* -- END BORDER-RADIUS -- */
-
 	function PaintDivLnBorder($state = 0, $blvl = 0, $h = 0)
 	{
 		// $state = 0 normal; 1 top; 2 bottom; 3 top and bottom
@@ -18137,7 +18015,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->y = $save_y;
 	}
 
-	function PaintImgBorder($objattr, $is_table)
+	function PaintImgBorder($objattr, $is_table, $box = null)
 	{
 		// Borders are disabled in columns - messes up the repositioning in printcolumnbuffer
 		if ($this->ColActive) {
@@ -18153,62 +18031,37 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$x0 = (isset($objattr['BORDER-X']) ? $objattr['BORDER-X'] : 0);
 		$y0 = (isset($objattr['BORDER-Y']) ? $objattr['BORDER-Y'] : 0);
 
+		if ($box === null && isset($objattr['border_radius'])) {
+			$box = $this->roundedBox->imageBox($objattr, $k);
+		}
+
 		// BORDERS
-		if ($objattr['border_top']) {
-			$tbd = $objattr['border_top'];
-			if (!empty($tbd['s'])) {
-				$this->_setBorderLine($tbd, $k);
-				if ($tbd['style'] == 'dotted' || $tbd['style'] == 'dashed') {
-					$this->_setDashBorder($tbd['style'], '', '', 'T');
-				}
-				$this->Line($x0, $y0, $x0 + $w, $y0);
-				// Reset Corners and Dash off
-				$this->SetLineJoin(2);
-				$this->SetLineCap(2);
-				$this->SetDash();
+		$lines = [
+			'top' => [$x0, $y0, $x0 + $w, $y0],
+			'left' => [$x0, $y0, $x0, $y0 + $h],
+			'right' => [$x0 + $w, $y0, $x0 + $w, $y0 + $h],
+			'bottom' => [$x0, $y0 + $h, $x0 + $w, $y0 + $h],
+		];
+		foreach ($lines as $side => $line) {
+			$tbd = $objattr['border_' . $side];
+			if (empty($tbd['s'])) {
+				continue;
 			}
-		}
-		if ($objattr['border_left']) {
-			$tbd = $objattr['border_left'];
-			if (!empty($tbd['s'])) {
-				$this->_setBorderLine($tbd, $k);
-				if ($tbd['style'] == 'dotted' || $tbd['style'] == 'dashed') {
-					$this->_setDashBorder($tbd['style'], '', '', 'L');
-				}
-				$this->Line($x0, $y0, $x0, $y0 + $h);
-				// Reset Corners and Dash off
-				$this->SetLineJoin(2);
-				$this->SetLineCap(2);
-				$this->SetDash();
+			$this->_setBorderLine($tbd, $k);
+			if ($tbd['style'] == 'dotted' || $tbd['style'] == 'dashed') {
+				$this->_setDashBorder($tbd['style'], '', '', strtoupper($side[0]));
+			} elseif ($box) {
+				$this->SetLineCap(0); // An arc stops at the diagonal, so nothing may run past it into the next side
 			}
-		}
-		if ($objattr['border_right']) {
-			$tbd = $objattr['border_right'];
-			if (!empty($tbd['s'])) {
-				$this->_setBorderLine($tbd, $k);
-				if ($tbd['style'] == 'dotted' || $tbd['style'] == 'dashed') {
-					$this->_setDashBorder($tbd['style'], '', '', 'R');
-				}
-				$this->Line($x0 + $w, $y0, $x0 + $w, $y0 + $h);
-				// Reset Corners and Dash off
-				$this->SetLineJoin(2);
-				$this->SetLineCap(2);
-				$this->SetDash();
+			if ($box) {
+				$this->writer->write($this->roundedBox->side($this->h, $side, $box, $tbd['w'] / $k) . 'S');
+			} else {
+				$this->Line($line[0], $line[1], $line[2], $line[3]);
 			}
-		}
-		if ($objattr['border_bottom']) {
-			$tbd = $objattr['border_bottom'];
-			if (!empty($tbd['s'])) {
-				$this->_setBorderLine($tbd, $k);
-				if ($tbd['style'] == 'dotted' || $tbd['style'] == 'dashed') {
-					$this->_setDashBorder($tbd['style'], '', '', 'B');
-				}
-				$this->Line($x0, $y0 + $h, $x0 + $w, $y0 + $h);
-				// Reset Corners and Dash off
-				$this->SetLineJoin(2);
-				$this->SetLineCap(2);
-				$this->SetDash();
-			}
+			// Reset Corners and Dash off
+			$this->SetLineJoin(2);
+			$this->SetLineCap(2);
+			$this->SetDash();
 		}
 		$this->SetDash();
 		$this->SetAlpha(1);
