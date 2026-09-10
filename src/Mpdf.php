@@ -30,6 +30,11 @@ use Psr\Log\NullLogger;
 class Mpdf implements \Psr\Log\LoggerAwareInterface
 {
 
+	use StateSnapshot {
+		getStateSnapshot as private snapshotOwnState;
+		restoreStateSnapshot as private restoreOwnState;
+	}
+
 	use Strict;
 	use FpdiTrait;
 	use MpdfPsrLogAwareTrait;
@@ -23714,9 +23719,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$toc_id = strtolower($toc_id);
 		}
 		$btoc = ['t' => $txt, 'l' => $level, 'p' => $this->page, 'link' => $linkn, 'toc_id' => $toc_id];
-		if ($this->keep_block_together) {
-			// The entries live on the TableOfContents object, which a block's state snapshot does not put back
-		} /* -- TABLES -- */ elseif ($this->table_rotate) {
+		/* -- TABLES -- */
+		if ($this->table_rotate) {
 			$this->tbrot_toc[] = $btoc;
 		} elseif ($this->kwt) {
 			$this->kwt_toc[] = $btoc;
@@ -27742,7 +27746,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 * can only be computed by writing to the document. For example, {@see TableOfContents::insertTOC}
 	 * uses this functionality to determine the correct page numbers.
 	 *
-	 * Only scalar and array values are captured in the snapshot. All objects and resources are excluded.
+	 * Only scalar and array values are captured in the snapshot, plus the state of the Form and
+	 * TableOfContents objects, where a document registers its fields and contents entries.
 	 *
 	 * @return array<string, mixed>
 	 *
@@ -27750,18 +27755,14 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 */
 	public function getStateSnapshot()
 	{
+		$snapshot = $this->snapshotOwnState();
+
 		// The loader caches stay live: the pass being unwound only adds to them and the pass that follows needs every
 		// entry. So does the counter that numbers fonts alongside them, and the reference into one of them
-		$live = ['fonts', 'FontFiles', 'extraFontSubsets', 'images', 'formobjects', 'CurrentFont'];
+		unset($snapshot['fonts'], $snapshot['FontFiles'], $snapshot['extraFontSubsets'], $snapshot['images'], $snapshot['formobjects'], $snapshot['CurrentFont']);
 
-		$snapshot = [];
-		foreach (get_object_vars($this) as $key => $value) {
-			if (is_object($value) || is_resource($value) || in_array($key, $live, true)) {
-				continue;
-			}
-
-			$snapshot[$key] = $value;
-		}
+		$snapshot['form'] = $this->form->getStateSnapshot();
+		$snapshot['tableOfContents'] = $this->tableOfContents->getStateSnapshot();
 
 		return $snapshot;
 	}
@@ -27777,9 +27778,11 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 */
 	public function restoreStateSnapshot(array $snapshot)
 	{
-		foreach ($snapshot as $key => $value) {
-			$this->{$key} = $value;
-		}
+		$this->form->restoreStateSnapshot($snapshot['form']);
+		$this->tableOfContents->restoreStateSnapshot($snapshot['tableOfContents']);
+		unset($snapshot['form'], $snapshot['tableOfContents']);
+
+		$this->restoreOwnState($snapshot);
 
 		// CurrentFont is a reference into fonts[], which stays live, so it is bound to the restored selection here:
 		// SetFont() will not do it while the family, style and size already match
