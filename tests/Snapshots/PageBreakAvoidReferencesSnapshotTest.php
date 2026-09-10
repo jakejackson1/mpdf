@@ -4,10 +4,10 @@ namespace Snapshots;
 
 /**
  * What a kept-together block registers beyond its text, on a block that moves and on one that stays: page
- * numbers, links and anchors, bookmarks, index entries, a form field, an annotation, a gradient, a cell
- * background image and a nested kept block. The index at the back lists each block's page once. No table of
- * contents entry: a table of contents in front shifts the pages, and mPDF numbers the index and places form
- * fields from before the shift
+ * numbers, links and anchors, bookmarks, contents and index entries, a form field, an annotation, a gradient, a
+ * cell background image and a nested kept block. The table of contents in front is written last and moved into
+ * place, which shifts every page after it by one; the contents and the index at the back each list a block's page
+ * once, as the page it ends up on, and each contents line and index entry links to that page
  *
  * @group snapshot
  */
@@ -33,14 +33,15 @@ class PageBreakAvoidReferencesSnapshotTest extends Snapshot
 			input { border: 0.2mm solid #404040; }
 		</style>
 
+		<tocpagebreak links="on" />
 		<h1>mPDF</h1>
 		<h2>What a kept block carries with it</h2>
 
 		<p>Two blocks below are kept together. The first fits where it is; the second does not and moves to the
 			next page. Each carries the same things: a page number, a link, an anchor and a link to it, a bookmark,
-			an index entry, a text field, a note, a gradient, a cell with a picture in its background, and a kept
-			block inside it. Each is registered once, for the page the block ends up on, as the index at the back
-			shows.</p>
+			a contents entry, an index entry, a text field, a note, a gradient, a cell with a picture in its
+			background, and a kept block inside it. Each is registered once, for the page the block ends up on, as
+			the contents in front and the index at the back show.</p>
 
 		<?php foreach (['stays' => 1, 'moves' => 7] as $label => $filler) { ?>
 			<?php for ($i = 0; $i < $filler; $i++) { ?>
@@ -50,6 +51,7 @@ class PageBreakAvoidReferencesSnapshotTest extends Snapshot
 
 			<div class="kept">
 				<bookmark content="The block that <?= $label ?>" />
+				<tocentry content="The block that <?= $label ?>" />
 				<indexentry content="Block that <?= $label ?>" />
 				<annotation content="A note on the block that <?= $label ?>" />
 				<p>This block <?= $label ?>. It is on page {PAGENO}.</p>
@@ -69,7 +71,7 @@ class PageBreakAvoidReferencesSnapshotTest extends Snapshot
 
 		<pagebreak />
 		<h2>Index</h2>
-		<indexinsert />
+		<indexinsert links="on" />
 		<?php
 		$html = ob_get_clean();
 
