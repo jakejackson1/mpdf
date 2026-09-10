@@ -19,7 +19,7 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 	 */
 	private function movingBlock()
 	{
-		return $this->filler(22) . '<div style="page-break-inside: avoid">' . str_repeat('<p>Kept</p>', 12) . '</div>';
+		return $this->filler(22) . $this->keptBlock(12);
 	}
 
 	/**
