@@ -4,8 +4,8 @@ namespace Mpdf;
 
 /**
  * What a kept block registers as it is laid out, beyond its text: links and anchors, bookmarks, index and table of
- * contents entries, form fields, annotations, page numbers, patterns and images, and its own border and
- * background. Each is registered once, on the page the block ends up on, whether the block moves or stays; the
+ * contents entries, form fields, annotations, page numbers, patterns and images, its own border and background,
+ * and the lists, pictures and tables it holds. Each is registered once, on the page the block ends up on, whether the block moves or stays; the
  * measuring pass leaves nothing of it behind
  */
 class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
@@ -189,6 +189,47 @@ class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\Te
 		foreach ($pages as $i => $stream) {
 			$this->assertSame($i === $page, (bool) preg_match('/^S$/m', $stream), 'Page ' . ($i + 1) . ($i === $page ? ' should' : ' should not') . ' carry the border');
 		}
+	}
+
+	/**
+	 * The list counters go back with everything else, so the numbers are what they would be had the block not
+	 * moved, a start and a letter style included
+	 *
+	 * @dataProvider placements
+	 */
+	public function testAListInsideTheBlockKeepsItsNumbers($filler, $page)
+	{
+		$inner = '<ol start="3"><li>Three</li><li>Four</li><li>Five</li></ol>'
+			. '<ol style="list-style-type: lower-alpha"><li>Alpha</li><li>Beta</li></ol>';
+
+		list(, $pages) = $this->document($filler, $page, $inner);
+
+		foreach (['3.', '4.', '5.', 'a.', 'b.'] as $marker) {
+			$this->assertOnlyOnPage($page, 1, "($marker)", $pages, "the marker $marker");
+		}
+	}
+
+	/**
+	 * @dataProvider placements
+	 */
+	public function testAnImageInsideTheBlockIsDrawnOnce($filler, $page)
+	{
+		list(, $pages) = $this->document($filler, $page, '<p><img src="' . $this->pngImage() . '" /></p>');
+
+		foreach ($pages as $i => $stream) {
+			$this->assertSame($i === $page ? 1 : 0, $this->images($stream), 'Page ' . ($i + 1) . ' should draw the image ' . ($i === $page ? 'once' : 'not at all'));
+		}
+	}
+
+	/**
+	 * @dataProvider placements
+	 */
+	public function testATableInsideTheBlockIsWrittenOnce($filler, $page)
+	{
+		list(, $pages) = $this->document($filler, $page, '<table><tr><td>Row one</td></tr><tr><td>Row two</td></tr></table>');
+
+		$this->assertOnlyOnPage($page, 1, '(Row one)', $pages, 'the first row');
+		$this->assertOnlyOnPage($page, 1, '(Row two)', $pages, 'the second row');
 	}
 
 	/**
