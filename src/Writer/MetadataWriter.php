@@ -572,13 +572,17 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 							$this->writer->write(' /F 28', false);
 						}
 
+						// An imported link carries its source annotation's own entries, which may include a border
+						if (!isset($pl['importedLink'])) {
+							$this->writer->write(' /Border [0 0 0]', false);
+						}
+
 						if (strpos($pl[4], '@') === 0) {
 
 							$p = substr($pl[4], 1);
 							// $h=isset($this->mpdf->OrientationChanges[$p]) ? $wPt : $hPt;
 							$htarg = $this->mpdf->pageDim[$p]['h'] * Mpdf::SCALE;
 							$this->writer->write(sprintf(' /Dest [%d 0 R /XYZ 0 %.3F null]>>', 1 + 2 * $p, $htarg));
-							$this->writer->write(' /Border [0 0 0]', false);
 
 						} elseif (is_string($pl[4])) {
 							/**
@@ -605,7 +609,6 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 								}
 							} else {
 								$this->writer->write(' /A <</S /URI /URI ' . $this->writer->string($pl[4]) . '>>');
-								$this->writer->write(' /Border [0 0 0]', false);
 							}
 							$this->writer->write('>>');
 						} else {
@@ -619,7 +622,6 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 							} // doesn't really matter
 
 							$this->writer->write(sprintf(' /Dest [%d 0 R /XYZ 0 %.3F null]>>', 1 + 2 * $l[0], $htarg - $l[1] * Mpdf::SCALE));
-							$this->writer->write(' /Border [0 0 0]', false);
 						}
 
 						$this->writer->write('endobj');

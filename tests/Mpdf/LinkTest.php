@@ -3,13 +3,15 @@
 namespace Mpdf;
 
 /**
- * Whether an href is classified as a named destination or an external target.
+ * Whether an href is classified as a named destination or an external target, and how the link annotation is written.
  *
  * Asserted against the emitted PDF because the two render identically — a misclassified link is
  * clickable and simply goes to page 1.
  */
 class LinkTest extends BaseMpdfTest
 {
+
+	use PageStreams;
 
 	/**
 	 * @dataProvider externalHrefProvider
@@ -85,5 +87,33 @@ class LinkTest extends BaseMpdfTest
 
 		$this->assertStringContainsString('/Dest [3 0 R', $output);
 		$this->assertStringNotContainsString('/URI', $output);
+	}
+
+	/**
+	 * The PDF default border is 1pt, so a link dictionary without /Border gets a box drawn around it by viewers that
+	 * honour the default (poppler does; Ghostscript and Chrome do not).
+	 *
+	 * @dataProvider hrefProvider
+	 */
+	public function testALinkIsWrittenWithoutABorder($href)
+	{
+		$this->mpdf->WriteHTML(sprintf('<p><a href="%s">link</a></p>', $href));
+
+		$output = $this->mpdf->Output(null, 'S');
+
+		$link = $this->annotations($output)[0];
+
+		$this->assertSame(1, substr_count($link, '/Subtype /Link'));
+		/* The entry has to land inside the dictionary: written after the closing `>>` it is ignored. */
+		$this->assertStringContainsString(' /Border [0 0 0]', substr($link, 0, strrpos($link, '>>')));
+	}
+
+	public function hrefProvider()
+	{
+		return [
+			'page' => ['@1'],
+			'named anchor' => ['#target'],
+			'uri' => ['https://example.com/page'],
+		];
 	}
 }
