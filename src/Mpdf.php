@@ -277,8 +277,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	var $tableBackgrounds;
 	var $inlineDisplayOff;
-	var $kt_y00;
-	var $kt_p00;
 	var $upperCase;
 	var $checkSIP;
 	var $checkSMP;
@@ -606,6 +604,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	var $tbrot_Links;
 
 	var $keep_block_together; // Keep a Block from page-break-inside: avoid
+	var $kt_blank; // what the measuring pass of that block left blank at the foot of the pages it broke
 
 	var $tbrot_y0;
 	var $tbrot_x0;
@@ -1115,8 +1114,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->tableBackgrounds = [];
 		$this->uniqstr = '20110230'; // mPDF 5.7.2
-		$this->kt_y00 = 0;
-		$this->kt_p00 = 0;
 		$this->BMPonly = [];
 		$this->page = 0;
 		$this->n = 2;
@@ -3194,6 +3191,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} // *CSS-PAGE*
 				$condition = '';
 			}
+		}
+
+		// A kept block's measuring pass can leave its page before it is full (a table or rows kept together move
+		// whole). Record what it left blank, so BlockTag::close() can discount it
+		if ($this->keep_block_together) {
+			$this->kt_blank += $this->PageBreakTrigger - $this->y;
 		}
 
 		if ($resetpagenum || $pagenumstyle || $suppress) {
