@@ -137,6 +137,29 @@ class PageBreakInsideAvoidStateTest extends \Yoast\PHPUnitPolyfills\TestCases\Te
 	}
 
 	/**
+	 * A radio group and a submit button keep bookkeeping beside the field: the group's kids, and the button's
+	 * action. Neither may be written for a field the measuring pass did not register
+	 *
+	 * @dataProvider placements
+	 */
+	public function testARadioGroupAndASubmitButtonAreWrittenOnceOnTheBlocksPage($filler, $page)
+	{
+		$inner = '<p><input type="radio" name="choice" value="yes" checked="checked" /> Yes <input type="radio" name="choice" value="no" /> No'
+			. ' <input type="submit" name="send" value="Send" /></p>';
+
+		list($pdf) = $this->document($filler, $page, $inner, '', '', ['useActiveForms' => true]);
+
+		$this->assertOnlyOnPage($page, 3, '/Subtype /Widget', $this->annotations($pdf), 'a widget');
+		$this->assertSame(1, preg_match_all('/\/Ff \d+\s*\/Kids \[([^\]]*)\]/', $pdf, $groups), 'The radio group should be written once');
+		preg_match_all('/(\d+) 0 R/', $groups[1][0], $kids);
+		$this->assertCount(2, $kids[1]);
+		foreach ($kids[1] as $kid) {
+			$this->assertStringContainsString('/Subtype /Widget', $this->object($pdf, $kid), "Kid $kid should be one of the buttons");
+		}
+		$this->assertSame(1, substr_count($pdf, '/S /SubmitForm'));
+	}
+
+	/**
 	 * @dataProvider placements
 	 */
 	public function testAnAnnotationIsWrittenOnceOnTheBlocksPage($filler, $page)

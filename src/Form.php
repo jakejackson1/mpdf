@@ -1096,9 +1096,12 @@ class Form
 		}
 
 		$this->SetFormButton($w, $h, $name, $value, 'submit', $title, $flags, false, false, $background_col, $border_col, $noprint);
-		$this->forms[$this->formCount]['URL'] = $url;
-		$this->forms[$this->formCount]['method'] = $method;
-		$this->forms[$this->formCount]['exporttype'] = $typ;
+		// The button is not on record while a block is only being measured, or inside a header or footer
+		if (isset($this->forms[$this->formCount])) {
+			$this->forms[$this->formCount]['URL'] = $url;
+			$this->forms[$this->formCount]['method'] = $method;
+			$this->forms[$this->formCount]['exporttype'] = $typ;
+		}
 		$this->mpdf->x += $w;
 	}
 
@@ -1167,7 +1170,8 @@ class Form
 				throw new \Mpdf\MpdfException("Field '" . $name . "' must have a value, which can only contain letters, numbers, colon(:), underscore(_), hyphen(-) or period(.)");
 			}
 		}
-		if ($type === 'radio') {
+		// A radio group lives on this object too, so it is not registered while a block is only being measured
+		if ($type === 'radio' && !$this->mpdf->keep_block_together) {
 			if (!isset($this->form_radio_groups[$name])) {
 				$this->form_radio_groups[$name] = [
 					'page' => $this->mpdf->page,
