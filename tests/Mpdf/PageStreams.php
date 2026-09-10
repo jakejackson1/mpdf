@@ -128,12 +128,22 @@ trait PageStreams
 	}
 
 	/**
-	 * The index in $stream lists $term once, on page $page
+	 * The text drawn on a page, joined up: a linked index list is written a piece at a time
 	 */
-	private function assertIndexLists($page, $term, $stream)
+	private function drawnText($stream)
 	{
-		$this->assertSame(1, preg_match_all('/\(' . preg_quote($term, '/') . '\s+(\d+)\)/', $stream, $listed), "The index should list '$term' once");
-		$this->assertSame((string) $page, $listed[1][0], "The index should list '$term' on page $page");
+		preg_match_all('/\((.*?)\)\s*Tj/', $stream, $chunks);
+
+		return implode('', $chunks[1]);
+	}
+
+	/**
+	 * The index in $stream lists $term once, against $pages: a page number, or a list such as "1-3, 5"
+	 */
+	private function assertIndexLists($pages, $term, $stream)
+	{
+		$this->assertSame(1, preg_match_all('/' . preg_quote($term, '/') . '\s+([\d, -]+)/', $this->drawnText($stream), $listed), "The index should list '$term' once");
+		$this->assertSame((string) $pages, trim($listed[1][0]), "The index should list '$term' against $pages");
 	}
 
 	private function assertTextCount($expected, $text, $stream, $message = '')
