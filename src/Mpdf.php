@@ -24419,84 +24419,26 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				$ppp = $this->Reference[$i]['p']; // = array of page numbers to point to
 				if (count($ppp)) {
 					sort($ppp);
-					$newarr = [];
-					$range_start = $ppp[0];
-					$range_end = 0;
-
-					$html .= $spacer;
-
-					for ($zi = 1; $zi < count($ppp); $zi++) {
-						if ($ppp[$zi] == ($ppp[($zi - 1)] + 1)) {
-							$range_end = $ppp[$zi];
+					// Consecutive pages are gathered into runs: three or more print as "a-b", a pair as "a, b"
+					$runs = [];
+					foreach ($ppp as $zi => $p) {
+						if ($zi && $p == $ppp[$zi - 1] + 1) {
+							$runs[count($runs) - 1][] = $p;
 						} else {
-							if ($range_end) {
-								if ($range_end == $range_start + 1) {
-									if ($useLinking) {
-										$html .= $this->indexLink($range_start, $targets);
-									}
-									$html .= $this->docPageNum($range_start);
-									if ($useLinking) {
-										$html .= '</a>';
-									}
-									$html .= $sep;
-
-									if ($useLinking) {
-										$html .= $this->indexLink($ppp[$zi - 1], $targets);
-									}
-									$html .= $this->docPageNum($ppp[$zi - 1]);
-									if ($useLinking) {
-										$html .= '</a>';
-									}
-									$html .= $sep;
-								}
-							} else {
-								if ($useLinking) {
-									$html .= $this->indexLink($ppp[$zi - 1], $targets);
-								}
-								$html .= $this->docPageNum($ppp[$zi - 1]);
-								if ($useLinking) {
-									$html .= '</a>';
-								}
-								$html .= $sep;
-							}
-							$range_start = $ppp[$zi];
-							$range_end = 0;
+							$runs[] = [$p];
 						}
 					}
-
-					if ($range_end) {
-						if ($useLinking) {
-							$html .= $this->indexLink($range_start, $targets);
-						}
-						$html .= $this->docPageNum($range_start);
-						if ($range_end == $range_start + 1) {
-							if ($useLinking) {
-								$html .= '</a>';
-							}
-							$html .= $sep;
-							if ($useLinking) {
-								$html .= $this->indexLink($range_end, $targets);
-							}
-							$html .= $this->docPageNum($range_end);
-							if ($useLinking) {
-								$html .= '</a>';
-							}
+					$refs = [];
+					foreach ($runs as $run) {
+						if (count($run) > 2) {
+							$refs[] = $this->indexPageRef($run, $useLinking, $targets, $joiner);
 						} else {
-							$html .= $joiner;
-							$html .= $this->docPageNum($range_end);
-							if ($useLinking) {
-								$html .= '</a>';
+							foreach ($run as $p) {
+								$refs[] = $this->indexPageRef([$p], $useLinking, $targets, $joiner);
 							}
-						}
-					} else {
-						if ($useLinking) {
-							$html .= $this->indexLink($ppp[(count($ppp) - 1)], $targets);
-						}
-						$html .= $this->docPageNum($ppp[(count($ppp) - 1)]);
-						if ($useLinking) {
-							$html .= '</a>';
 						}
 					}
+					$html .= $spacer . implode($sep, $refs);
 				}
 			}
 			$html .= '</div>';
@@ -24507,9 +24449,22 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		return $html;
 	}
 
-	private function indexLink($page, array $targets)
+	/**
+	 * One page reference in an index entry: the page number, or "a-b" for a run of pages, linked to the first page of
+	 * the run when links are on
+	 */
+	private function indexPageRef(array $run, $useLinking, array $targets, $joiner)
 	{
-		return '<a class="mpdf_index_link" href="@' . (isset($targets[$page]) ? $targets[$page] : $page) . '">';
+		$text = $this->docPageNum($run[0]);
+		if (count($run) > 1) {
+			$text .= $joiner . $this->docPageNum(end($run));
+		}
+		if (!$useLinking) {
+			return $text;
+		}
+		$page = isset($targets[$run[0]]) ? $targets[$run[0]] : $run[0];
+
+		return '<a class="mpdf_index_link" href="@' . $page . '">' . $text . '</a>';
 	}
 
 	/* -- END INDEX -- */
