@@ -468,6 +468,16 @@ abstract class BlockTag extends Tag
 			$this->mpdf->_postForcedPagebreak($pagebreaktype, $startpage, $save_blk, $save_blklvl);
 		}
 
+		// mPDF 6 page-break-inside:avoid. The block is laid out once to measure it and, if that ran onto another
+		// page, everything is put back as it is here and the block is laid out again from the same token. Not while
+		// output is buffered (headers, footers, fixed-position blocks): there is no page to break there
+		$snapshot = null;
+		if (isset($p['PAGE-BREAK-INSIDE']) && strtoupper($p['PAGE-BREAK-INSIDE']) === 'AVOID'
+			&& !$this->mpdf->ColActive && !$this->mpdf->keep_block_together && !isset($attr['PAGEBREAKAVOIDCHECKED'])
+			&& !$this->mpdf->bufferoutput) {
+			$snapshot = $this->mpdf->getStateSnapshot();
+		}
+
 		// mPDF 6 pagebreaktype - moved after pagebreak
 		$this->mpdf->blklvl++;
 		$currblk = & $this->mpdf->blk[$this->mpdf->blklvl];
@@ -477,14 +487,10 @@ abstract class BlockTag extends Tag
 		$currblk['attr'] = $attr;
 
 		$properties = $this->cssManager->MergeCSS('BLOCK', $tag, $attr); // mPDF 6 - moved to after page-break-before
-		// mPDF 6 page-break-inside:avoid
-		if (isset($properties['PAGE-BREAK-INSIDE']) && strtoupper($properties['PAGE-BREAK-INSIDE']) === 'AVOID'
-			&& !$this->mpdf->ColActive && !$this->mpdf->keep_block_together && !isset($attr['PAGEBREAKAVOIDCHECKED'])) {
-			// avoid re-iterating using PAGEBREAKAVOIDCHECKED; set in CloseTag
+		if ($snapshot !== null) {
 			$currblk['keep_block_together'] = 1;
-			$currblk['array_i'] = $ihtml; // mPDF 6
-			$this->mpdf->kt_y00 = $this->mpdf->y;
-			$this->mpdf->kt_p00 = $this->mpdf->page;
+			$currblk['array_i'] = $ihtml;
+			$currblk['kt_state'] = $snapshot;
 			$this->mpdf->keep_block_together = 1;
 		}
 		if ($lastbottommargin && !empty($properties['MARGIN-TOP']) && empty($properties['FLOAT'])) {
@@ -584,12 +590,8 @@ abstract class BlockTag extends Tag
 		}
 
 		/* -- CSS-FLOAT -- */
-		if (isset($properties['FLOAT']) && strtoupper($properties['FLOAT']) === 'RIGHT' && !$this->mpdf->ColActive) {
-
-			// Cancel Keep-Block-together
-			$currblk['keep_block_together'] = false;
-			$this->mpdf->kt_y00 = 0;
-			$this->mpdf->keep_block_together = 0;
+		$float = isset($properties['FLOAT']) ? strtoupper($properties['FLOAT']) : '';
+		if ($float === 'RIGHT' && !$this->mpdf->ColActive) {
 
 			$this->mpdf->blockContext++;
 			$currblk['blockContext'] = $this->mpdf->blockContext;
@@ -636,12 +638,7 @@ abstract class BlockTag extends Tag
 				$currblk['float_width'] = ($currblk['css_set_width'] + $bdl + $pdl + $bdr + $pdr + $currblk['margin_right']);
 			}
 
-		} elseif (isset($properties['FLOAT']) && strtoupper($properties['FLOAT']) === 'LEFT' && !$this->mpdf->ColActive) {
-			// Cancel Keep-Block-together
-			$currblk['keep_block_together'] = false;
-			$this->mpdf->kt_y00 = 0;
-			$this->mpdf->keep_block_together = 0;
-
+		} elseif ($float === 'LEFT' && !$this->mpdf->ColActive) {
 			$this->mpdf->blockContext++;
 			$currblk['blockContext'] = $this->mpdf->blockContext;
 
@@ -907,7 +904,7 @@ abstract class BlockTag extends Tag
 		$this->mpdf->x = $this->mpdf->lMargin + $currblk['outer_left_margin'];
 
 		/* -- BACKGROUNDS -- */
-		if (!empty($properties['BACKGROUND-IMAGE']) && !$this->mpdf->kwt && !$this->mpdf->ColActive && !$this->mpdf->keep_block_together) {
+		if (!empty($properties['BACKGROUND-IMAGE']) && !$this->mpdf->kwt && !$this->mpdf->ColActive) {
 			$ret = $this->mpdf->SetBackground($properties, $currblk['inner_width']);
 			if ($ret) {
 				$currblk['background-image'] = $ret;
@@ -937,10 +934,7 @@ abstract class BlockTag extends Tag
 
 		// Save x,y coords in case we need to print borders...
 		$currblk['y0'] = $this->mpdf->y;
-		$currblk['initial_y0'] = $this->mpdf->y; // mPDF 6
 		$currblk['x0'] = $this->mpdf->x;
-		$currblk['initial_x0'] = $this->mpdf->x; // mPDF 6
-		$currblk['initial_startpage'] = $this->mpdf->page;
 		$currblk['startpage'] = $this->mpdf->page; // mPDF 6
 		$this->mpdf->oldy = $this->mpdf->y;
 
@@ -1032,9 +1026,7 @@ abstract class BlockTag extends Tag
 				$this->mpdf->listcounter[$this->mpdf->listlvl] = 0;
 			}
 
-			if (!isset($attr['PAGEBREAKAVOIDCHECKED']) || !$attr['PAGEBREAKAVOIDCHECKED']) {
-				$this->mpdf->listcounter[$this->mpdf->listlvl]++;
-			}
+			$this->mpdf->listcounter[$this->mpdf->listlvl]++;
 
 			$this->mpdf->listitem = [];
 
@@ -1298,7 +1290,10 @@ abstract class BlockTag extends Tag
 		}
 
 		/* -- CSS-FLOAT -- */
-		if ($this->mpdf->blk[$this->mpdf->blklvl]['float'] === 'R') {
+		// A block measured for page-break-inside:avoid leaves nothing behind, so its own float close is skipped;
+		// that also leaves the position where the float ended for the check below
+		$float = $this->mpdf->blk[$this->mpdf->blklvl]['float'];
+		if (($float === 'R' || $float === 'L') && !$this->mpdf->blk[$this->mpdf->blklvl]['keep_block_together']) {
 			// If width not set, here would need to adjust and output buffer
 			$s = $this->mpdf->PrintPageBackgrounds();
 			// Writes after the marker so not overwritten later by page background etc.
@@ -1316,42 +1311,7 @@ abstract class BlockTag extends Tag
 			}
 
 			$this->mpdf->addFloatDiv([
-				'side' => 'R',
-				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
-				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
-				'startpos' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'] * 1000 + $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
-				'endpage' => $this->mpdf->page,
-				'y1' => $this->mpdf->y,
-				'endpos' => $this->mpdf->page * 1000 + $this->mpdf->y,
-				'w' => $this->mpdf->blk[$this->mpdf->blklvl]['float_width'],
-				'blklvl' => $this->mpdf->blklvl,
-				'blockContext' => $this->mpdf->blk[$this->mpdf->blklvl - 1]['blockContext']
-			]);
-
-			$this->mpdf->y = $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'];
-			$this->mpdf->page = $this->mpdf->blk[$this->mpdf->blklvl]['startpage'];
-			$this->mpdf->ResetMargins();
-			$this->mpdf->pageoutput[$this->mpdf->page] = [];
-		}
-		if ($this->mpdf->blk[$this->mpdf->blklvl]['float'] === 'L') {
-			// If width not set, here would need to adjust and output buffer
-			$s = $this->mpdf->PrintPageBackgrounds();
-			// Writes after the marker so not overwritten later by page background etc.
-			$this->mpdf->pages[$this->mpdf->page] = preg_replace('/(___BACKGROUND___PATTERNS' . $this->mpdf->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->mpdf->pages[$this->mpdf->page]);
-			$this->mpdf->pageBackgrounds = [];
-			$this->mpdf->Reset();
-			$this->mpdf->pageoutput[$this->mpdf->page] = [];
-
-			for ($i = ($this->mpdf->blklvl - 1); $i >= 0; $i--) {
-				if (isset($this->mpdf->blk[$i]['float_endpos'])) {
-					$this->mpdf->blk[$i]['float_endpos'] = max($this->mpdf->blk[$i]['float_endpos'], $this->mpdf->page * 1000 + $this->mpdf->y);
-				} else {
-					$this->mpdf->blk[$i]['float_endpos'] = $this->mpdf->page * 1000 + $this->mpdf->y;
-				}
-			}
-
-			$this->mpdf->addFloatDiv([
-				'side' => 'L',
+				'side' => $float,
 				'startpage' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'],
 				'y0' => $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
 				'startpos' => $this->mpdf->blk[$this->mpdf->blklvl]['startpage'] * 1000 + $this->mpdf->blk[$this->mpdf->blklvl]['float_start_y'],
@@ -1388,52 +1348,17 @@ abstract class BlockTag extends Tag
 
 		// mPDF 6 page-break-inside:avoid
 		if ($this->mpdf->blk[$this->mpdf->blklvl]['keep_block_together']) {
-			$movepage = false;
+			$start = $this->mpdf->blk[$this->mpdf->blklvl]['kt_state'];
+			$i = $this->mpdf->blk[$this->mpdf->blklvl]['array_i'];
 			// If page-break-inside:avoid section has broken to new page but fits on one side - then move:
-			if (($this->mpdf->page - $this->mpdf->kt_p00) == 1 && $this->mpdf->y < $this->mpdf->kt_y00) {
-				$movepage = true;
-			}
-			if (($this->mpdf->page - $this->mpdf->kt_p00) > 0) {
-				for ($i = $this->mpdf->page; $i > $this->mpdf->kt_p00; $i--) {
-					unset($this->mpdf->pages[$i]);
-					if (isset($this->mpdf->blk[$this->mpdf->blklvl]['bb_painted'][$i])) {
-						unset($this->mpdf->blk[$this->mpdf->blklvl]['bb_painted'][$i]);
-					}
-					if (isset($this->mpdf->blk[$this->mpdf->blklvl]['marginCorrected'][$i])) {
-						unset($this->mpdf->blk[$this->mpdf->blklvl]['marginCorrected'][$i]);
-					}
-					if (isset($this->mpdf->pageoutput[$i])) {
-						unset($this->mpdf->pageoutput[$i]);
-					}
-				}
-				$this->mpdf->page = $this->mpdf->kt_p00;
-			}
-			$this->mpdf->keep_block_together = 0;
-			$this->mpdf->pageoutput[$this->mpdf->page] = [];
+			$movepage = ($this->mpdf->page - $start['page']) == 1 && $this->mpdf->y < $start['y'];
 
-			$this->mpdf->y = $this->mpdf->kt_y00;
+			// Back to where the block opened: the pages the measuring pass made, the state of the one it started on,
+			// the enclosing blocks and the cursor all go with it
+			$this->mpdf->restoreStateSnapshot($start);
+			$ahtml[$i] .= ' pagebreakavoidchecked="true";'; // so open() does not measure it again
+			$ihtml = $i - 1; // the parser advances onto the same token
 
-			$ihtml = $this->mpdf->blk[$this->mpdf->blklvl]['array_i'] - 1;
-
-			$ahtml[$ihtml + 1] .= ' pagebreakavoidchecked="true";'; // avoid re-iterating; read in OpenTag()
-
-			unset($this->mpdf->blk[$this->mpdf->blklvl]);
-			$this->mpdf->blklvl--;
-
-			for ($blklvl = 1; $blklvl <= $this->mpdf->blklvl; $blklvl++) {
-				$this->mpdf->blk[$blklvl]['y0'] = $this->mpdf->blk[$blklvl]['initial_y0'];
-				$this->mpdf->blk[$blklvl]['x0'] = $this->mpdf->blk[$blklvl]['initial_x0'];
-				$this->mpdf->blk[$blklvl]['startpage'] = $this->mpdf->blk[$blklvl]['initial_startpage'];
-			}
-
-			if (isset($this->mpdf->blk[$this->mpdf->blklvl]['x0'])) {
-				$this->mpdf->x = $this->mpdf->blk[$this->mpdf->blklvl]['x0'];
-			} else {
-				$this->mpdf->x = $this->mpdf->lMargin;
-			}
-
-			$this->mpdf->lastblocklevelchange = 0;
-			$this->mpdf->ResetMargins();
 			if ($movepage) {
 				$this->mpdf->AddPage();
 			}

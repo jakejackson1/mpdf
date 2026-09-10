@@ -3255,9 +3255,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->pageBackgrounds = [];
 		}
 
-		$save_kt = $this->keep_block_together;
-		$this->keep_block_together = 0;
-
 		$save_cols = false;
 
 		/* -- COLUMNS -- */
@@ -3414,8 +3411,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$this->table_rotate = $save_tr; // *TABLES*
 		$this->kwt = $save_kwt;
-
-		$this->keep_block_together = $save_kt;
 
 		$this->cMarginL = $bak_cml;
 		$this->cMarginR = $bak_cmr;
@@ -4459,9 +4454,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	function Link($x, $y, $w, $h, $link)
 	{
 		$l = [$x * Mpdf::SCALE, $this->hPt - $y * Mpdf::SCALE, $w * Mpdf::SCALE, $h * Mpdf::SCALE, $link];
-		if ($this->keep_block_together) { // don't write yet
-			return;
-		} elseif ($this->table_rotate) { // *TABLES*
+		if ($this->table_rotate) { // *TABLES*
 			$this->tbrot_Links[$this->page][] = $l; // *TABLES*
 			return; // *TABLES*
 		} // *TABLES*
@@ -4891,7 +4884,10 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				($this->y + $this->divheight > $this->PageBreakTrigger)
 				|| ($this->y + $h > $this->PageBreakTrigger)
 				|| (
+					// page-break-after:avoid wants room for one more line this tall after this one. When a fresh page
+					// has no such room either, breaking only adds empty pages (mpdf/mpdf#1801)
 					$this->y + ($h * 2) + $bottom > $this->PageBreakTrigger
+						&& $this->tMargin + ($h * 2) + $bottom <= $this->PageBreakTrigger
 						&& (isset($this->blk[$this->blklvl]['page_break_after_avoid']) && $this->blk[$this->blklvl]['page_break_after_avoid'])
 				)
 			)
@@ -6763,7 +6759,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		if ($this->blklvl > 0 && !$is_table) {
 			if ($endofblock && $blockstate > 1) {
-				if ($this->blk[$this->blklvl]['page_break_after_avoid']) {
+				// As in Cell(): only ask for the extra line if a fresh page could hold it (mpdf/mpdf#1801)
+				if ($this->blk[$this->blklvl]['page_break_after_avoid'] && $this->tMargin + $check_h + $stackHeight <= $this->PageBreakTrigger) {
 					$check_h += $stackHeight;
 				}
 				$check_h += ($this->blk[$this->blklvl]['padding_bottom'] + $this->blk[$this->blklvl]['border_bottom']['w']);
@@ -9587,7 +9584,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$x = $this->x;
 					$this->Cell(($this->blk[$blvl]['width']), $h, '', '', 0, '', 1);
 					$this->x = $x;
-					if (!$this->keep_block_together && !$this->writingHTMLheader && !$this->writingHTMLfooter) {
+					if (!$this->writingHTMLheader && !$this->writingHTMLfooter) {
 						// $state = 0 normal; 1 top; 2 bottom; 3 top and bottom
 						if ($blvl == $this->blklvl) {
 							$this->PaintDivLnBorder($state, $blvl, $h);
@@ -10112,9 +10109,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		$an = ['txt' => $text, 'x' => $x, 'y' => $y, 'opt' => ['Icon' => $icon, 'T' => $author, 'Subj' => $subject, 'C' => $colarray, 'CA' => $opacity, 'popup' => $popup, 'file' => $file]];
 
-		if ($this->keep_block_together) { // don't write yet
-			return;
-		} elseif ($this->table_rotate) {
+		if ($this->table_rotate) {
 			$this->tbrot_Annots[$this->page][] = $an;
 			return;
 		} elseif ($this->kwt) {
@@ -16318,7 +16313,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page, "kwt" => true];
 				} elseif ($this->ColActive) {
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page, "col" => $this->CurrCol];
-				} elseif (!$this->keep_block_together) {
+				} else {
 					$this->internallink[$vetor[7]] = ["Y" => $ily, "PAGE" => $this->page];
 				}
 				if (empty($vetor[0])) { // Ignore empty text
@@ -16843,9 +16838,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if ($this->ColActive) {
 			return;
 		} // *COLUMNS*
-		if ($this->keep_block_together) {
-			return;
-		} // mPDF 6
 		$save_y = $this->y;
 		if (!$blvl) {
 			$blvl = $this->blklvl;
@@ -17333,8 +17325,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$this->y = $save_y;
 
 
-		// BACKGROUNDS are disabled in columns/kbt/headers - messes up the repositioning in printcolumnbuffer
-		if ($this->ColActive || $this->kwt || $this->keep_block_together) {
+		// BACKGROUNDS are disabled in columns/kwt - messes up the repositioning in printcolumnbuffer
+		if ($this->ColActive || $this->kwt) {
 			return;
 		}
 
@@ -22085,6 +22077,25 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 	}
 
+	/**
+	 * Splice the backgrounds collected for a table in behind the placeholder it wrote to $buffer, and spend the
+	 * placeholder whether or not anything was put behind it: one left in place takes a copy of the next table's
+	 * backgrounds as well, so a table with no background of its own left the one after it painted twice
+	 */
+	function spendTableBackgrounds($buffer)
+	{
+		$s = $this->tableBackgrounds ? "\n" . $this->PrintTableBackgrounds() . "\n" : '';
+		$placeholder = '___TABLE___BACKGROUNDS' . $this->uniqstr;
+
+		if ($buffer === 'pages') {
+			$this->pages[$this->page] = str_replace($placeholder, ' ' . $s, $this->pages[$this->page]);
+		} else {
+			$this->$buffer = str_replace($placeholder, ' ' . $s, $this->$buffer);
+		}
+
+		$this->tableBackgrounds = [];
+	}
+
 	function _tableWrite(&$table, $split = false, $startrow = 0, $startcol = 0, $splitpg = 0, $rety = 0)
 	{
 		$level = $table['level'];
@@ -22570,17 +22581,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 								}
 
 								// $this->AcceptPageBreak() has moved tablebuffer to $this->pages content
-								if ($this->tableBackgrounds) {
-									$s = $this->PrintTableBackgrounds();
-									if ($this->bufferoutput) {
-										$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->headerbuffer);
-										$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->headerbuffer);
-									} else {
-										$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->pages[$this->page]);
-										$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->pages[$this->page]);
-									}
-									$this->tableBackgrounds = [];
-								}
+								$this->spendTableBackgrounds($this->bufferoutput ? 'headerbuffer' : 'pages');
 
 								if ($split) {
 									if ($i == 0 && $j == 0) {
@@ -23488,25 +23489,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			/* -- END BACKGROUNDS -- */
 		}
 
-		if ($this->tableBackgrounds && $level == 1) {
-			$s = $this->PrintTableBackgrounds();
+		if ($level == 1) {
+			// The same routing as BaseWriter::write() gave the placeholder
 			if ($this->table_rotate && !$this->processingHeader && !$this->processingFooter) {
-				$this->tablebuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->tablebuffer);
-				if ($level == 1) {
-					$this->tablebuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->tablebuffer);
-				}
-			} elseif ($this->bufferoutput) {
-				$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->headerbuffer);
-				if ($level == 1) {
-					$this->headerbuffer = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->headerbuffer);
-				}
+				$this->spendTableBackgrounds('tablebuffer');
 			} else {
-				$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', '\\1' . "\n" . $s . "\n", $this->pages[$this->page]);
-				if ($level == 1) {
-					$this->pages[$this->page] = preg_replace('/(___TABLE___BACKGROUNDS' . $this->uniqstr . ')/', " ", $this->pages[$this->page]);
-				}
+				$this->spendTableBackgrounds($this->bufferoutput ? 'headerbuffer' : 'pages');
 			}
-			$this->tableBackgrounds = [];
 		}
 
 
@@ -23578,9 +23567,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		// DIRECTIONALITY RTL
 		$bmo = ['t' => $txt, 'l' => $level, 'y' => $y, 'p' => $this->page];
 
-		if ($this->keep_block_together) {
-			// do nothing
-		} elseif ($this->table_rotate) {
+		if ($this->table_rotate) {
 			$this->tbrot_BMoutlines[] = $bmo;
 		} elseif ($this->kwt) {
 			$this->kwt_BMoutlines[] = $bmo;
@@ -23713,7 +23700,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page, "kwt" => true];
 		} elseif ($this->ColActive) {
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page, "col" => $this->CurrCol];
-		} elseif (!$this->keep_block_together) {
+		} else {
 			$this->internallink[$uid] = ["Y" => $ily, "PAGE" => $this->page];
 		}
 		$this->internallink['#' . $uid] = $linkn;
@@ -23728,7 +23715,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 		$btoc = ['t' => $txt, 'l' => $level, 'p' => $this->page, 'link' => $linkn, 'toc_id' => $toc_id];
 		if ($this->keep_block_together) {
-			// do nothing
+			// The entries live on the TableOfContents object, which a block's state snapshot does not put back
 		} /* -- TABLES -- */ elseif ($this->table_rotate) {
 			$this->tbrot_toc[] = $btoc;
 		} elseif ($this->kwt) {
@@ -24182,9 +24169,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 		// Search the reference (AND Ref/PageNo) in the array
 		$Present = false;
-		if ($this->keep_block_together) {
-			// do nothing
-		} /* -- TABLES -- */ elseif ($this->kwt) {
+		/* -- TABLES -- */
+		if ($this->kwt) {
 			$size = count($this->kwt_Reference);
 			for ($i = 0; $i < $size; $i++) {
 				if (isset($this->kwt_Reference[$i]['t']) && $this->kwt_Reference[$i]['t'] == $txt) {
@@ -25913,7 +25899,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} else {
 					if ($l == 0 && $bsfctr == (count($this->backupSubsFont) - 1)) { // Not found even in last backup font
 						$cont = mb_substr($writehtml_e, $start + 1);
-						$writehtml_e = mb_substr($writehtml_e, 0, $start + 1, 'UTF-8');
+						// Write the trim back into the token too, here and at every splice below, as SubstituteCharsSIP()
+						// does: a page-break-inside:avoid block's second parse otherwise prints the untrimmed text (mpdf/mpdf#2075)
+						$writehtml_a[$writehtml_i] = $writehtml_e = mb_substr($writehtml_e, 0, $start + 1, 'UTF-8');
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['', $cont]);
 						$this->subPos = $writehtml_i + 1;
 
@@ -25927,7 +25915,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($l > 0) {
 				$patt = mb_substr($writehtml_e, $start, $l, 'UTF-8');
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 					$this->subPos = $writehtml_i + 3;
 
@@ -26034,7 +26022,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($l > 0) {
 					$patt = mb_substr($writehtml_e, $start, $l);
 					if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-						$writehtml_e = $m[1];
+						$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 						$this->subPos = $writehtml_i + 3;
 						return 4;
@@ -26083,7 +26071,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				if ($l > 0) {
 					$patt = mb_substr($writehtml_e, $start, $l);
 					if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-						$writehtml_e = $m[1];
+						$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 						$this->subPos = $writehtml_i + 3;
 						return 4;
@@ -26137,7 +26125,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($ftype == 'C') {
 				$patt = mb_substr($writehtml_e, $start, count($repl));
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, [$font, implode('|', $repl), '/' . $font, $m[3]]); // e.g. <tts>
 					$this->subPos = $writehtml_i + 3;
 					return 4;
@@ -26187,7 +26175,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				} else {
 					if ($l == 0 && $bsfctr == (count($this->backupSubsFont) - 1)) { // Not found even in last backup font
 						$cont = mb_substr($writehtml_e, $start + 1);
-						$writehtml_e = mb_substr($writehtml_e, 0, $start + 1);
+						$writehtml_a[$writehtml_i] = $writehtml_e = mb_substr($writehtml_e, 0, $start + 1);
 						array_splice($writehtml_a, $writehtml_i + 1, 0, ['', $cont]);
 						$this->subPos = $writehtml_i + 1;
 						return 2;
@@ -26200,7 +26188,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			if ($l > 0) {
 				$patt = mb_substr($writehtml_e, $start, $l);
 				if (preg_match("/(.*?)(" . preg_quote($patt, '/') . ")(.*)/u", $writehtml_e, $m)) {
-					$writehtml_e = $m[1];
+					$writehtml_a[$writehtml_i] = $writehtml_e = $m[1];
 					array_splice($writehtml_a, $writehtml_i + 1, 0, ['span style="font-family: ' . $font . '"', $m[2], '/span', $m[3]]);
 					$this->subPos = $writehtml_i + 3;
 					return 4;
@@ -27343,7 +27331,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		$html = str_replace("<innerpre", "<pre", $html);
 
 		$html = preg_replace('/<textarea([^>]*)><\/textarea>/si', '<textarea\\1> </textarea>', $html);
-		$html = preg_replace('/(<table[^>]*>)\s*(<caption)(.*?<\/caption>)(.*?<\/table>)/si', '\\2 position="top"\\3\\1\\4\\2 position="bottom"\\3', $html); // *TABLES*
+		// With use_kwt, a caption above its table is kept with it the same way as a heading (mpdf/mpdf#1666)
+		$kwt = $this->use_kwt ? ' keep-with-table="1"' : '';
+		$html = preg_replace('/(<table[^>]*>)\s*(<caption)(.*?<\/caption>)(.*?<\/table>)/si', '\\2 position="top"' . $kwt . '\\3\\1\\4\\2 position="bottom"\\3', $html); // *TABLES*
 
 		if ($this->use_kwt) {
 			$returnHtml = preg_replace('/<(h[1-6])([^>]*(?<!\/))(>[^>]*<\/\\1>\s*<table)/si', '<\\1\\2 keep-with-table="1"\\3', $html);
@@ -27760,9 +27750,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	 */
 	public function getStateSnapshot()
 	{
+		// The loader caches stay live: the pass being unwound only adds to them and the pass that follows needs every
+		// entry. So does the counter that numbers fonts alongside them, and the reference into one of them
+		$live = ['fonts', 'FontFiles', 'extraFontSubsets', 'images', 'formobjects', 'CurrentFont'];
+
 		$snapshot = [];
 		foreach (get_object_vars($this) as $key => $value) {
-			if (is_object($value) || is_resource($value)) {
+			if (is_object($value) || is_resource($value) || in_array($key, $live, true)) {
 				continue;
 			}
 
@@ -27785,6 +27779,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	{
 		foreach ($snapshot as $key => $value) {
 			$this->{$key} = $value;
+		}
+
+		// CurrentFont is a reference into fonts[], which stays live, so it is bound to the restored selection here:
+		// SetFont() will not do it while the family, style and size already match
+		$fontkey = $this->FontFamily . $this->FontStyle;
+		if (isset($this->fonts[$fontkey])) {
+			$this->CurrentFont = &$this->fonts[$fontkey];
 		}
 	}
 }

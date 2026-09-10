@@ -201,7 +201,7 @@ class Td extends Tag
 			$c['gradient'] = false;
 		}
 
-		if (!empty($properties['BACKGROUND-IMAGE']) && !$this->mpdf->keep_block_together) {
+		if (!empty($properties['BACKGROUND-IMAGE'])) {
 			$ret = $this->mpdf->SetBackground($properties, $this->mpdf->blk[$this->mpdf->blklvl]['inner_width']);
 			if ($ret) {
 				$c['background-image'] = $ret;
