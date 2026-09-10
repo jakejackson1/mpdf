@@ -913,7 +913,7 @@ abstract class BlockTag extends Tag
 		/* -- END BACKGROUNDS -- */
 
 		/* -- TABLES -- */
-		if ($this->mpdf->use_kwt && isset($attr['KEEP-WITH-TABLE']) && !$this->mpdf->ColActive && !$this->mpdf->keep_block_together) {
+		if ($this->mpdf->use_kwt && isset($attr['KEEP-WITH-TABLE']) && !$this->mpdf->ColActive) {
 			$this->mpdf->kwt = true;
 			$this->mpdf->kwt_y0 = $this->mpdf->y;
 			//$this->mpdf->kwt_x0 = $this->mpdf->x;

@@ -336,7 +336,7 @@ class CssMerger
 			}
 		}
 
-		if (!empty($previousBlock['bgcolorarray']) && ($this->mpdf->ColActive || $this->mpdf->keep_block_together)) {
+		if (!empty($previousBlock['bgcolorarray']) && $this->mpdf->ColActive) {
 			// Doesn't officially inherit, but default value is transparent (?=inherited)
 			$cor = $previousBlock['bgcolorarray'];
 			$this->cssProperties['BACKGROUND-COLOR'] = $this->colorConverter->colAtoString($cor);
