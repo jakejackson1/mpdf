@@ -492,6 +492,7 @@ abstract class BlockTag extends Tag
 			$currblk['array_i'] = $ihtml;
 			$currblk['kt_state'] = $snapshot;
 			$this->mpdf->keep_block_together = 1;
+			$this->mpdf->kt_blank = 0;
 		}
 		if ($lastbottommargin && !empty($properties['MARGIN-TOP']) && empty($properties['FLOAT'])) {
 			$currblk['lastbottommargin'] = $lastbottommargin;
@@ -1353,8 +1354,10 @@ abstract class BlockTag extends Tag
 		if ($unwind) {
 			$start = $blk['kt_state'];
 			$i = $blk['array_i'];
-			// If page-break-inside:avoid section has broken to new page but fits on one side - then move:
-			$movepage = ($this->mpdf->page - $start['page']) == 1 && $this->mpdf->y < $start['y'];
+			// Moves to a fresh page when it fits one: its end lands higher than its start, once the blank an early break
+			// (a table or rows kept together) left at the foot of the page is discounted. A block that reached a third
+			// page is left split without looking further, as before
+			$movepage = ($this->mpdf->page - $start['page']) == 1 && $this->mpdf->y - $start['y'] < $this->mpdf->kt_blank;
 
 			// Back to where the block opened: the pages the measuring pass made, the state of the one it started on,
 			// the enclosing blocks and the cursor all go with it

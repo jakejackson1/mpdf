@@ -321,19 +321,58 @@ class PageBreakInsideAvoidTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCas
 	}
 
 	/**
-	 * Rows that keep with the one before break the table early, and where the block's measuring pass ends is what
-	 * decides whether it moves whole. Measured with the markers, this block would end low on page 2 and be left
-	 * split; measured without them it moves, and the markers are honoured on the page it moves to
+	 * Rows that keep with the one before cannot split, so the measuring pass moves the whole table to page 2 and
+	 * the block ends lower there than it started. The strip that left blank on page 1 is not part of the block,
+	 * and with it taken off the block is seen to fit a page and moves
 	 */
 	public function testATableWhoseRowsKeepTogetherStillMovesWholeWithItsKeptBlock()
 	{
-		$table = '<table><tr><td>Row</td></tr>' . str_repeat('<tr style="page-break-before: avoid"><td>Row</td></tr>', 19) . '</table>';
+		$rows = 20;
+		$table = '<table><tr><td>Row</td></tr>' . str_repeat('<tr style="page-break-before: avoid"><td>Row</td></tr>', $rows - 1) . '</table>';
 
-		$pages = $this->pages($this->render($this->filler(10) . '<div style="page-break-inside: avoid">' . str_repeat('<p>Kept</p>', 8) . $table . '</div>'));
+		$this->assertBlockMovesWholeToPageTwo($this->filler(10), $table, $rows);
+	}
+
+	/**
+	 * GravityPDF/mpdf#61: a table kept together leaves the foot of page 1 blank the same way rows that keep
+	 * together do, so the measured end landed below the start and the block was left split
+	 */
+	public function testATableKeptTogetherInsideAKeptBlockMovesWholeWithIt()
+	{
+		$rows = 26;
+		$table = '<table style="page-break-inside: avoid">' . str_repeat('<tr><td>Row</td></tr>', $rows) . '</table>';
+
+		$this->assertBlockMovesWholeToPageTwo($this->filler(12), $table, $rows);
+	}
+
+	private function assertBlockMovesWholeToPageTwo($before, $table, $rows)
+	{
+		$pages = $this->keptLinesOverTable($before, $table);
 
 		$this->assertCount(2, $pages);
 		$this->assertTextCount(0, 'Kept', $pages[0]);
 		$this->assertTextCount(8, 'Kept', $pages[1]);
-		$this->assertTextCount(20, 'Row', $pages[1]);
+		$this->assertTextCount($rows, 'Row', $pages[1]);
+	}
+
+	/**
+	 * Discounting the blank strip must not move a block that is taller than a page. With a table kept together that
+	 * with its lines is taller than one, the lines stay where they are and only the table moves, as it does alone
+	 */
+	public function testAKeptBlockTallerThanAPageIsSplitWhereItStands()
+	{
+		$rows = 40;
+		$table = '<table style="page-break-inside: avoid">' . str_repeat('<tr><td>Row</td></tr>', $rows) . '</table>';
+
+		$pages = $this->keptLinesOverTable($this->filler(12), $table);
+
+		$this->assertCount(2, $pages);
+		$this->assertTextCount(8, 'Kept', $pages[0]);
+		$this->assertTextCount($rows, 'Row', $pages[1]);
+	}
+
+	private function keptLinesOverTable($before, $table)
+	{
+		return $this->pages($this->render($before . '<div style="page-break-inside: avoid">' . str_repeat('<p>Kept</p>', 8) . $table . '</div>'));
 	}
 }
