@@ -24178,6 +24178,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$txt = $this->purify_utf8($txt);
 			$this->Reference[$i]['uf'] = $txt; // Unformatted e.g. pure utf-8 encoded characters, no mark-up/tags
 			// Used for ordering and collation
+			$this->Reference[$i]['order'] = $i; // Entries that collate the same keep this order, on every PHP version
 		}
 
 		if ($usedivletters) {
@@ -24213,7 +24214,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		}
 
 		usort($this->Reference, function ($a, $b) {
-			return strcoll(strtolower($a['uf']), strtolower($b['uf']));
+			return strcoll(mb_strtolower($a['uf'], 'UTF-8'), mb_strtolower($b['uf'], 'UTF-8')) ?: $a['order'] - $b['order'];
 		});
 
 		if ($indexCollationLocale) {
