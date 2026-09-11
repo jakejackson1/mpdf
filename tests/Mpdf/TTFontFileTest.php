@@ -48,6 +48,18 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
+	 * Verify a font carrying a GSUB Lookup Type 5, Format 3 subtable parses rather than throwing
+	 */
+	public function testGetMetricsWithACoverageBasedContextLookup()
+	{
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSansTakri-GSUB53-Subset.ttf', (string) time(), 0, false, false, 0xFF);
+		$this->assertSame('NotoSansTakri-Regular', $this->ttf->fullName);
+
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSansSaurashtra-GSUB53-Subset.ttf', (string) time(), 0, false, false, 0xFF);
+		$this->assertSame('NotoSansSaurashtra-Regular', $this->ttf->fullName);
+	}
+
+	/**
 	 * MarkGlyphSetsDef coverage offsets are relative to that table, not to the file. Seeking to them as
 	 * absolute offsets lands in the table directory and yields empty sets, which silently disables every
 	 * UseMarkFilteringSet lookup. U+0DCA/U+0DD2/U+0DD3 are the subset's Sinhala marks; the second set's
