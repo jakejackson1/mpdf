@@ -1394,8 +1394,21 @@ class TTFontFile
 		$this->fontCache->jsonWrite($this->fontkey . '.GDEFdata.json', $font);
 	}
 
-	function _getClassDefinitionTable()
+	/**
+	 * ClassDefFormat1 or ClassDefFormat2, per Class Definition Table in the OpenType layout common
+	 * table formats.
+	 *
+	 * @see https://learn.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table
+	 *
+	 * @param int $offset Seek here first. GDEF's two class definitions are read where the caller
+	 *                    already is; a GPOS PairPos subtable names its two by offset.
+	 */
+	function _getClassDefinitionTable($offset = 0)
 	{
+		if ($offset > 0) {
+			$this->seek($offset);
+		}
+
 		// NB Any glyph not included in the range of covered GlyphIDs automatically belongs to Class 0. This is not returned by this function
 		$ClassFormat = $this->read_ushort();
 		$GlyphByClass = [];
@@ -3072,7 +3085,12 @@ class TTFontFile
 	 * A lookup's MarkFilteringSet indexes GDEF's mark glyph sets. A font naming a set GDEF does not define is
 	 * malformed, and guessing which marks it meant would shape silently wrong, so both callers fail loudly here.
 	 */
-	private function markGlyphSet($MarkFilteringSet)
+	/**
+	 * The glyphs of one of GDEF's mark glyph sets.
+	 *
+	 * protected rather than private because OtlDump reports on the same sets, from the same parse.
+	 */
+	protected function markGlyphSet($MarkFilteringSet)
 	{
 		if (!isset($this->MarkGlyphSets[$MarkFilteringSet])) {
 			throw new \Mpdf\Exception\FontException(sprintf('Font "%s" uses mark filtering set %s, which GDEF does not define', $this->fontkey, $MarkFilteringSet));

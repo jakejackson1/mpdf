@@ -1,0 +1,83 @@
+body {
+	font-family: DejaVuSansCondensed;
+	font-weight: normal;
+	font-size: 11pt;
+	font-feature-settings: {{featureSettings}};
+}
+h5 {
+	font-size: 1rem;
+	color: #000066;
+	margin-bottom: 0.3em;
+}
+.glyphs {
+	font-family: {{family}};
+}
+.subtable {
+	font-size: 0.7rem;
+}
+h5.level2 {
+	font-size: 0.85rem;
+	color: #6666AA;
+}
+.lookuptype {
+	font-size: 0.7rem;
+	color: #888888;
+	text-transform: uppercase;
+}
+.lookuptypesub {
+	font-size: 0.7rem;
+	color: #888888;
+	text-transform: uppercase;
+}
+span.unicode {
+	color: #888888;
+	font-size: 0.7rem;
+}
+span.changed {
+	font-family: {{family}};
+	font-size: 1.5rem;
+	color: #FF4444;
+	font-feature-settings: {{featureSettings}};
+}
+span.unchanged {
+	font-family: {{family}};
+	font-size: 1.5rem;
+	color: #4444FF;
+	font-feature-settings: {{featureSettings}};
+}
+span.backtrack {
+	font-family: {{family}};
+	font-size: 1.5rem;
+	color: #66aa66;
+	font-feature-settings: {{featureSettings}};
+}
+span.lookahead {
+	font-family: {{family}};
+	font-size: 1.5rem;
+	color: #66aa66;
+	font-feature-settings: {{featureSettings}};
+}
+span.inputother {
+	font-family: {{family}};
+	font-size: 1.5rem;
+	color: #006688;
+	font-feature-settings: {{featureSettings}};
+}
+div.context {
+	font-size: 0.7rem;
+	color: #888888;
+	text-transform: uppercase;
+}
+div.sequenceIndex {
+	font-size: 0.7rem;
+}
+div.rule {
+	font-size: 0.7rem;
+}
+.ignore {
+	color: #888888;
+	font-size: 0.7rem;
+}
+div.level2 {
+	margin-left: 5em;
+}

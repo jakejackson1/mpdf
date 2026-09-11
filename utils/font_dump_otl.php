@@ -1,202 +1,109 @@
 <?php
 
+/**
+ * Renders a readable report of a font's OpenType layout tables as a PDF.
+ *
+ *   php utils/font_dump_otl.php <family> [<style>] [<script> <language>]
+ *
+ *   php utils/font_dump_otl.php khmeros                  # what scripts and features the font offers
+ *   php utils/font_dump_otl.php dejavusans '' latn DFLT  # every lookup of one script and language
+ *
+ * Also runs over the web, taking the same four values from the query string.
+ *
+ * Without a script and language it lists what the font offers, each script linking to its own detail
+ * report. With them it walks every GSUB and GPOS lookup of that script, showing the glyphs each rule
+ * matches and what it substitutes or moves.
+ */
+
 namespace Mpdf;
 
-use Mpdf\Fonts\FontFileFinder;
+use Mpdf\Fonts\FontCache;
 
-$family = 'khmeros';
+require_once __DIR__ . '/../vendor/autoload.php';
 
-$style = ''; // '','B','I','BI'; // At present only works for Regular style
-$script = '';
-$lang = '';
+$cli = PHP_SAPI === 'cli';
+$argument = function ($position, $name, $default = '') use ($cli) {
+	global $argv;
 
-if (isset($_REQUEST['script'])) {
-	$script = $_REQUEST['script'];
-}
-
-if (isset($_REQUEST['lang'])) {
-	$lang = $_REQUEST['lang'];
-}
-
-if ($script && strlen($script) < 4) {
-	$script = str_pad($script, 4, ' ');
-}
-
-if ($lang && strlen($lang) < 4) {
-	$lang = str_pad($lang, 4, ' ');
-}
-
-require_once '../vendor/autoload.php';
-
-$mpdf = new Mpdf();
-
-$mpdf->simpleTables = true;
-
-// This generates a .mtx.php file if not already generated
-$mpdf->SetFont($family, $style);
-
-$ff = array();
-$ffs = '';
-
-if ($lang && $script) {
-	$GSUBFeatures = $mpdf->CurrentFont['GSUBFeatures'][$script][$lang];
-	if (is_array($GSUBFeatures)) {
-		foreach ($GSUBFeatures as $tag => $v) {
-			$ff[] = '"' . $tag . '" 0';
-		}
+	if ($cli) {
+		return isset($argv[$position]) ? $argv[$position] : $default;
 	}
-	$GPOSFeatures = $mpdf->CurrentFont['GPOSFeatures'][$script][$lang];
-	if (is_array($GPOSFeatures)) {
-		foreach ($GPOSFeatures as $tag => $v) {
-			$ff[] = '"' . $tag . '" 0';
-		}
-	}
-	$ffs = implode(', ', $ff);
-}
-//==============================================================
 
-$html = '<style>
-body {
-	font-family: DejaVuSansCondensed;
-	font-weight: normal;
-	font-size: 11pt;
-	font-feature-settings: ' . $ffs . ';
-}
-h5 {
-	font-size: 1rem;
-	color: #000066;
-	margin-bottom: 0.3em;
-}
-.glyphs {
-	font-family: ' . $family . ';
-}
-.subtable {
-	font-size: 0.7rem;
-}
-h5.level2 {
-	font-size: 0.85rem;
-	color: #6666AA;
-}
-.lookuptype {
-	font-size: 0.7rem;
-	color: #888888;
-	text-transform: uppercase;
-}
-.lookuptypesub {
-	font-size: 0.7rem;
-	color: #888888;
-	text-transform: uppercase;
-}
-span.unicode {
-	color: #888888;
-	font-size: 0.7rem;
-}
-span.changed {
-	font-family: ' . $family . ';
-	font-size: 1.5rem;
-	color: #FF4444;
-	font-feature-settings: ' . $ffs . ';
-}
-span.unchanged {
-	font-family: ' . $family . ';
-	font-size: 1.5rem;
-	color: #4444FF;
-	font-feature-settings: ' . $ffs . ';
-}
-span.backtrack {
-	font-family: ' . $family . ';
-	font-size: 1.5rem;
-	color: #66aa66;
-	font-feature-settings: ' . $ffs . ';
-}
-span.lookahead {
-	font-family: ' . $family . ';
-	font-size: 1.5rem;
-	color: #66aa66;
-	font-feature-settings: ' . $ffs . ';
-}
-span.inputother {
-	font-family: ' . $family . ';
-	font-size: 1.5rem;
-	color: #006688;
-	font-feature-settings: ' . $ffs . ';
-}
-div.context {
-	font-size: 0.7rem;
-	color: #888888;
-	text-transform: uppercase;
-}
-div.sequenceIndex {
-	font-size: 0.7rem;
-}
-div.rule {
-	font-size: 0.7rem;
-}
-.ignore {
-	color: #888888;
-	font-size: 0.7rem;
-}
-div.level2 {
-	margin-left: 5em;
-}
-</style>
-<body>
-<h1 style="text-align:center;">' . strtoupper($family . $style) . '</h1>';
+	return isset($_REQUEST[$name]) ? $_REQUEST[$name] : $default;
+};
 
-if ($lang && $script) {
-	$html .= '<h2 style="text-align:center;">' . $script . ' ' . $lang . '</h2>';
+$family = strtolower($argument(1, 'family'));
+$style = strtoupper($argument(2, 'style'));
+$script = $argument(3, 'script');
+$language = $argument(4, 'lang');
+
+if (!$family) {
+	fwrite(STDERR, "Usage: php utils/font_dump_otl.php <family> [<style>] [<script> <language>]\n");
+	exit(1);
 }
 
-$mpdf->WriteHTML($html);
-
-$mpdf->debugfonts = false;
-
-$family = strtolower($family);
-$style = strtoupper($style);
-
-if ($style == 'IB') {
+if ($style === 'IB') {
 	$style = 'BI';
 }
 
-$fontkey = $family . $style;
-$stylekey = $style;
+// Script and language system tags are four bytes, space padded
+$script = $script ? str_pad($script, 4, ' ') : '';
+$language = $language ? str_pad($language, 4, ' ') : '';
 
-if (!$style) {
-	$stylekey = 'R';
+$mpdf = new Mpdf();
+$mpdf->simpleTables = true;
+
+// Resolves the font file, generates its metrics cache if it is not already there, and leaves
+// everything the dump needs in CurrentFont. Taking the file from there rather than resolving it again
+// means the report is of the font the renderer would have used.
+$mpdf->SetFont($family, $style);
+$font = $mpdf->CurrentFont;
+
+$features = [];
+if ($script && $language) {
+	foreach (['GSUBFeatures', 'GPOSFeatures'] as $table) {
+		if (isset($font[$table][$script][$language]) && is_array($font[$table][$script][$language])) {
+			foreach ($font[$table][$script][$language] as $tag => $unused) {
+				$features[] = '"' . $tag . '" 0';
+			}
+		}
+	}
 }
 
-$mpdf->overrideOTLsettings[$fontkey]['script'] = $script;
-$mpdf->overrideOTLsettings[$fontkey]['lang'] = $lang;
+// Every glyph in the report is rendered with the font's own features switched off, so that what is
+// shown is the glyph the rule names rather than the glyph the shaper would have chosen
+$featureSettings = implode(', ', $features);
 
-// include $fontCache->tempFilename($fontkey.'.mtx.php');
+$css = file_get_contents(__DIR__ . '/data/font_dump_otl.css');
+$css = str_replace(['{{family}}', '{{featureSettings}}'], [$family, $featureSettings], $css);
 
-$fontFileFinder = new FontFileFinder($mpdf->fontDir);
-$ttffile = $fontFileFinder->findFontFile($mpdf->fontdata[$family][$stylekey]);
-$ttfstat = stat($ttffile);
-
-if (isset($mpdf->fontdata[$family]['TTCfontID'][$stylekey])) {
-	$TTCfontID = $mpdf->fontdata[$family]['TTCfontID'][$stylekey];
-} else {
-	$TTCfontID = 0;
+$title = '<h1 style="text-align:center;">' . strtoupper($family . $style) . '</h1>';
+if ($script && $language) {
+	$title .= '<h2 style="text-align:center;">' . $script . ' ' . $language . '</h2>';
 }
 
-$BMPonly = false;
+$mpdf->WriteHTML('<style>' . $css . '</style><body>' . $title);
+$mpdf->debugfonts = false;
 
-if (in_array($family, $mpdf->BMPonly)) {
-	$BMPonly = true;
-}
+$dump = new OtlDump($mpdf, new FontCache(new Cache($mpdf->tempDir . '/ttfontdata')), 'win');
 
-$useOTL = $mpdf->fontdata[$family]['useOTL'];
-
-$dump = new OtlDump($mpdf);
-
-$mpdf->OTLscript = $script;
-$mpdf->OTLlang = $lang;
-
-if ($lang && $script) {
-	$dump->getMetrics($ttffile, $fontkey, $TTCfontID, $mpdf->debugfonts, $BMPonly, true, $useOTL, 'detail');
-} else {
-	$dump->getMetrics($ttffile, $fontkey, $TTCfontID, $mpdf->debugfonts, $BMPonly, true, $useOTL, 'summary');
+try {
+	$dump->getMetrics(
+		$font['ttffile'],
+		$font['fontkey'],
+		$font['TTCfontID'],
+		$mpdf->debugfonts,
+		in_array($family, $mpdf->BMPonly, true),
+		$font['useOTL'],
+		$script && $language ? 'detail' : 'summary',
+		$script,
+		$language
+	);
+} catch (MpdfException $e) {
+	// Naming a script or language the font does not carry is the usual mistake, and the message says
+	// what it does carry. A stack trace would bury that.
+	fwrite(STDERR, $e->getMessage() . "\n");
+	exit(1);
 }
 
 $mpdf->Output();
