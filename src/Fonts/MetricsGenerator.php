@@ -7,6 +7,16 @@ use Mpdf\TTFontFile;
 class MetricsGenerator
 {
 
+	/**
+	 * The shape of everything this class writes into the font cache.
+	 *
+	 * Regeneration is otherwise triggered only by the font file's size changing, so a release that
+	 * changes what a cache file *means* — the unit an offset is measured in, which table a blob
+	 * holds, the keys of an array — is served the old shape and reads it as the new one. Raise this
+	 * whenever that happens. Mpdf::AddFont() compares it and regenerates on a mismatch.
+	 */
+	const CACHE_FORMAT = 1;
+
 	private $fontCache;
 
 	private $fontDescriptor;
@@ -65,6 +75,7 @@ class MetricsGenerator
 			'GPOSFeatures' => $ttf->GPOSFeatures,
 			'GPOSLookups' => $ttf->GPOSLookups,
 			'kerninfo' => $ttf->kerninfo,
+			'cacheFormat' => self::CACHE_FORMAT,
 		];
 
 		$this->fontCache->jsonWrite($fontkey . '.mtx.json', $font);

@@ -4000,6 +4000,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			'GPOSFeatures' => [],
 			'GPOSLookups' => [],
 			'rtlPUAstr' => '',
+			'cacheFormat' => 0,
 		];
 
 		$fontCacheFilename = $fontkey . '.mtx.json';
@@ -4032,6 +4033,12 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		if ($this->fontDescriptor != $font['fontmetrics']) {
 			$regenerate = true;
 		} // mPDF 6
+
+		// A cache written by a release that laid its files out differently cannot be read by this one
+		$cacheFormat = isset($font['cacheFormat']) ? $font['cacheFormat'] : 0;
+		if ($cacheFormat !== MetricsGenerator::CACHE_FORMAT) {
+			$regenerate = true;
+		}
 
 		$glyphIDtoUni = null;
 		if (empty($font['name']) || $font['originalsize'] != $ttfstat['size'] || $regenerate) {

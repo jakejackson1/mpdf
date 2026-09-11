@@ -82,6 +82,14 @@ class Otl
 
 	var $lbdicts; // Line-breaking dictionaries
 
+	/**
+	 * Memoised Coverage and ClassDef tables, for the life of the document.
+	 *
+	 * Keyed [fontkey][reader][offset]. The reader dimension is load-bearing: a font may point both a
+	 * PairPos ClassDef and a chained-context InputClassDef at one table, and _getClassDefinitionTable
+	 * returns class => list of unicodes where _getClasses returns class => map of unicode => 1. Shared
+	 * by offset alone, whichever ran first would hand the other a shape it cannot index, with no error.
+	 */
 	var $LuDataCache;
 
 	var $arabGlyphs;
@@ -4726,8 +4734,8 @@ class Otl
 
 	private function _getClassDefinitionTable($offset)
 	{
-		if (isset($this->LuDataCache[$this->fontkey][$offset])) {
-			$GlyphByClass = $this->LuDataCache[$this->fontkey][$offset];
+		if (isset($this->LuDataCache[$this->fontkey]['classDef'][$offset])) {
+			$GlyphByClass = $this->LuDataCache[$this->fontkey]['classDef'][$offset];
 		} else {
 			$this->seek($offset);
 			$ClassFormat = $this->read_ushort();
@@ -4756,7 +4764,7 @@ class Otl
 				}
 			}
 			ksort($GlyphByClass);
-			$this->LuDataCache[$this->fontkey][$offset] = $GlyphByClass;
+			$this->LuDataCache[$this->fontkey]['classDef'][$offset] = $GlyphByClass;
 		}
 		return $GlyphByClass;
 	}
@@ -6306,8 +6314,8 @@ class Otl
 		// Need to do this separately to cache separately
 		// Otherwise the same as fn below _getCoverage
 		$offset = $this->_pos;
-		if (isset($this->LuDataCache[$this->fontkey]['GID'][$offset])) {
-			$g = $this->LuDataCache[$this->fontkey]['GID'][$offset];
+		if (isset($this->LuDataCache[$this->fontkey]['coverageGID'][$offset])) {
+			$g = $this->LuDataCache[$this->fontkey]['coverageGID'][$offset];
 		} else {
 			$g = [];
 			$CoverageFormat = $this->read_ushort();
@@ -6329,7 +6337,7 @@ class Otl
 					}
 				}
 			}
-			$this->LuDataCache[$this->fontkey]['GID'][$offset] = $g;
+			$this->LuDataCache[$this->fontkey]['coverageGID'][$offset] = $g;
 		}
 		return $g;
 	}
@@ -6337,8 +6345,8 @@ class Otl
 	private function _getCoverage()
 	{
 		$offset = $this->_pos;
-		if (isset($this->LuDataCache[$this->fontkey][$offset])) {
-			$g = $this->LuDataCache[$this->fontkey][$offset];
+		if (isset($this->LuDataCache[$this->fontkey]['coverage'][$offset])) {
+			$g = $this->LuDataCache[$this->fontkey]['coverage'][$offset];
 		} else {
 			$g = [];
 			$CoverageFormat = $this->read_ushort();
@@ -6360,15 +6368,15 @@ class Otl
 					}
 				}
 			}
-			$this->LuDataCache[$this->fontkey][$offset] = $g;
+			$this->LuDataCache[$this->fontkey]['coverage'][$offset] = $g;
 		}
 		return $g;
 	}
 
 	private function _getClasses($offset)
 	{
-		if (isset($this->LuDataCache[$this->fontkey][$offset])) {
-			$GlyphByClass = $this->LuDataCache[$this->fontkey][$offset];
+		if (isset($this->LuDataCache[$this->fontkey]['classes'][$offset])) {
+			$GlyphByClass = $this->LuDataCache[$this->fontkey]['classes'][$offset];
 		} else {
 			$this->seek($offset);
 			$ClassFormat = $this->read_ushort();
@@ -6409,7 +6417,7 @@ class Otl
 					}
 				}
 			}
-			$this->LuDataCache[$this->fontkey][$offset] = $GlyphByClass;
+			$this->LuDataCache[$this->fontkey]['classes'][$offset] = $GlyphByClass;
 		}
 		return $GlyphByClass;
 	}
@@ -6420,8 +6428,8 @@ class Otl
 		// $scriptblock is the (number/code) for the script of the actual text string based on Unicode properties (Ucdn::$uni_scriptblock)
 		// $scripttag is the default tag derived from $scriptblock
 		/*
-		  http://www.microsoft.com/typography/otspec/ttoreg.htm
-		  http://www.microsoft.com/typography/otspec/scripttags.htm
+		  https://learn.microsoft.com/en-us/typography/opentype/spec/ttoreg
+		  https://learn.microsoft.com/en-us/typography/opentype/spec/scripttags
 
 		  Values for useOTL
 
@@ -6542,7 +6550,7 @@ class Otl
 	private function _getOTLLangTag($ietf, $available)
 	{
 		// http://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-		// http://www.microsoft.com/typography/otspec/languagetags.htm
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/languagetags
 		// IETF tag = e.g. en-US, und-Arab, sr-Cyrl cf. class LangToFont
 		if ($available == '') {
 			return '';

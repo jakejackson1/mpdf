@@ -1232,7 +1232,7 @@ class TTFontFile
 
 	function _getGDEFtables()
 	{
-		// http://www.microsoft.com/typography/otspec/gdef.htm
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/gdef
 		if (isset($this->tables["GDEF"])) {
 			$gdef_offset = $this->seek_table("GDEF");
 
@@ -1312,7 +1312,7 @@ class TTFontFile
 			  uint16 	PointCount 	Number of attachment points on this glyph
 			  uint16 	PointIndex[PointCount] 	Array of contour point indices -in increasing numerical order
 
-			  See Example 3 - http://www.microsoft.com/typography/otspec/gdef.htm
+			  See Example 3 - https://learn.microsoft.com/en-us/typography/opentype/spec/gdef
 			 */
 
 			// Ligature Caret List
