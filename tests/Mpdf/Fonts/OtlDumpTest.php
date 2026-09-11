@@ -92,6 +92,24 @@ class OtlDumpTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
+	 * WriteHTML refuses HTML longer than pcre.backtrack_limit, and one lookup of one script can
+	 * report far more than that, so the report is handed over in pieces.
+	 */
+	public function testTheReportIsWrittenInPiecesWriteHtmlWillAccept()
+	{
+		$this->dump('NotoSans-Regular', 'latn', 'DFLT');
+
+		$limit = (int) ini_get('pcre.backtrack_limit');
+		$longest = 0;
+		foreach ($this->mpdf->recordedHtml as $html) {
+			$longest = max($longest, strlen($html));
+		}
+
+		$this->assertGreaterThan($limit, array_sum(array_map('strlen', $this->mpdf->recordedHtml)));
+		$this->assertLessThan($limit, $longest);
+	}
+
+	/**
 	 * @return string[] The HTML the report was written in
 	 */
 	private function dump($font, $script, $language)

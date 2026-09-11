@@ -134,6 +134,21 @@ class OtlDump extends TTFontFile
 	private $language;
 
 	/**
+	 * The detail report as it is built, shared by the writer at both levels so that either can hand
+	 * over what has built up so far.
+	 *
+	 * @var string
+	 */
+	private $report = '';
+
+	/**
+	 * How much report to build up before handing it to WriteHTML, a quarter of what it will accept.
+	 *
+	 * @var int
+	 */
+	private $reportChunkBytes = 0;
+
+	/**
 	 * What the summary report's links should carry to reach a detail report of the same font.
 	 *
 	 * The summary lists every script and language system a font offers and links each to its own
@@ -198,6 +213,7 @@ class OtlDump extends TTFontFile
 		$this->script = $script;
 		$this->language = $language;
 		$this->notOffered = [];
+		$this->reportChunkBytes = max(1, (int) ((int) ini_get('pcre.backtrack_limit') / 4));
 		$this->useOTL = $useOTL; // mPDF 5.7.1
 		$this->fontkey = $fontkey; // mPDF 5.7.1
 		$this->filename = $file;
@@ -1776,7 +1792,13 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	{
 		// Process (3) LookupList for specific Script-LangSys
 		// Generate preg_replace
-		$html = '';
+		// Level 1 writes the report, level 2 returns its part of it to the rule that nested the
+		// lookup. Both append to one buffer so that a nested lookup's thousands of rows can be handed
+		// over as they are built, rather than arriving at level 1 as one string too long to write.
+		if ($level == 1) {
+			$this->report = '';
+		}
+		$html = &$this->report;
 		if ($level == 1) {
 			$html .= '<bookmark level="0" content="GSUB features">';
 		}
@@ -1818,6 +1840,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 						if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
 							continue;
 						}
+						$this->flushReport($html);
 						$html .= '<div class="substitution">';
 						$html .= '<span class="unicode">' . $this->formatUni($inputGlyphs[0]) . '&nbsp;</span> ';
 						if ($level == 2 && $exB) {
@@ -1848,6 +1871,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 							if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
 								continue;
 							}
+							$this->flushReport($html);
 							$html .= '<div class="substitution">';
 							$html .= '<span class="unicode">' . $this->formatUni($inputGlyphs[0]) . '&nbsp;</span> ';
 							if ($level == 2 && $exB) {
@@ -1878,6 +1902,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 								if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
 									continue;
 								}
+								$this->flushReport($html);
 								$html .= '<div class="substitution">';
 								$html .= '<span class="unicode">' . $this->formatUni($inputGlyphs[0]) . '&nbsp;</span> ';
 								if ($level == 2 && $exB) {
@@ -1916,6 +1941,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 									if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
 										continue;
 									}
+									$this->flushReport($html);
 									$html .= '<div class="substitution">';
 									$html .= '<span class="unicode">' . $this->formatUniArr($inputGlyphs) . '&nbsp;</span> ';
 									if ($level == 2 && $exB) {
@@ -2457,6 +2483,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 												if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
 													continue;
 												}
+												$this->flushReport($html);
 												$html .= '<div class="substitution">';
 												$html .= '<span class="unicode">' . $this->formatUni($inputGlyphs[0]) . '&nbsp;</span> ';
 												$html .= '<span class="unchanged">&nbsp;' . $this->formatEntity($inputGlyphs[0]) . '</span>';
@@ -2474,12 +2501,14 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 				}
 			}
 			$html .= '</div>';
+			$this->flushReport($html);
 		}
-		if ($level == 1) {
+		if ($level == 1 && $html !== '') {
 			$this->mpdf->WriteHTML($html);
-		} else {
-			return $html;
+			$html = '';
 		}
+
+		return '';
 	}
 
 	//=====================================================================================
@@ -2866,7 +2895,13 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	function _getGPOSarray(&$Lookup, $lul, $scripttag, $level = 1, $lcoverage = '', $exB = '', $exL = '')
 	{
 		// Process (3) LookupList for specific Script-LangSys
-		$html = '';
+		// Level 1 writes the report, level 2 returns its part of it to the rule that nested the
+		// lookup. Both append to one buffer so that a nested lookup's thousands of rows can be handed
+		// over as they are built, rather than arriving at level 1 as one string too long to write.
+		if ($level == 1) {
+			$this->report = '';
+		}
+		$html = &$this->report;
 		if ($level == 1) {
 			$html .= '<bookmark level="0" content="GPOS features">';
 		}
@@ -2922,6 +2957,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 								continue;
 							}
 
+							$this->flushReport($html);
 							$html .= '<div class="substitution">';
 							$html .= '<span class="unicode">' . $this->formatUni($glyphs[$g]) . '&nbsp;</span> ';
 							if ($level == 2 && $exB) {
@@ -2974,6 +3010,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 								}
 								$Value = $Values[$g];
 
+								$this->flushReport($html);
 								$html .= '<div class="substitution">';
 								$html .= '<span class="unicode">' . $this->formatUni($glyphs[$g]) . '&nbsp;</span> ';
 								if ($level == 2 && $exB) {
@@ -3140,6 +3177,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 													continue;
 												}
 
+												$this->flushReport($html);
 												$html .= '<div class="substitution">';
 												$html .= '<span class="unicode">' . $this->formatUni($FirstGlyph) . '&nbsp;</span> ';
 												if ($level == 2 && $exB) {
@@ -3564,12 +3602,14 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 				}
 			}
 			$html .= '</div>';
+			$this->flushReport($html);
 		}
-		if ($level == 1) {
+		if ($level == 1 && $html !== '') {
 			$this->mpdf->WriteHTML($html);
-		} else {
-			return $html;
+			$html = '';
 		}
+
+		return '';
 	}
 
 	//=====================================================================================
@@ -3584,6 +3624,27 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		}
 
 		return $c;
+	}
+
+	/**
+	 * Hand over the report so far if it has built up more than WriteHTML will take.
+	 *
+	 * AdjustHTML refuses HTML longer than pcre.backtrack_limit, and one lookup can report tens of
+	 * thousands of rules - a Latin font's GPOS kern lookup runs to ten megabytes on its own, so
+	 * writing per lookup is not enough. Call this only where the report is between rows, so that
+	 * every piece is whole elements; the enclosing div stays open across the calls, which the rest
+	 * of the report does too - the summary opens a div in one call and closes it in another.
+	 *
+	 * @param string $html The report so far, emptied if it was handed over
+	 */
+	private function flushReport(&$html)
+	{
+		if (strlen($html) < $this->reportChunkBytes) {
+			return;
+		}
+
+		$this->mpdf->WriteHTML($html);
+		$html = '';
 	}
 
 	/**
