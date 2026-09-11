@@ -1569,8 +1569,20 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														$Lookup[$i]['Subtable'][$c]['SubClassSetOffset'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $offset;
 													}
 												}
+											} elseif ($SubstFormat == 3) {
+												// Format 3: Coverage-based Context Glyph Substitution
+												// NB Unlike Lookup Type 6 Format 3, the count of substitutions precedes the Coverage table offsets
+												$Lookup[$i]['Subtable'][$c]['InputGlyphCount'] = $this->read_ushort();
+												$Lookup[$i]['Subtable'][$c]['SubstCount'] = $this->read_ushort();
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['InputGlyphCount']; $b++) {
+													$Lookup[$i]['Subtable'][$c]['CoverageInput'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+												}
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['SubstCount']; $b++) {
+													$Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['SequenceIndex'] = $this->read_ushort();
+													$Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['LookupListIndex'] = $this->read_ushort();
+												}
 											} else {
-												throw new \Mpdf\Exception\FontException("GPOS Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported (ttfontsuni.php).");
+												throw new \Mpdf\Exception\FontException("GSUB Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported.");
 											}
 										}
 									} // LookupType 6: Chaining Contextual Substitution Subtable
@@ -1809,7 +1821,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														$glyphs = $this->_getCoverage();
 														$Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'][] = implode("|", $glyphs);
 													}
-													throw new \Mpdf\Exception\FontException("Lookup Type 5, SubstFormat 3 not tested. Please report this with the name of font used - " . $this->fontkey);
 												}
 											}
 										}
@@ -3006,7 +3017,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 				$endGlyphID = $StartGlyph + $i;
 				$class = $this->read_ushort();
 				for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-					if ($this->glyphToChar[$g][0]) {
+					if (isset($this->glyphToChar[$g][0])) {
 						$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$g][0]);
 					}
 				}
@@ -3019,7 +3030,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 					$endGlyphID = $this->read_ushort();
 					$class = $this->read_ushort();
 					for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-						if ($this->glyphToChar[$g][0]) {
+						if (isset($this->glyphToChar[$g][0])) {
 							$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$g][0]);
 						}
 					}

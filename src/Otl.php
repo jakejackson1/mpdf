@@ -2021,7 +2021,66 @@ class Otl
 			//===========
 			// Format 3: Coverage-based Context Glyph Substitution
 			elseif ($SubstFormat == 3) {
-				throw new \Mpdf\MpdfException("GSUB Lookup Type " . $Type . " Format " . $SubstFormat . " not TESTED YET.");
+				// NB Unlike Lookup Type 6 Format 3, the count of substitutions precedes the Coverage table offsets
+				$InputGlyphCount = $this->read_ushort();
+				$SubstCount = $this->read_ushort();
+				$CoverageInputOffset = [];
+				for ($b = 0; $b < $InputGlyphCount; $b++) {
+					$CoverageInputOffset[] = $subtable_offset + $this->read_ushort(); // in glyph sequence order
+				}
+				$save_pos = $this->_pos; // Save the point just after the Coverage table offsets
+
+				$CoverageInputGlyphs = [];
+				for ($b = 0; $b < $InputGlyphCount; $b++) {
+					$this->seek($CoverageInputOffset[$b]);
+					$glyphs = $this->_getCoverage();
+					$CoverageInputGlyphs[$b] = implode("|", $glyphs);
+				}
+
+				// Type 5 is a plain context: it has no backtrack or lookahead sequence
+				$matched = $this->checkContextMatchMultiple($CoverageInputGlyphs, [], [], $ignore, $ptr);
+				if ($matched) {
+					if ($this->debugOTL) {
+						$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
+					}
+
+					$this->seek($save_pos); // Return to just after the Coverage table offsets
+					$SubstLookupRecord = [];
+					for ($p = 0; $p < $SubstCount; $p++) {
+						// SubstLookupRecord
+						$SubstLookupRecord[$p]['SequenceIndex'] = $this->read_ushort();
+						$SubstLookupRecord[$p]['LookupListIndex'] = $this->read_ushort();
+					}
+					for ($p = 0; $p < $SubstCount; $p++) {
+						// Apply  $SubstLookupRecord[$p]['LookupListIndex']  at   $SubstLookupRecord[$p]['SequenceIndex']
+						if ($SubstLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
+							continue;
+						}
+						$lu = $SubstLookupRecord[$p]['LookupListIndex'];
+						$luType = $this->GSUBLookups[$lu]['Type'];
+						$luFlag = $this->GSUBLookups[$lu]['Flag'];
+						$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
+
+						$luptr = $matched[$SubstLookupRecord[$p]['SequenceIndex']];
+						$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
+						$lucurrGID = $this->OTLdata[$luptr]['uni'];
+
+						foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
+							$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, ($lusubtable_offset - $this->GSUB_offset), $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
+							if ($shift) {
+								break;
+							}
+						}
+					}
+					if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
+						return (isset($shift) ? $shift : 0);
+					} /* OTL_FIX_3 */
+					else {
+						return $InputGlyphCount; // should be + matched ignores in Input Sequence
+					}
+				}
+
+				return 0;
 			}
 		} ////////////////////////////////////////////////////////////////////////////////
 		// LookupType 6: Chaining Contextual Substitution Subtable

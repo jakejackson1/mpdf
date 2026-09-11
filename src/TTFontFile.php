@@ -1793,8 +1793,20 @@ class TTFontFile
 								$Lookup[$i]['Subtable'][$c]['SubClassSetOffset'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $offset;
 							}
 						}
+					} // Format 3: Coverage-based Context Glyph Substitution
+					elseif ($SubstFormat == 3) {
+						// NB Unlike Lookup Type 6 Format 3, the count of substitutions precedes the Coverage table offsets
+						$Lookup[$i]['Subtable'][$c]['InputGlyphCount'] = $this->read_ushort();
+						$Lookup[$i]['Subtable'][$c]['SubstCount'] = $this->read_ushort();
+						for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['InputGlyphCount']; $b++) {
+							$Lookup[$i]['Subtable'][$c]['CoverageInput'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+						}
+						for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['SubstCount']; $b++) {
+							$Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['SequenceIndex'] = $this->read_ushort();
+							$Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['LookupListIndex'] = $this->read_ushort();
+						}
 					} else {
-						throw new \Mpdf\Exception\FontException("GPOS Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported (ttfontsuni.php).");
+						throw new \Mpdf\Exception\FontException("GSUB Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported.");
 					}
 				} // LookupType 6: Chaining Contextual Substitution Subtable
 				elseif ($Lookup[$i]['Type'] == 6) {
@@ -2010,7 +2022,6 @@ class TTFontFile
 							$glyphs = $this->_getCoverage();
 							$Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'][] = implode("|", $glyphs);
 						}
-						throw new \Mpdf\Exception\FontException("Lookup Type 5, SubstFormat 3 not tested. Please report this with the name of font used - " . $this->fontkey);
 					}
 				} // LookupType 6: Chaining Contextual Substitution Subtable
 				elseif ($Lookup[$i]['Type'] == 6) {
@@ -2613,57 +2624,39 @@ class TTFontFile
 						// IgnoreMarks flag set on main Lookup table
 						$ignore = $this->_getGSUBignoreString($Lookup[$i]['Flag'], $Lookup[$i]['MarkFilteringSet']);
 						$inputGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'];
-						$CoverageInputGlyphs = implode('|', $inputGlyphs);
 						$nInput = $Lookup[$i]['Subtable'][$c]['InputGlyphCount'];
 
-						if ($Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']) {
-							$backtrackGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageBacktrackGlyphs'];
-						} else {
-							$backtrackGlyphs = [];
-						}
-
-						// Returns e.g. ¦(FEEB|FEEC)(ignore) ¦(FD12|FD13)(ignore) ¦
-						$backtrackMatch = $this->_makeGSUBbacktrackMatch($backtrackGlyphs, $ignore);
-
-						if ($Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']) {
-							$lookaheadGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'];
-						} else {
-							$lookaheadGlyphs = [];
-						}
-
-						// Returns e.g. ¦(ignore) (FD12|FD13)¦(ignore) (FEEB|FEEC)¦
-						$lookaheadMatch = $this->_makeGSUBlookaheadMatch($lookaheadGlyphs, $ignore);
-
-						$nBsubs = 2 * count($backtrackGlyphs);
-						$nIsubs = (2 * $nInput) - 1;
 						$contextInputMatch = $this->_makeGSUBcontextInputMatch($inputGlyphs, $ignore, [], 0);
-						$subRule = ['context' => 1, 'tag' => $tag, 'matchback' => $backtrackMatch, 'match' => ($contextInputMatch . $lookaheadMatch), 'nBacktrack' => count($backtrackGlyphs), 'nInput' => $nInput, 'nLookahead' => count($lookaheadGlyphs), 'rules' => [],];
+
+						// Type 5 is a plain context: it has no backtrack or lookahead sequence, as Format 1 above
+						$subRule = ['context' => 1, 'tag' => $tag, 'matchback' => '', 'match' => $contextInputMatch, 'nBacktrack' => 0, 'nInput' => $nInput, 'nLookahead' => 0, 'rules' => [],];
 
 						for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['SubstCount']; $b++) {
 							$lup = $Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['LookupListIndex'];
 							$seqIndex = $Lookup[$i]['Subtable'][$c]['SubstLookupRecord'][$b]['SequenceIndex'];
 							for ($lus = 0; $lus < $Lookup[$lup]['SubtableCount']; $lus++) {
-								if (!empty($Lookup[$lup]['Subtable'][$lus]['subs'])) {
-									foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
-										$lookupGlyphs = $luss['Replace'];
-										$mLen = count($lookupGlyphs);
+								if (empty($Lookup[$lup]['Subtable'][$lus]['subs']) || !is_array($Lookup[$lup]['Subtable'][$lus]['subs'])) {
+									continue;
+								}
 
-										// Only apply if the (first) 'Replace' glyph from the
-										// Lookup list is in the [inputGlyphs] at ['SequenceIndex']
-										// then apply the substitution
-										if (strpos($inputGlyphs[$seqIndex], $lookupGlyphs[0]) === false) {
-											continue;
-										}
+								foreach ($Lookup[$lup]['Subtable'][$lus]['subs'] as $luss) {
+									$lookupGlyphs = $luss['Replace'];
 
-										// Returns e.g. ¦(0612)¦(ignore) (0613)¦(ignore) (0614)¦
-										$contextInputMatch = $this->_makeGSUBcontextInputMatch($inputGlyphs, $ignore, $lookupGlyphs, $seqIndex);
-										$REPL = implode(" ", $luss['substitute']);
+									// Only apply if the (first) 'Replace' glyph from the
+									// Lookup list is in the [inputGlyphs] at ['SequenceIndex']
+									// then apply the substitution
+									if (strpos($inputGlyphs[$seqIndex], $lookupGlyphs[0]) === false) {
+										continue;
+									}
 
-										if (strpos("isol fina fin2 fin3 medi med2 init ", $tag) !== false && $scripttag == 'arab') {
-											$volt[] = ['match' => $lookupGlyphs[0], 'replace' => $REPL, 'tag' => $tag, 'prel' => $backtrackGlyphs, 'postl' => $lookaheadGlyphs, 'ignore' => $ignore];
-										} else {
-											$subRule['rules'][] = ['type' => $Lookup[$lup]['Type'], 'match' => $lookupGlyphs, 'replace' => $luss['substitute'], 'seqIndex' => $seqIndex, 'key' => $lookupGlyphs[0],];
-										}
+									// Returns e.g. ¦(0612)¦(ignore) (0613)¦(ignore) (0614)¦
+									$contextInputMatch = $this->_makeGSUBcontextInputMatch($inputGlyphs, $ignore, $lookupGlyphs, $seqIndex);
+									$REPL = implode(" ", $luss['substitute']);
+
+									if (strpos("isol fina fin2 fin3 medi med2 init ", $tag) !== false && $scripttag == 'arab') {
+										$volt[] = ['match' => $lookupGlyphs[0], 'replace' => $REPL, 'tag' => $tag, 'prel' => [], 'postl' => [], 'ignore' => $ignore];
+									} else {
+										$subRule['rules'][] = ['type' => $Lookup[$lup]['Type'], 'match' => $lookupGlyphs, 'replace' => $luss['substitute'], 'seqIndex' => $seqIndex, 'key' => $lookupGlyphs[0],];
 									}
 								}
 							}
@@ -3316,7 +3309,7 @@ class TTFontFile
 				$endGlyphID = $this->read_ushort();
 				$class = $this->read_ushort();
 				for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-					if ($this->glyphToChar[$g][0]) {
+					if (isset($this->glyphToChar[$g][0])) {
 						$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$g][0]);
 					}
 				}
