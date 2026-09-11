@@ -1639,7 +1639,30 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 												}
 											}
 										} else {
-											throw new \Mpdf\Exception\FontException("Lookup Type " . $Lookup[$i]['Type'] . " not supported.");
+											// LookupType 8: Reverse Chaining Contextual Single Substitution Subtable
+											if ($Lookup[$i]['Type'] == 8) {
+												// Format 1 is the only one the specification defines
+												if ($SubstFormat != 1) {
+													throw new \Mpdf\Exception\FontException("GSUB Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported.");
+												}
+												$Lookup[$i]['Subtable'][$c]['CoverageTableOffset'] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+												$Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount'] = $this->read_ushort();
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']; $b++) {
+													$Lookup[$i]['Subtable'][$c]['CoverageBacktrack'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+												}
+												$Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount'] = $this->read_ushort();
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']; $b++) {
+													$Lookup[$i]['Subtable'][$c]['CoverageLookahead'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+												}
+												// One substitute glyph per glyph in the Coverage table - the substitution is written into the
+												// subtable itself rather than delegated to a Lookup, as every other contextual type does
+												$Lookup[$i]['Subtable'][$c]['GlyphCount'] = $this->read_ushort();
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['GlyphCount']; $b++) {
+													$Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][] = $this->read_ushort();
+												}
+											} else {
+												throw new \Mpdf\Exception\FontException("Lookup Type " . $Lookup[$i]['Type'] . " not supported.");
+											}
 										}
 									}
 								}
@@ -1947,6 +1970,41 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 															$Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'][] = implode("|", $glyphs);
 														}
 													}
+												}
+											}
+										} else {
+											// LookupType 8: Reverse Chaining Contextual Single Substitution 1 => 1
+											if ($Lookup[$i]['Type'] == 8) {
+												$this->seek($Lookup[$i]['Subtable'][$c]['CoverageTableOffset']);
+												$glyphs = $this->_getCoverage();
+												$Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'] = [implode("|", $glyphs)];
+												for ($g = 0; $g < count($glyphs); $g++) {
+													$replace = [];
+													$substitute = [];
+													$replace[] = $glyphs[$g];
+													// Flag = Ignore
+													if ($this->_checkGSUBignore($Lookup[$i]['Flag'], $replace[0], $Lookup[$i]['MarkFilteringSet'])) {
+														continue;
+													}
+													if (!isset($Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][$g])) {
+														continue;
+													} // The substitutes must run parallel to the Coverage table; either an error in the font, or something has gone wrong
+													$gid = $Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][$g];
+													if (!isset($this->glyphToChar[$gid][0])) {
+														continue;
+													}
+													$substitute[] = unicode_hex($this->glyphToChar[$gid][0]);
+													$Lookup[$i]['Subtable'][$c]['subs'][] = ['Replace' => $replace, 'substitute' => $substitute];
+												}
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']; $b++) {
+													$this->seek($Lookup[$i]['Subtable'][$c]['CoverageBacktrack'][$b]);
+													$glyphs = $this->_getCoverage();
+													$Lookup[$i]['Subtable'][$c]['CoverageBacktrackGlyphs'][] = implode("|", $glyphs);
+												}
+												for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']; $b++) {
+													$this->seek($Lookup[$i]['Subtable'][$c]['CoverageLookahead'][$b]);
+													$glyphs = $this->_getCoverage();
+													$Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'][] = implode("|", $glyphs);
 												}
 											}
 										}
@@ -2676,6 +2734,25 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														$html .= $this->_getGSUBarray($Lookup, $lul2, $scripttag, 2, $inputGlyphs[$seqIndex], $exB, $exL);
 													}
 												}
+											}
+										}
+									} else {
+										// LookupType 8: Reverse Chaining Contextual Single Substitution Subtable
+										if ($Lookup[$i]['Type'] == 8 && !empty($Lookup[$i]['Subtable'][$c]['subs'])) {
+											$html .= '<div class="lookuptype">LookupType 8: Reverse Chaining Contextual Single Substitution Subtable</div>';
+											foreach ($Lookup[$i]['Subtable'][$c]['subs'] as $luss) {
+												$inputGlyphs = $luss['Replace'];
+												$substitute = $luss['substitute'][0];
+												if ($level == 2 && strpos($coverage, $inputGlyphs[0]) === false) {
+													continue;
+												}
+												$html .= '<div class="substitution">';
+												$html .= '<span class="unicode">' . $this->formatUni($inputGlyphs[0]) . '&nbsp;</span> ';
+												$html .= '<span class="unchanged">&nbsp;' . $this->formatEntity($inputGlyphs[0]) . '</span>';
+												$html .= '&nbsp; &raquo; &raquo; &nbsp;';
+												$html .= '<span class="changed">&nbsp;' . $this->formatEntity($substitute) . '</span>';
+												$html .= '&nbsp; <span class="unicode">' . $this->formatUni($substitute) . '</span> ';
+												$html .= '</div>';
 											}
 										}
 									}

@@ -1306,6 +1306,10 @@ class Otl
 			if (preg_match('/' . $tag . '([0-9]{1,2})/', $usetags, $m)) {
 				$tagInt = $m[1];
 			}
+			if ($Type == 8) {
+				$this->_applyGSUBreverseLookup($lu, $Flag, $MarkFilteringSet, $tag, $tagInt);
+				continue;
+			}
 			$ptr = 0;
 			// Test each glyph sequentially
 			while ($ptr < (count($this->OTLdata))) { // whilst there is another glyph ..0064
@@ -1337,13 +1341,36 @@ class Otl
 
 		$GSUBFeatures = $this->mpdf->CurrentFont['GSUBFeatures'][$scriptTag][$langsys];
 
+		// A reverse Lookup runs the other way down the glyphs, so it cannot share the cursor the rest
+		// of the list walks forward. Taking each over the whole run up front costs nothing here: this
+		// method already abandons Lookup order, applying every Lookup at each glyph before it moves on.
+		$reverse = [];
+		foreach ($GSUBFeatures as $tag => $arr) {
+			if (strpos($usetags, $tag) === false) {
+				continue;
+			}
+			foreach ($arr as $lu) {
+				if ($this->GSUBLookups[$lu]['Type'] != 8) {
+					continue;
+				}
+				$tagInt = 1;
+				if (preg_match('/' . $tag . '([0-9]{1,2})/', $usetags, $m)) {
+					$tagInt = $m[1];
+				}
+				$reverse[$lu] = true;
+				$this->_applyGSUBreverseLookup($lu, $this->GSUBLookups[$lu]['Flag'], $this->GSUBLookups[$lu]['MarkFilteringSet'], $tag, $tagInt);
+			}
+		}
+
 		$tags = explode(' ', $usetags);
 		foreach ($tags as $usetag) {
 			$LookupList = [];
 			foreach ($GSUBFeatures as $tag => $arr) {
 				if (strpos($usetags, $tag) !== false) {
 					foreach ($arr as $lu) {
-						$LookupList[$lu] = $tag;
+						if (!isset($reverse[$lu])) {
+							$LookupList[$lu] = $tag;
+						}
 					}
 				}
 			}
@@ -1414,6 +1441,10 @@ class Otl
 				if (preg_match('/' . $tag . '([0-9]{1,2})/', $usetags, $m)) {
 					$tagInt = $m[1];
 				}
+				if ($Type == 8) {
+					$this->_applyGSUBreverseLookup($lu, $Flag, $MarkFilteringSet, $usetag, $tagInt);
+					continue;
+				}
 
 				$ptr = 0;
 				// Test each glyph sequentially
@@ -1462,6 +1493,7 @@ class Otl
 				}
 			}
 			ksort($LookupList);
+			$mask = $this->_getIndicFeatureMask($usetag);
 
 			foreach ($LookupList as $lu => $tag) {
 				$Type = $this->GSUBLookups[$lu]['Type'];
@@ -1470,6 +1502,10 @@ class Otl
 				$tagInt = 1;
 				if (preg_match('/' . $tag . '([0-9]{1,2})/', $usetags, $m)) {
 					$tagInt = $m[1];
+				}
+				if ($Type == 8) {
+					$this->_applyGSUBreverseLookup($lu, $Flag, $MarkFilteringSet, $usetag, $tagInt, $mask);
+					continue;
 				}
 
 				$ptr = 0;
@@ -1481,34 +1517,8 @@ class Otl
 					foreach ($this->GSUBLookups[$lu]['Subtables'] as $c => $subtable_offset) {
 						// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
 						if (isset($this->GSLuCoverage[$lu][$c][$currGID])) {
-							if (strpos('rphf pref blwf half pstf cfar init', $usetag) !== false) { // only apply when mask indicates
-								$mask = 0;
-								switch ($usetag) {
-									case 'rphf':
-										$mask = (1 << (Indic::RPHF));
-										break;
-									case 'pref':
-										$mask = (1 << (Indic::PREF));
-										break;
-									case 'blwf':
-										$mask = (1 << (Indic::BLWF));
-										break;
-									case 'half':
-										$mask = (1 << (Indic::HALF));
-										break;
-									case 'pstf':
-										$mask = (1 << (Indic::PSTF));
-										break;
-									case 'cfar':
-										$mask = (1 << (Indic::CFAR));
-										break;
-									case 'init':
-										$mask = (1 << (Indic::INIT));
-										break;
-								}
-								if (!($this->OTLdata[$ptr]['mask'] & $mask)) {
-									continue;
-								}
+							if ($mask && !($this->OTLdata[$ptr]['mask'] & $mask)) { // only apply when mask indicates
+								continue;
 							}
 							// Get rules from font GSUB subtable
 							$shift = $this->_applyGSUBsubtable($lu, $c, $ptr, $currGlyph, $currGID, ($subtable_offset - $this->GSUB_offset), $Type, $Flag, $MarkFilteringSet, $this->GSLuCoverage[$lu][$c], 0, $usetag, $is_old_spec, $tagInt);
@@ -1525,18 +1535,6 @@ class Otl
 						elseif (static::_OTL_OLD_SPEC_COMPAT_1 && $Type == 4 && !$is_old_spec && strpos('0094D 009CD 00A4D 00ACD 00B4D 00BCD 00C4D 00CCD 00D4D', $currGlyph) !== false) {
 							// only apply when 'pref blwf pstf' tags, and when mask indicates
 							if (strpos('pref blwf pstf', $usetag) !== false) {
-								$mask = 0;
-								switch ($usetag) {
-									case 'pref':
-										$mask = (1 << (Indic::PREF));
-										break;
-									case 'blwf':
-										$mask = (1 << (Indic::BLWF));
-										break;
-									case 'pstf':
-										$mask = (1 << (Indic::PSTF));
-										break;
-								}
 								if (!($this->OTLdata[$ptr]['mask'] & $mask)) {
 									continue;
 								}
@@ -1565,6 +1563,55 @@ class Otl
 				}
 			}
 		}
+	}
+
+	/**
+	 * Take a Lookup over the glyphs from the last one back to the first.
+	 *
+	 * Type 8, reverse chaining contextual single substitution, is the only Lookup applied in
+	 * reverse order: each match reads a lookahead that has already been substituted and a backtrack
+	 * that has not. It replaces exactly one glyph, so the cursor always steps by one.
+	 */
+	private function _applyGSUBreverseLookup($lu, $Flag, $MarkFilteringSet, $tag, $tagInt, $mask = 0)
+	{
+		$subtables = $this->GSUBLookups[$lu]['Subtables'];
+		$coverage = $this->GSLuCoverage[$lu];
+
+		for ($ptr = count($this->OTLdata) - 1; $ptr >= 0; $ptr--) {
+			if ($mask && !($this->OTLdata[$ptr]['mask'] & $mask)) { // only apply when mask indicates
+				continue;
+			}
+			$currGlyph = $this->OTLdata[$ptr]['hex'];
+			$currGID = $this->OTLdata[$ptr]['uni'];
+			foreach ($subtables as $c => $subtable_offset) {
+				if (!isset($coverage[$c][$currGID])) {
+					continue;
+				}
+				// Get rules from font GSUB subtable
+				if ($this->_applyGSUBsubtable($lu, $c, $ptr, $currGlyph, $currGID, ($subtable_offset - $this->GSUB_offset), 8, $Flag, $MarkFilteringSet, $coverage[$c], 0, $tag, 0, $tagInt)) {
+					break;
+				}
+			}
+		}
+	}
+
+	/**
+	 * The bit an Indic feature tag sets on the glyphs it may be applied to. Tags that apply to
+	 * every glyph in the syllable have no bit of their own, and return 0.
+	 */
+	private function _getIndicFeatureMask($usetag)
+	{
+		$masks = [
+			'rphf' => Indic::RPHF,
+			'pref' => Indic::PREF,
+			'blwf' => Indic::BLWF,
+			'half' => Indic::HALF,
+			'pstf' => Indic::PSTF,
+			'cfar' => Indic::CFAR,
+			'init' => Indic::INIT,
+		];
+
+		return isset($masks[$usetag]) ? Indic::FLAG($masks[$usetag]) : 0;
 	}
 
 	function _applyGSUBsubtableSpecial($lookupID, $subtable, $ptr, $currGlyph, $currGID, $nextGlyph, $nextGID, $subtable_offset, $Type, $LuCoverage)
@@ -2424,6 +2471,69 @@ class Otl
 
 				return 0;
 			}
+		} ////////////////////////////////////////////////////////////////////////////////
+		// LookupType 8: Reverse Chaining Contextual Single Substitution Subtable : 1 to 1
+		////////////////////////////////////////////////////////////////////////////////
+		elseif ($Type == 8) {
+			// Flag = Ignore
+			if ($this->_checkGCOMignore($Flag, $currGlyph, $MarkFilteringSet)) {
+				return 0;
+			}
+			//===========
+			// Format 1:
+			//===========
+			// Format 1 is the only one the specification defines
+			if ($SubstFormat != 1) {
+				throw new \Mpdf\MpdfException("GSUB Lookup Type " . $Type . ", Format " . $SubstFormat . " not supported.");
+			}
+
+			$CoverageTableOffset = $subtable_offset + $this->read_ushort();
+			$BacktrackGlyphCount = $this->read_ushort();
+			$CoverageBacktrackOffset = [];
+			for ($b = 0; $b < $BacktrackGlyphCount; $b++) {
+				$CoverageBacktrackOffset[] = $subtable_offset + $this->read_ushort(); // in glyph sequence order
+			}
+			$LookaheadGlyphCount = $this->read_ushort();
+			$CoverageLookaheadOffset = [];
+			for ($b = 0; $b < $LookaheadGlyphCount; $b++) {
+				$CoverageLookaheadOffset[] = $subtable_offset + $this->read_ushort(); // in glyph sequence order
+			}
+			// The substitute glyphs run parallel to the input Coverage table
+			$GlyphCount = $this->read_ushort();
+			$save_pos = $this->_pos; // Save the point just after GlyphCount
+			$GlyphPos = $LuCoverage[$currGID];
+			if ($GlyphPos >= $GlyphCount) {
+				return 0;
+			}
+
+			$CoverageBacktrackGlyphs = [];
+			for ($b = 0; $b < $BacktrackGlyphCount; $b++) {
+				$this->seek($CoverageBacktrackOffset[$b]);
+				$glyphs = $this->_getCoverage();
+				$CoverageBacktrackGlyphs[$b] = implode("|", $glyphs);
+			}
+			$CoverageLookaheadGlyphs = [];
+			for ($b = 0; $b < $LookaheadGlyphCount; $b++) {
+				$this->seek($CoverageLookaheadOffset[$b]);
+				$glyphs = $this->_getCoverage();
+				$CoverageLookaheadGlyphs[$b] = implode("|", $glyphs);
+			}
+
+			// The input sequence is the one glyph at $ptr, which the caller has already matched against
+			// the input Coverage table, so only the backtrack and lookahead sequences are left to check
+			if (!$this->checkContextMatchMultiple([$currGlyph], $CoverageBacktrackGlyphs, $CoverageLookaheadGlyphs, $ignore, $ptr)) {
+				return 0;
+			}
+
+			$this->seek($save_pos + (2 * $GlyphPos));
+			$substitute = $this->glyphToChar($this->read_ushort());
+
+			$shift = $this->GSUBsubstitute($ptr, $substitute, $Type);
+			if ($this->debugOTL && $shift) {
+				$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
+			}
+
+			return $shift;
 		} else {
 			throw new \Mpdf\MpdfException("GSUB Lookup Type " . $Type . " not supported.");
 		}
@@ -2486,7 +2596,8 @@ class Otl
 
 		// LookupType 1: Simple Substitution Subtable : 1 to 1
 		// LookupType 3: Alternate Forms : 1 to 1(n)
-		if ($Type == 1 || $Type == 3) {
+		// LookupType 8: Reverse Chaining Contextual Single Substitution : 1 to 1
+		if ($Type == 1 || $Type == 3 || $Type == 8) {
 			$this->OTLdata[$pos]['uni'] = $substitute;
 			$this->OTLdata[$pos]['hex'] = $this->unicode_hex($substitute);
 			return 1;
@@ -3850,8 +3961,58 @@ class Otl
 			//===========
 			// Format 1:
 			//===========
+			// Format 1: Simple Context Glyph Positioning
 			if ($PosFormat == 1) {
-				throw new \Mpdf\MpdfException("GPOS Lookup Type " . $Type . " Format " . $PosFormat . " not TESTED YET.");
+				$CoverageTableOffset = $subtable_offset + $this->read_ushort();
+				$PosRuleSetCount = $this->read_ushort();
+
+				// PosRuleSet tables: All contexts beginning with the same glyph
+				// Select the PosRuleSet required using the position of the glyph in the coverage table
+				$GlyphPos = $LuCoverage[$currGID];
+				$this->skip($GlyphPos * 2);
+				$offset = $this->read_ushort();
+				if ($offset == 0x0000) {
+					return 0; // No context begins with this glyph
+				}
+
+				$PosRuleSet = $subtable_offset + $offset;
+				$this->seek($PosRuleSet);
+				$PosRuleCnt = $this->read_ushort();
+				$PosRule = [];
+				for ($b = 0; $b < $PosRuleCnt; $b++) {
+					$PosRule[$b] = $PosRuleSet + $this->read_ushort();
+				}
+
+				for ($b = 0; $b < $PosRuleCnt; $b++) {  // EACH RULE
+					$this->seek($PosRule[$b]);
+					$InputGlyphCount = $this->read_ushort();
+					$PosCount = $this->read_ushort();
+
+					$Input = [];
+					$Input[0] = $this->OTLdata[$ptr]['uni'];
+					for ($r = 1; $r < $InputGlyphCount; $r++) {
+						$gid = $this->read_ushort();
+						$Input[$r] = $this->glyphToChar($gid);
+					}
+
+					// Type 7 is a plain context: it has no backtrack or lookahead sequence
+					$matched = $this->checkContextMatch($Input, [], [], $ignore, $ptr);
+					if ($matched) {
+						$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+						if ($this->debugOTL && $shift) {
+							$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
+						}
+
+						if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
+							return $shift;
+						} /* OTL_FIX_3 */
+						else {
+							return $InputGlyphCount; // should be + matched ignores in Input Sequence
+						}
+					}
+				}
+
+				return 0;
 			} //===========
 			// Format 2:
 			//===========
@@ -3966,7 +4127,40 @@ class Otl
 			// Format 3:
 			//===========
 			elseif ($PosFormat == 3) {
-				throw new \Mpdf\MpdfException("GPOS Lookup Type " . $Type . " Format " . $PosFormat . " not TESTED YET.");
+				// NB Unlike Lookup Type 8 Format 3, the count of positionings precedes the Coverage table offsets
+				$InputGlyphCount = $this->read_ushort();
+				$PosCount = $this->read_ushort();
+				$CoverageInputOffset = [];
+				for ($b = 0; $b < $InputGlyphCount; $b++) {
+					$CoverageInputOffset[] = $subtable_offset + $this->read_ushort(); // in glyph sequence order
+				}
+				$save_pos = $this->_pos; // Save the point just after the Coverage table offsets
+
+				$CoverageInputGlyphs = [];
+				for ($b = 0; $b < $InputGlyphCount; $b++) {
+					$this->seek($CoverageInputOffset[$b]);
+					$glyphs = $this->_getCoverage();
+					$CoverageInputGlyphs[$b] = implode("|", $glyphs);
+				}
+
+				// Type 7 is a plain context: it has no backtrack or lookahead sequence
+				$matched = $this->checkContextMatchMultiple($CoverageInputGlyphs, [], [], $ignore, $ptr);
+				if ($matched) {
+					$this->seek($save_pos); // Return to just after the Coverage table offsets
+					$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+					if ($this->debugOTL && $shift) {
+						$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
+					}
+
+					if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
+						return $shift;
+					} /* OTL_FIX_3 */
+					else {
+						return $InputGlyphCount; // should be + matched ignores in Input Sequence
+					}
+				}
+
+				return 0;
 			} else {
 				throw new \Mpdf\MpdfException("GPOS Lookup Type " . $Type . ", Format " . $PosFormat . " not supported.");
 			}
@@ -3977,8 +4171,67 @@ class Otl
 			//===========
 			// Format 1:
 			//===========
+			// Format 1: Simple Chaining Context Glyph Positioning
 			if ($PosFormat == 1) {
-				throw new \Mpdf\MpdfException("GPOS Lookup Type " . $Type . " Format " . $PosFormat . " not TESTED YET.");
+				$CoverageTableOffset = $subtable_offset + $this->read_ushort();
+				$ChainPosRuleSetCount = $this->read_ushort();
+
+				// All of the ChainPosRule tables defining contexts that begin with the same first glyph are grouped together in a ChainPosRuleSet table
+				$GlyphPos = $LuCoverage[$currGID];
+				$this->skip($GlyphPos * 2);
+				$offset = $this->read_ushort();
+				if ($offset == 0x0000) {
+					return 0; // No context begins with this glyph
+				}
+
+				$ChainPosRuleSet = $subtable_offset + $offset;
+				$this->seek($ChainPosRuleSet);
+				$ChainPosRuleCount = $this->read_ushort();
+				$ChainPosRule = [];
+				for ($s = 0; $s < $ChainPosRuleCount; $s++) {
+					$ChainPosRule[$s] = $ChainPosRuleSet + $this->read_ushort();
+				}
+
+				for ($s = 0; $s < $ChainPosRuleCount; $s++) {  // EACH RULE
+					$this->seek($ChainPosRule[$s]);
+
+					$BacktrackGlyphCount = $this->read_ushort();
+					$Backtrack = [];
+					for ($b = 0; $b < $BacktrackGlyphCount; $b++) {
+						$gid = $this->read_ushort();
+						$Backtrack[] = $this->glyphToChar($gid);
+					}
+					$Input = [];
+					$Input[0] = $this->OTLdata[$ptr]['uni'];
+					$InputGlyphCount = $this->read_ushort();
+					for ($b = 1; $b < $InputGlyphCount; $b++) {
+						$gid = $this->read_ushort();
+						$Input[$b] = $this->glyphToChar($gid);
+					}
+					$LookaheadGlyphCount = $this->read_ushort();
+					$Lookahead = [];
+					for ($b = 0; $b < $LookaheadGlyphCount; $b++) {
+						$gid = $this->read_ushort();
+						$Lookahead[] = $this->glyphToChar($gid);
+					}
+
+					$matched = $this->checkContextMatch($Input, $Backtrack, $Lookahead, $ignore, $ptr);
+					if ($matched) {
+						$PosCount = $this->read_ushort();
+						$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+						if ($this->debugOTL && $shift) {
+							$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
+						}
+
+						if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
+							return $shift;
+						} /* OTL_FIX_3 */
+						else {
+							return $InputGlyphCount; // should be + matched ignores in Input Sequence
+						}
+					}
+				}
+
 				return 0;
 			} //===========
 			// Format 2:
@@ -4227,6 +4480,51 @@ class Otl
 		} else {
 			throw new \Mpdf\MpdfException("GPOS Lookup Type " . $Type . " not supported.");
 		}
+	}
+
+	/**
+	 * Apply the lookups a matched GPOS context asks for, at the positions the match found.
+	 *
+	 * Every contextual and chaining format ends with the same array of PosLookupRecords, read from
+	 * the current position, each pairing an index into the matched input sequence with the lookup
+	 * to run at it.
+	 */
+	private function _applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec)
+	{
+		$PosLookupRecord = [];
+		for ($p = 0; $p < $PosCount; $p++) { // EACH LOOKUP
+			$PosLookupRecord[$p]['SequenceIndex'] = $this->read_ushort();
+			$PosLookupRecord[$p]['LookupListIndex'] = $this->read_ushort();
+		}
+
+		$shift = 0;
+		for ($p = 0; $p < $PosCount; $p++) {
+			// Apply  $PosLookupRecord[$p]['LookupListIndex']  at   $PosLookupRecord[$p]['SequenceIndex']
+			if ($PosLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
+				continue;
+			}
+			$lu = $PosLookupRecord[$p]['LookupListIndex'];
+			$luType = $this->GPOSLookups[$lu]['Type'];
+			$luFlag = $this->GPOSLookups[$lu]['Flag'];
+			if (isset($this->GPOSLookups[$lu]['MarkFilteringSet'])) {
+				$luMarkFilteringSet = $this->GPOSLookups[$lu]['MarkFilteringSet'];
+			} else {
+				$luMarkFilteringSet = '';
+			}
+
+			$luptr = $matched[$PosLookupRecord[$p]['SequenceIndex']];
+			$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
+			$lucurrGID = $this->OTLdata[$luptr]['uni'];
+
+			foreach ($this->GPOSLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
+				$shift = $this->_applyGPOSsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, ($lusubtable_offset - $this->GPOS_offset + $this->GSUB_length), $luType, $luFlag, $luMarkFilteringSet, $this->LuCoverage[$lu][$luc], $tag, 1, $is_old_spec);
+				if ($shift) {
+					break;
+				}
+			}
+		}
+
+		return $shift;
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////

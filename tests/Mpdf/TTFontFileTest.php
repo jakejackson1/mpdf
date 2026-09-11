@@ -60,6 +60,17 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
+	 * A reverse chaining Lookup is read at metrics time like any other, so a font carrying one has to
+	 * get through getMetrics() before its glyphs can ever be shaped
+	 */
+	public function testGetMetricsWithAReverseChainingLookup()
+	{
+		$this->ttf->getMetrics(__DIR__ . '/../data/ttf/NotoSansCoptic-GSUB81-Subset.ttf', (string) time(), 0, false, false, 0xFF);
+
+		$this->assertSame('NotoSansCoptic-Regular', $this->ttf->fullName);
+	}
+
+	/**
 	 * MarkGlyphSetsDef coverage offsets are relative to that table, not to the file. Seeking to them as
 	 * absolute offsets lands in the table directory and yields empty sets, which silently disables every
 	 * UseMarkFilteringSet lookup. U+0DCA/U+0DD2/U+0DD3 are the subset's Sinhala marks; the second set's

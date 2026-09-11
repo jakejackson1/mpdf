@@ -1857,6 +1857,27 @@ class TTFontFile
 							// glyph position specified by the SequenceIndex.
 						}
 					}
+				} // LookupType 8: Reverse Chaining Contextual Single Substitution Subtable
+				elseif ($Lookup[$i]['Type'] == 8) {
+					// Format 1 is the only one the specification defines
+					if ($SubstFormat != 1) {
+						throw new \Mpdf\Exception\FontException("GSUB Lookup Type " . $Lookup[$i]['Type'] . ", Format " . $SubstFormat . " not supported.");
+					}
+					$Lookup[$i]['Subtable'][$c]['CoverageTableOffset'] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+					$Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount'] = $this->read_ushort();
+					for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']; $b++) {
+						$Lookup[$i]['Subtable'][$c]['CoverageBacktrack'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+					}
+					$Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount'] = $this->read_ushort();
+					for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']; $b++) {
+						$Lookup[$i]['Subtable'][$c]['CoverageLookahead'][] = $Lookup[$i]['Subtable'][$c]['Offset'] + $this->read_ushort();
+					}
+					// One substitute glyph per glyph in the Coverage table - the substitution is written into the
+					// subtable itself rather than delegated to a Lookup, as every other contextual type does
+					$Lookup[$i]['Subtable'][$c]['GlyphCount'] = $this->read_ushort();
+					for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['GlyphCount']; $b++) {
+						$Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][] = $this->read_ushort();
+					}
 				} else {
 					throw new \Mpdf\Exception\FontException(sprintf('Lookup Type "%s" not supported.', $Lookup[$i]['Type']));
 				}
@@ -2146,6 +2167,39 @@ class TTFontFile
 							$glyphs = $this->_getCoverage();
 							$Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'][] = implode("|", $glyphs);
 						}
+					}
+				} // LookupType 8: Reverse Chaining Contextual Single Substitution 1 => 1
+				elseif ($Lookup[$i]['Type'] == 8) {
+					$this->seek($Lookup[$i]['Subtable'][$c]['CoverageTableOffset']);
+					$glyphs = $this->_getCoverage();
+					$Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'] = [implode("|", $glyphs)];
+					for ($g = 0; $g < count($glyphs); $g++) {
+						$replace = [];
+						$substitute = [];
+						$replace[] = $glyphs[$g];
+						// Flag = Ignore
+						if ($this->_checkGSUBignore($Lookup[$i]['Flag'], $replace[0], $Lookup[$i]['MarkFilteringSet'])) {
+							continue;
+						}
+						if (!isset($Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][$g])) {
+							continue;
+						} // The substitutes must run parallel to the Coverage table; either an error in the font, or something has gone wrong
+						$gid = $Lookup[$i]['Subtable'][$c]['SubstituteGlyphID'][$g];
+						if (!isset($this->glyphToChar[$gid][0])) {
+							continue;
+						}
+						$substitute[] = unicode_hex($this->glyphToChar[$gid][0]);
+						$Lookup[$i]['Subtable'][$c]['subs'][] = ['Replace' => $replace, 'substitute' => $substitute];
+					}
+					for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']; $b++) {
+						$this->seek($Lookup[$i]['Subtable'][$c]['CoverageBacktrack'][$b]);
+						$glyphs = $this->_getCoverage();
+						$Lookup[$i]['Subtable'][$c]['CoverageBacktrackGlyphs'][] = implode("|", $glyphs);
+					}
+					for ($b = 0; $b < $Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']; $b++) {
+						$this->seek($Lookup[$i]['Subtable'][$c]['CoverageLookahead'][$b]);
+						$glyphs = $this->_getCoverage();
+						$Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'][] = implode("|", $glyphs);
 					}
 				}
 			}
@@ -2926,6 +2980,47 @@ class TTFontFile
 							$volt[] = $subRule;
 						}
 					}
+				} // LookupType 8: Reverse Chaining Contextual Single Substitution Subtable
+				elseif ($Lookup[$i]['Type'] == 8) {
+					if (empty($Lookup[$i]['Subtable'][$c]['subs'])) {
+						continue; // every entry was filtered out by the Ignore flags
+					}
+
+					// IgnoreMarks flag set on main Lookup table
+					$ignore = $this->_getGSUBignoreString($Lookup[$i]['Flag'], $Lookup[$i]['MarkFilteringSet']);
+					$inputGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageInputGlyphs'];
+
+					if ($Lookup[$i]['Subtable'][$c]['BacktrackGlyphCount']) {
+						$backtrackGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageBacktrackGlyphs'];
+					} else {
+						$backtrackGlyphs = [];
+					}
+					// Returns e.g. ¦(FEEB|FEEC)(ignore) ¦(FD12|FD13)(ignore) ¦
+					$backtrackMatch = $this->_makeGSUBbacktrackMatch($backtrackGlyphs, $ignore);
+
+					if ($Lookup[$i]['Subtable'][$c]['LookaheadGlyphCount']) {
+						$lookaheadGlyphs = $Lookup[$i]['Subtable'][$c]['CoverageLookaheadGlyphs'];
+					} else {
+						$lookaheadGlyphs = [];
+					}
+					// Returns e.g. ¦(ignore) (FD12|FD13)¦(ignore) (FEEB|FEEC)¦
+					$lookaheadMatch = $this->_makeGSUBlookaheadMatch($lookaheadGlyphs, $ignore);
+
+					// Type 8 replaces exactly one glyph, so the input sequence is always a single Coverage table
+					$contextInputMatch = $this->_makeGSUBcontextInputMatch($inputGlyphs, $ignore, [], 0);
+					$subRule = ['context' => 1, 'tag' => $tag, 'matchback' => $backtrackMatch, 'match' => ($contextInputMatch . $lookaheadMatch), 'nBacktrack' => count($backtrackGlyphs), 'nInput' => 1, 'nLookahead' => count($lookaheadGlyphs), 'rules' => [],];
+
+					foreach ($Lookup[$i]['Subtable'][$c]['subs'] as $luss) {
+						if (strpos("isol fina fin2 fin3 medi med2 init ", $tag) !== false && $scripttag == 'arab') {
+							$volt[] = ['match' => $luss['Replace'][0], 'replace' => implode(" ", $luss['substitute']), 'tag' => $tag, 'prel' => $backtrackGlyphs, 'postl' => $lookaheadGlyphs, 'ignore' => $ignore];
+						} else {
+							$subRule['rules'][] = ['type' => 1, 'match' => $luss['Replace'], 'replace' => $luss['substitute'], 'seqIndex' => 0, 'key' => $luss['Replace'][0],];
+						}
+					}
+
+					if (count($subRule['rules'])) {
+						$volt[] = $subRule;
+					}
 				}
 			}
 		}
@@ -3250,7 +3345,9 @@ class TTFontFile
 			$CoverageGlyphCount = $this->read_ushort();
 			for ($gid = 0; $gid < $CoverageGlyphCount; $gid++) {
 				$glyphID = $this->read_ushort();
-				$uni = $this->glyphToChar[$glyphID][0];
+				// A Coverage table may name a glyph no character reaches, and the position of every
+				// glyph after it in the table still has to line up with the rules that index it
+				$uni = isset($this->glyphToChar[$glyphID][0]) ? $this->glyphToChar[$glyphID][0] : 0;
 				if ($convert2hex) {
 					$g[] = unicode_hex($uni);
 				} elseif ($mode == 2) {
@@ -3268,7 +3365,7 @@ class TTFontFile
 				$end = $this->read_ushort();
 				$StartCoverageIndex = $this->read_ushort(); // n/a
 				for ($glyphID = $start; $glyphID <= $end; $glyphID++) {
-					$uni = $this->glyphToChar[$glyphID][0];
+					$uni = isset($this->glyphToChar[$glyphID][0]) ? $this->glyphToChar[$glyphID][0] : 0;
 					if ($convert2hex) {
 						$g[] = unicode_hex($uni);
 					} elseif ($mode == 2) {
