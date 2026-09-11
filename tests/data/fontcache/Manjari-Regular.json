@@ -110,7 +110,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150544
+                    9488
                 ],
                 "MarkFilteringSet": ""
             },
@@ -119,7 +119,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    141482
+                    426
                 ],
                 "MarkFilteringSet": ""
             },
@@ -128,7 +128,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    141628
+                    572
                 ],
                 "MarkFilteringSet": ""
             },
@@ -137,7 +137,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    141660
+                    604
                 ],
                 "MarkFilteringSet": ""
             },
@@ -146,7 +146,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    141686
+                    630
                 ],
                 "MarkFilteringSet": ""
             },
@@ -155,7 +155,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142142
+                    1086
                 ],
                 "MarkFilteringSet": ""
             },
@@ -164,7 +164,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142202
+                    1146
                 ],
                 "MarkFilteringSet": ""
             },
@@ -173,7 +173,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142236
+                    1180
                 ],
                 "MarkFilteringSet": ""
             },
@@ -182,7 +182,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142278
+                    1222
                 ],
                 "MarkFilteringSet": ""
             },
@@ -191,7 +191,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142344
+                    1288
                 ],
                 "MarkFilteringSet": ""
             },
@@ -200,7 +200,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142370
+                    1314
                 ],
                 "MarkFilteringSet": ""
             },
@@ -209,7 +209,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142392
+                    1336
                 ],
                 "MarkFilteringSet": ""
             },
@@ -218,7 +218,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    142470
+                    1414
                 ],
                 "MarkFilteringSet": ""
             },
@@ -227,7 +227,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    143234
+                    2178
                 ],
                 "MarkFilteringSet": ""
             },
@@ -236,7 +236,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    144040
+                    2984
                 ],
                 "MarkFilteringSet": ""
             },
@@ -245,7 +245,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    144312
+                    3256
                 ],
                 "MarkFilteringSet": ""
             },
@@ -254,7 +254,7 @@
                 "Flag": 8,
                 "SubtableCount": 1,
                 "Subtables": [
-                    144652
+                    3596
                 ],
                 "MarkFilteringSet": ""
             },
@@ -263,74 +263,74 @@
                 "Flag": 0,
                 "SubtableCount": 68,
                 "Subtables": [
-                    148142,
-                    148160,
-                    148180,
-                    148200,
-                    148218,
-                    148240,
-                    148260,
-                    148278,
-                    148298,
-                    148324,
-                    148342,
-                    148362,
-                    148382,
-                    148400,
-                    148420,
-                    148446,
-                    148464,
-                    148492,
-                    148512,
-                    148530,
-                    148550,
-                    148568,
-                    148596,
-                    148622,
-                    148640,
-                    148668,
-                    148688,
-                    148706,
-                    148726,
-                    148746,
-                    148764,
-                    148792,
-                    148812,
-                    148830,
-                    148850,
-                    148870,
-                    148898,
-                    148920,
-                    148958,
-                    148984,
-                    149010,
-                    149036,
-                    149054,
-                    149082,
-                    149102,
-                    149120,
-                    149148,
-                    149168,
-                    149186,
-                    149206,
-                    149226,
-                    149254,
-                    149284,
-                    149314,
-                    149344,
-                    149370,
-                    149396,
-                    149416,
-                    149448,
-                    149468,
-                    149494,
-                    149512,
-                    149534,
-                    149560,
-                    149586,
-                    149612,
-                    149646,
-                    149674
+                    7086,
+                    7104,
+                    7124,
+                    7144,
+                    7162,
+                    7184,
+                    7204,
+                    7222,
+                    7242,
+                    7268,
+                    7286,
+                    7306,
+                    7326,
+                    7344,
+                    7364,
+                    7390,
+                    7408,
+                    7436,
+                    7456,
+                    7474,
+                    7494,
+                    7512,
+                    7540,
+                    7566,
+                    7584,
+                    7612,
+                    7632,
+                    7650,
+                    7670,
+                    7690,
+                    7708,
+                    7736,
+                    7756,
+                    7774,
+                    7794,
+                    7814,
+                    7842,
+                    7864,
+                    7902,
+                    7928,
+                    7954,
+                    7980,
+                    7998,
+                    8026,
+                    8046,
+                    8064,
+                    8092,
+                    8112,
+                    8130,
+                    8150,
+                    8170,
+                    8198,
+                    8228,
+                    8258,
+                    8288,
+                    8314,
+                    8340,
+                    8360,
+                    8392,
+                    8412,
+                    8438,
+                    8456,
+                    8478,
+                    8504,
+                    8530,
+                    8556,
+                    8590,
+                    8618
                 ],
                 "MarkFilteringSet": ""
             },
@@ -339,7 +339,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149708
+                    8652
                 ],
                 "MarkFilteringSet": ""
             },
@@ -348,7 +348,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149736
+                    8680
                 ],
                 "MarkFilteringSet": ""
             },
@@ -357,7 +357,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149770
+                    8714
                 ],
                 "MarkFilteringSet": ""
             },
@@ -366,7 +366,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149804
+                    8748
                 ],
                 "MarkFilteringSet": ""
             },
@@ -375,7 +375,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149832
+                    8776
                 ],
                 "MarkFilteringSet": ""
             },
@@ -384,7 +384,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149860
+                    8804
                 ],
                 "MarkFilteringSet": ""
             },
@@ -393,7 +393,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149888
+                    8832
                 ],
                 "MarkFilteringSet": ""
             },
@@ -402,7 +402,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149922
+                    8866
                 ],
                 "MarkFilteringSet": ""
             },
@@ -411,7 +411,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149956
+                    8900
                 ],
                 "MarkFilteringSet": ""
             },
@@ -420,7 +420,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    149984
+                    8928
                 ],
                 "MarkFilteringSet": ""
             },
@@ -429,7 +429,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150012
+                    8956
                 ],
                 "MarkFilteringSet": ""
             },
@@ -438,7 +438,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150046
+                    8990
                 ],
                 "MarkFilteringSet": ""
             },
@@ -447,7 +447,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150080
+                    9024
                 ],
                 "MarkFilteringSet": ""
             },
@@ -456,7 +456,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150108
+                    9052
                 ],
                 "MarkFilteringSet": ""
             },
@@ -465,7 +465,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150136
+                    9080
                 ],
                 "MarkFilteringSet": ""
             },
@@ -474,7 +474,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150164
+                    9108
                 ],
                 "MarkFilteringSet": ""
             },
@@ -483,7 +483,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150192
+                    9136
                 ],
                 "MarkFilteringSet": ""
             },
@@ -492,7 +492,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150226
+                    9170
                 ],
                 "MarkFilteringSet": ""
             },
@@ -501,7 +501,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150254
+                    9198
                 ],
                 "MarkFilteringSet": ""
             },
@@ -510,7 +510,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150282
+                    9226
                 ],
                 "MarkFilteringSet": ""
             },
@@ -519,7 +519,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150310
+                    9254
                 ],
                 "MarkFilteringSet": ""
             },
@@ -528,7 +528,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150338
+                    9282
                 ],
                 "MarkFilteringSet": ""
             },
@@ -537,7 +537,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150366
+                    9310
                 ],
                 "MarkFilteringSet": ""
             },
@@ -546,7 +546,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150394
+                    9338
                 ],
                 "MarkFilteringSet": ""
             },
@@ -555,7 +555,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150428
+                    9372
                 ],
                 "MarkFilteringSet": ""
             },
@@ -564,7 +564,7 @@
                 "Flag": 8,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150462
+                    9406
                 ],
                 "MarkFilteringSet": ""
             },
@@ -573,7 +573,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150544
+                    9488
                 ],
                 "MarkFilteringSet": ""
             },
@@ -582,7 +582,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150622
+                    9566
                 ],
                 "MarkFilteringSet": ""
             },
@@ -591,7 +591,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    150642
+                    9586
                 ],
                 "MarkFilteringSet": ""
             }
@@ -648,7 +648,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    139138
+                    106
                 ],
                 "MarkFilteringSet": ""
             },
@@ -657,8 +657,8 @@
                 "Flag": 0,
                 "SubtableCount": 2,
                 "Subtables": [
-                    140730,
-                    140756
+                    1698,
+                    1724
                 ],
                 "MarkFilteringSet": ""
             },
@@ -667,8 +667,8 @@
                 "Flag": 0,
                 "SubtableCount": 2,
                 "Subtables": [
-                    140818,
-                    140978
+                    1786,
+                    1946
                 ],
                 "MarkFilteringSet": ""
             }
@@ -680,8 +680,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 141056,
-            "GPOS_offset": 139032,
             "GSUB_length": 9602,
             "GlyphClassBases": " 00020| 00021| 00022| 00023| 00024| 00025| 00026| 00027| 00028| 00029| 0002A| 0002B| 0002C| 0002D| 0002E| 0002F| 00030| 00031| 00032| 00033| 00034| 00035| 00036| 00037| 00038| 00039| 0003A| 0003B| 0003C| 0003D| 0003E| 0003F| 00040| 00041| 00042| 00043| 00044| 00045| 00046| 00047| 00048| 00049| 0004A| 0004B| 0004C| 0004D| 0004E| 0004F| 00050| 00051| 00052| 00053| 00054| 00055| 00056| 00057| 00058| 00059| 0005A| 00061| 00062| 00063| 00064| 00065| 00066| 00067| 00068| 00069| 0006A| 0006B| 0006C| 0006D| 0006E| 0006F| 00070| 00071| 00072| 00073| 00074| 00075| 00076| 00077| 00078| 00079| 0007A| 0007B| 0007C| 0007D| 0007E| 000AD| 00D02| 00D03| 00D04| 00D05| 00D06| 00D07| 00D08| 00D09| 00D0A| 00D0B| 00D0C| 00D0E| 00D0F| 00D10| 00D12| 00D13| 00D14| 00D15| 00D16| 00D17| 00D18| 00D19| 00D1A| 00D1B| 00D1C| 00D1D| 00D1E| 00D1F| 00D20| 00D21| 00D22| 00D23| 00D24| 00D25| 00D26| 00D27| 00D28| 00D29| 00D2A| 00D2B| 00D2C| 00D2D| 00D2E| 00D2F| 00D30| 00D31| 00D32| 00D33| 00D34| 00D35| 00D36| 00D37| 00D38| 00D39| 00D3A| 00D3D| 00D3E| 00D3F| 00D40| 00D41| 00D42| 00D43| 00D44| 00D46| 00D47| 00D48| 00D4A| 00D4B| 00D4C| 00D57| 00D60| 00D61| 00D62| 00D79| 00D7A| 00D7B| 0200C| 0200D| 020B9| 025CC| 0E000| 0E001| 0E002| 0E003| 0E004| 0FFFF",
             "GlyphClassMarks": " 00D00| 00D01| 00D3B| 00D3C| 00D4D| 00D4E",

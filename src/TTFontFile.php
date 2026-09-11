@@ -1282,8 +1282,9 @@ class TTFontFile
 		}
 
 		$font = [
-			'GSUB_offset' => $GSUB_offset,
-			'GPOS_offset' => $GPOS_offset,
+			// Subtable offsets are stored relative to their own table, so where in the file the tables
+			// were is no longer anybody's business. GSUB_length still is: the two tables share one
+			// cache file, GSUB first.
 			'GSUB_length' => $GSUB_length,
 			'GlyphClassBases' => $this->GlyphClassBases,
 			'GlyphClassMarks' => $this->GlyphClassMarks,
@@ -1484,7 +1485,10 @@ class TTFontFile
 			$GSLookup[$i]['SubtableCount'] = $SubtableCount[$i] = $this->reader->readUInt16();
 
 			for ($c = 0; $c < $SubtableCount[$i]; $c++) {
-				$GSLookup[$i]['Subtables'][$c] = $Offsets[$i] + $this->reader->readUInt16();
+				// Offset16 from the start of this Lookup table. Stored relative to the start of GSUB,
+				// because the shaper reads a copy of GSUB alone and has no idea where in the file it
+				// came from - it used to subtract the table's base back off at all twelve call sites.
+				$GSLookup[$i]['Subtables'][$c] = $Offsets[$i] + $this->reader->readUInt16() - $gsub_offset;
 			}
 
 			// MarkFilteringSet = Index (base 0) into GDEF mark glyph sets structure
@@ -1498,9 +1502,11 @@ class TTFontFile
 			if ($GSLookup[$i]['Type'] == 7) {
 				// Overwrites new offset (32-bit) for each subtable, and a new lookup Type
 				for ($c = 0; $c < $SubtableCount[$i]; $c++) {
-					$this->reader->seek($GSLookup[$i]['Subtables'][$c]);
+					$this->reader->seek($gsub_offset + $GSLookup[$i]['Subtables'][$c]);
 					$ExtensionPosFormat = $this->reader->readUInt16();
 					$type = $this->reader->readUInt16();
+					// Offset32 from the start of the extension subtable, so adding it to a GSUB-relative
+					// offset leaves it GSUB-relative
 					$ext_offset = $this->reader->readUInt32();
 					$GSLookup[$i]['Subtables'][$c] = $GSLookup[$i]['Subtables'][$c] + $ext_offset;
 				}
@@ -1512,7 +1518,8 @@ class TTFontFile
 		$this->GSLuCoverage = [];
 		for ($i = 0; $i < $LookupCount; $i++) {
 			for ($c = 0; $c < $GSLookup[$i]['SubtableCount']; $c++) {
-				$this->reader->seek($GSLookup[$i]['Subtables'][$c]);
+				$subtable_offset = $gsub_offset + $GSLookup[$i]['Subtables'][$c];
+				$this->reader->seek($subtable_offset);
 				$PosFormat = $this->reader->readUInt16();
 
 				if ($GSLookup[$i]['Type'] == 5 && $PosFormat == 3) {
@@ -1523,7 +1530,7 @@ class TTFontFile
 				}
 
 				// NB Coverage only looks at glyphs for position 1 (i.e. 5.3 and 6.3)	// NEEDS TO READ ALL ********************
-				$Coverage = $GSLookup[$i]['Subtables'][$c] + $this->reader->readUInt16();
+				$Coverage = $subtable_offset + $this->reader->readUInt16();
 				$this->reader->seek($Coverage);
 				$glyphs = $this->_getCoverage(false, 2);
 				$this->GSLuCoverage[$i][$c] = $glyphs;
@@ -3475,7 +3482,9 @@ class TTFontFile
 			$Lookup[$i]['Flag'] = $flag = $this->reader->readUInt16();
 			$Lookup[$i]['SubtableCount'] = $SubtableCount[$i] = $this->reader->readUInt16();
 			for ($c = 0; $c < $SubtableCount[$i]; $c++) {
-				$Lookup[$i]['Subtables'][$c] = $Offsets[$i] + $this->reader->readUInt16();
+				// Offset16 from the start of this Lookup table, stored relative to the start of GPOS.
+				// See _getGSUBtables().
+				$Lookup[$i]['Subtables'][$c] = $Offsets[$i] + $this->reader->readUInt16() - $gpos_offset;
 			}
 			// MarkFilteringSet = Index (base 0) into GDEF mark glyph sets structure
 			if (($flag & 0x0010) === 0x0010) {
@@ -3488,9 +3497,10 @@ class TTFontFile
 			if ($Lookup[$i]['Type'] == 9) {
 				// Overwrites new offset (32-bit) for each subtable, and a new lookup Type
 				for ($c = 0; $c < $SubtableCount[$i]; $c++) {
-					$this->reader->seek($Lookup[$i]['Subtables'][$c]);
+					$this->reader->seek($gpos_offset + $Lookup[$i]['Subtables'][$c]);
 					$ExtensionPosFormat = $this->reader->readUInt16();
 					$type = $this->reader->readUInt16();
+					// Offset32 from the start of the extension subtable, so this stays GPOS-relative
 					$Lookup[$i]['Subtables'][$c] = $Lookup[$i]['Subtables'][$c] + $this->reader->readUInt32();
 				}
 				$Lookup[$i]['Type'] = $type;
@@ -3501,7 +3511,8 @@ class TTFontFile
 		$this->LuCoverage = [];
 		for ($i = 0; $i < $LookupCount; $i++) {
 			for ($c = 0; $c < $Lookup[$i]['SubtableCount']; $c++) {
-				$this->reader->seek($Lookup[$i]['Subtables'][$c]);
+				$subtable_offset = $gpos_offset + $Lookup[$i]['Subtables'][$c];
+				$this->reader->seek($subtable_offset);
 				$PosFormat = $this->reader->readUInt16();
 
 				if ($Lookup[$i]['Type'] == 7 && $PosFormat == 3) {
@@ -3512,7 +3523,7 @@ class TTFontFile
 				}
 				// NB Coverage only looks at glyphs for position 1 (i.e. 7.3 and 8.3)	// NEEDS TO READ ALL ********************
 				// NB For e.g. Type 4, this may be the Coverage for the Mark
-				$Coverage = $Lookup[$i]['Subtables'][$c] + $this->reader->readUInt16();
+				$Coverage = $subtable_offset + $this->reader->readUInt16();
 				$this->reader->seek($Coverage);
 				$glyphs = $this->_getCoverage(false, 2);
 				$this->LuCoverage[$i][$c] = $glyphs;

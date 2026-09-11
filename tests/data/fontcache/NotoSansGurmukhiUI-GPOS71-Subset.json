@@ -28,7 +28,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    4498
+                    62
                 ],
                 "MarkFilteringSet": ""
             }
@@ -59,7 +59,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    4380
+                    64
                 ],
                 "MarkFilteringSet": ""
             },
@@ -68,7 +68,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    4412
+                    96
                 ],
                 "MarkFilteringSet": ""
             }
@@ -80,8 +80,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 4436,
-            "GPOS_offset": 4316,
             "GSUB_length": 100,
             "GlyphClassBases": " 00A1F| 00A2C",
             "GlyphClassMarks": " 00A47| 00A4C| 00A71| 0E000| 0E001",

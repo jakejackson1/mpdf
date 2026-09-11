@@ -60,7 +60,7 @@
                 "Flag": 256,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2710
+                    94
                 ],
                 "MarkFilteringSet": ""
             },
@@ -69,7 +69,7 @@
                 "Flag": 256,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2724
+                    108
                 ],
                 "MarkFilteringSet": ""
             },
@@ -78,7 +78,7 @@
                 "Flag": 256,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2738
+                    122
                 ],
                 "MarkFilteringSet": ""
             },
@@ -87,7 +87,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2752
+                    136
                 ],
                 "MarkFilteringSet": ""
             },
@@ -96,9 +96,9 @@
                 "Flag": 256,
                 "SubtableCount": 3,
                 "Subtables": [
-                    2770,
-                    2796,
-                    2822
+                    154,
+                    180,
+                    206
                 ],
                 "MarkFilteringSet": ""
             }
@@ -167,7 +167,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2510
+                    90
                 ],
                 "MarkFilteringSet": ""
             },
@@ -176,7 +176,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2576
+                    156
                 ],
                 "MarkFilteringSet": 1
             }
@@ -191,8 +191,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 2616,
-            "GPOS_offset": 2420,
             "GSUB_length": 236,
             "GlyphClassBases": " 00020| 0E000| 0E001| 0E002| 0E003| 1168A| 116A0| 116A2| 116A4| 116AE",
             "GlyphClassMarks": " 116AB",

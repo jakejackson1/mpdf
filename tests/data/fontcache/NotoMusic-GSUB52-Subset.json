@@ -84,7 +84,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2108
+                    136
                 ],
                 "MarkFilteringSet": ""
             },
@@ -93,7 +93,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2138
+                    166
                 ],
                 "MarkFilteringSet": ""
             },
@@ -102,7 +102,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2152
+                    180
                 ],
                 "MarkFilteringSet": ""
             },
@@ -111,7 +111,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2166
+                    194
                 ],
                 "MarkFilteringSet": ""
             },
@@ -120,7 +120,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2180
+                    208
                 ],
                 "MarkFilteringSet": ""
             },
@@ -129,7 +129,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2194
+                    222
                 ],
                 "MarkFilteringSet": ""
             },
@@ -138,7 +138,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2208
+                    236
                 ],
                 "MarkFilteringSet": ""
             },
@@ -147,7 +147,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2338
+                    366
                 ],
                 "MarkFilteringSet": ""
             }
@@ -210,7 +210,7 @@
                 "Flag": 9,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1870
+                    86
                 ],
                 "MarkFilteringSet": ""
             }
@@ -222,8 +222,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 1972,
-            "GPOS_offset": 1784,
             "GSUB_length": 378,
             "GlyphClassBases": " 0E000| 0E001| 0E002| 0E003| 0E004| 0E005| 1D143| 1D144| 1D146| 1D148| 1D1B9",
             "GlyphClassMarks": " 1D165",

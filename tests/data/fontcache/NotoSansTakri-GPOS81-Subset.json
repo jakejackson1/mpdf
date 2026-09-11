@@ -60,7 +60,7 @@
                 "Flag": 256,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6344
+                    92
                 ],
                 "MarkFilteringSet": ""
             },
@@ -69,7 +69,7 @@
                 "Flag": 256,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6358
+                    106
                 ],
                 "MarkFilteringSet": ""
             },
@@ -78,7 +78,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6372
+                    120
                 ],
                 "MarkFilteringSet": ""
             },
@@ -87,8 +87,8 @@
                 "Flag": 256,
                 "SubtableCount": 2,
                 "Subtables": [
-                    6388,
-                    6414
+                    136,
+                    162
                 ],
                 "MarkFilteringSet": ""
             }
@@ -175,7 +175,7 @@
                 "Flag": 8,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6104
+                    128
                 ],
                 "MarkFilteringSet": ""
             },
@@ -184,7 +184,7 @@
                 "Flag": 8,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6154
+                    178
                 ],
                 "MarkFilteringSet": ""
             },
@@ -193,7 +193,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6172
+                    196
                 ],
                 "MarkFilteringSet": ""
             },
@@ -202,7 +202,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6210
+                    234
                 ],
                 "MarkFilteringSet": 1
             }
@@ -217,8 +217,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 6252,
-            "GPOS_offset": 5976,
             "GSUB_length": 188,
             "GlyphClassBases": " 00020| 0E000| 0E001| 0E002| 1168A| 116AE",
             "GlyphClassMarks": " 116AB",

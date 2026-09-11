@@ -76,7 +76,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1936
+                    132
                 ],
                 "MarkFilteringSet": ""
             },
@@ -85,7 +85,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1958
+                    154
                 ],
                 "MarkFilteringSet": ""
             },
@@ -94,7 +94,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1986
+                    182
                 ],
                 "MarkFilteringSet": ""
             },
@@ -103,7 +103,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    2010
+                    206
                 ],
                 "MarkFilteringSet": ""
             }
@@ -134,7 +134,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1760
+                    64
                 ],
                 "MarkFilteringSet": ""
             },
@@ -143,7 +143,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    1776
+                    80
                 ],
                 "MarkFilteringSet": ""
             }
@@ -155,8 +155,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 1804,
-            "GPOS_offset": 1696,
             "GSUB_length": 218,
             "GlyphClassBases": " 00041| 00042| 00043| 0E000| 0E001| 0E002| 0E003",
             "GlyphClassMarks": "",

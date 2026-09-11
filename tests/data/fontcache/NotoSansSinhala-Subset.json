@@ -52,7 +52,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7118
+                    138
                 ],
                 "MarkFilteringSet": ""
             },
@@ -61,7 +61,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7146
+                    166
                 ],
                 "MarkFilteringSet": ""
             },
@@ -70,7 +70,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7194
+                    214
                 ],
                 "MarkFilteringSet": ""
             },
@@ -79,7 +79,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7338
+                    358
                 ],
                 "MarkFilteringSet": ""
             },
@@ -88,9 +88,9 @@
                 "Flag": 0,
                 "SubtableCount": 3,
                 "Subtables": [
-                    7224,
-                    7252,
-                    7276
+                    244,
+                    272,
+                    296
                 ],
                 "MarkFilteringSet": ""
             },
@@ -99,7 +99,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7310
+                    330
                 ],
                 "MarkFilteringSet": ""
             },
@@ -108,7 +108,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7324
+                    344
                 ],
                 "MarkFilteringSet": ""
             },
@@ -117,7 +117,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7338
+                    358
                 ],
                 "MarkFilteringSet": ""
             },
@@ -126,7 +126,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7360
+                    380
                 ],
                 "MarkFilteringSet": 0
             },
@@ -135,7 +135,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7410
+                    430
                 ],
                 "MarkFilteringSet": 0
             },
@@ -144,7 +144,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7444
+                    464
                 ],
                 "MarkFilteringSet": 0
             },
@@ -153,7 +153,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7594
+                    614
                 ],
                 "MarkFilteringSet": 0
             },
@@ -162,7 +162,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7610
+                    630
                 ],
                 "MarkFilteringSet": 0
             },
@@ -171,7 +171,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7626
+                    646
                 ],
                 "MarkFilteringSet": 0
             },
@@ -180,7 +180,7 @@
                 "Flag": 16,
                 "SubtableCount": 1,
                 "Subtables": [
-                    7642
+                    662
                 ],
                 "MarkFilteringSet": 0
             }
@@ -225,7 +225,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6446
+                    94
                 ],
                 "MarkFilteringSet": ""
             },
@@ -234,7 +234,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6468
+                    116
                 ],
                 "MarkFilteringSet": ""
             },
@@ -243,7 +243,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6570
+                    218
                 ],
                 "MarkFilteringSet": ""
             },
@@ -252,7 +252,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6734
+                    382
                 ],
                 "MarkFilteringSet": ""
             },
@@ -261,7 +261,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6788
+                    436
                 ],
                 "MarkFilteringSet": ""
             },
@@ -270,7 +270,7 @@
                 "Flag": 0,
                 "SubtableCount": 1,
                 "Subtables": [
-                    6892
+                    540
                 ],
                 "MarkFilteringSet": ""
             }
@@ -285,8 +285,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_offset": 6980,
-            "GPOS_offset": 6352,
             "GSUB_length": 676,
             "GlyphClassBases": " 00D9A| 00DBB| 00DBD| 00DC1| 00DC3| 00DC4| 0E00E| 0E00F| 0E010",
             "GlyphClassMarks": " 00DCA| 00DD2| 00DD3| 0E000| 0E001| 0E002| 0E003| 0E004| 0E005| 0E006| 0E007| 0E008| 0E009| 0E00A| 0E00B",
