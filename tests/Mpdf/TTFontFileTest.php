@@ -124,7 +124,8 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 	}
 
 	/**
-	 * Everything the reader extracted, less its own position in the file
+	 * Everything the parser extracted. The reader it extracted them with is not public, so it does
+	 * not appear here and its position does not have to be excluded.
 	 */
 	private function metrics($file, $debug)
 	{
@@ -132,7 +133,7 @@ class TTFontFileTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
 		$ttf->getMetrics(__DIR__ . '/../data/ttf/' . $file, uniqid('', true), 0, $debug, false, 0xFF);
 
 		$vars = get_object_vars($ttf);
-		unset($vars['fh'], $vars['fontkey'], $vars['fontCache']);
+		unset($vars['fontkey'], $vars['fontCache']);
 
 		return $vars;
 	}

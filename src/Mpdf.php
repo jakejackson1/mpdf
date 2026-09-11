@@ -19509,16 +19509,6 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 		} // columns
 	}
 
-	function read_short(&$fh)
-	{
-		$s = fread($fh, 2);
-		$a = (ord($s[0]) << 8) + ord($s[1]);
-		if ($a & (1 << 15)) {
-			$a = ($a - (1 << 16));
-		}
-		return $a;
-	}
-
 	function _packCellBorder($cell)
 	{
 		if (!is_array($cell) || !isset($cell)) {

@@ -2,6 +2,8 @@
 
 namespace Mpdf;
 
+use Mpdf\Fonts\FileReader;
+
 class TTFontFileAnalysis extends TTFontFile
 {
 
@@ -9,11 +11,7 @@ class TTFontFileAnalysis extends TTFontFile
 	function extractCoreInfo($file, $TTCfontID = 0)
 	{
 		$this->filename = $file;
-		$this->fh = fopen($file, 'rb');
-		if (!$this->fh) {
-			throw new \Mpdf\MpdfException('ERROR - Can\'t open file ' . $file);
-		}
-		$this->_pos = 0;
+		$this->reader = new FileReader($file);
 		$this->charWidths = '';
 		$this->glyphPos = [];
 		$this->charToGlyph = [];
@@ -23,7 +21,7 @@ class TTFontFileAnalysis extends TTFontFile
 		$this->descent = 0;
 		$this->numTTCFonts = 0;
 		$this->TTCFonts = [];
-		$this->version = $version = $this->read_ulong();
+		$this->version = $version = $this->reader->readUInt32();
 		$this->panose = []; // mPDF 5.0
 
 		if ($version == 0x4F54544F) {
@@ -32,19 +30,19 @@ class TTFontFileAnalysis extends TTFontFile
 
 		if ($version == 0x74746366) {
 			if ($TTCfontID > 0) {
-				$this->version = $version = $this->read_ulong(); // TTC Header version now
+				$this->version = $version = $this->reader->readUInt32(); // TTC Header version now
 				if (!in_array($version, [0x00010000, 0x00020000])) {
 					throw new \Mpdf\MpdfException("ERROR - NOT ADDED as Error parsing TrueType Collection: version=" . $version . " - " . $file);
 				}
 			} else {
 				throw new \Mpdf\MpdfException("ERROR - Error parsing TrueType Collection - " . $file);
 			}
-			$this->numTTCFonts = $this->read_ulong();
+			$this->numTTCFonts = $this->reader->readUInt32();
 			for ($i = 1; $i <= $this->numTTCFonts; $i++) {
-				$this->TTCFonts[$i]['offset'] = $this->read_ulong();
+				$this->TTCFonts[$i]['offset'] = $this->reader->readUInt32();
 			}
-			$this->seek($this->TTCFonts[$TTCfontID]['offset']);
-			$this->version = $version = $this->read_ulong(); // TTFont version again now
+			$this->reader->seek($this->TTCFonts[$TTCfontID]['offset']);
+			$this->version = $version = $this->reader->readUInt32(); // TTFont version again now
 			$this->readTableDirectory(false);
 		} else {
 			if (!in_array($version, [0x00010000, 0x74727565])) {
@@ -55,16 +53,16 @@ class TTFontFileAnalysis extends TTFontFile
 
 		/* Included for testing...
 		  $cmap_offset = $this->seek_table("cmap");
-		  $this->skip(2);
-		  $cmapTableCount = $this->read_ushort();
+		  $this->reader->skip(2);
+		  $cmapTableCount = $this->reader->readUInt16();
 		  $unicode_cmap_offset = 0;
 		  for ($i=0;$i<$cmapTableCount;$i++) {
-		  $x[$i]['platformId'] = $this->read_ushort();
-		  $x[$i]['encodingId'] = $this->read_ushort();
-		  $x[$i]['offset'] = $this->read_ulong();
-		  $save_pos = $this->_pos;
-		  $x[$i]['format'] = $this->get_ushort($cmap_offset + $x[$i]['offset'] );
-		  $this->seek($save_pos );
+		  $x[$i]['platformId'] = $this->reader->readUInt16();
+		  $x[$i]['encodingId'] = $this->reader->readUInt16();
+		  $x[$i]['offset'] = $this->reader->readUInt32();
+		  $save_pos = $this->reader->tell();
+		  $x[$i]['format'] = $this->reader->uint16At($cmap_offset + $x[$i]['offset'] );
+		  $this->reader->seek($save_pos );
 		  }
 		  print_r($x); exit;
 		 */
@@ -74,29 +72,29 @@ class TTFontFileAnalysis extends TTFontFile
 
 		/* Test purposes - displays table of names
 		  $name_offset = $this->seek_table("name");
-		  $format = $this->read_ushort();
+		  $format = $this->reader->readUInt16();
 		  if ($format != 0 && $format != 1)	// mPDF 5.3.73
 		  die("Unknown name table format ".$format);
-		  $numRecords = $this->read_ushort();
-		  $string_data_offset = $name_offset + $this->read_ushort();
+		  $numRecords = $this->reader->readUInt16();
+		  $string_data_offset = $name_offset + $this->reader->readUInt16();
 		  for ($i=0;$i<$numRecords; $i++) {
-		  $x[$i]['platformId'] = $this->read_ushort();
-		  $x[$i]['encodingId'] = $this->read_ushort();
-		  $x[$i]['languageId'] = $this->read_ushort();
-		  $x[$i]['nameId'] = $this->read_ushort();
-		  $x[$i]['length'] = $this->read_ushort();
-		  $x[$i]['offset'] = $this->read_ushort();
+		  $x[$i]['platformId'] = $this->reader->readUInt16();
+		  $x[$i]['encodingId'] = $this->reader->readUInt16();
+		  $x[$i]['languageId'] = $this->reader->readUInt16();
+		  $x[$i]['nameId'] = $this->reader->readUInt16();
+		  $x[$i]['length'] = $this->reader->readUInt16();
+		  $x[$i]['offset'] = $this->reader->readUInt16();
 
 		  $N = '';
 		  if ($x[$i]['platformId'] == 1 && $x[$i]['encodingId'] == 0 && $x[$i]['languageId'] == 0) { // Roman
-		  $opos = $this->_pos;
-		  $N = $this->get_chunk($string_data_offset + $x[$i]['offset'] , $x[$i]['length'] );
-		  $this->_pos = $opos;
-		  $this->seek($opos);
+		  $opos = $this->reader->tell();
+		  $N = $this->reader->bytesAt($string_data_offset + $x[$i]['offset'] , $x[$i]['length'] );
+		  $this->reader->seek($opos);
+		  $this->reader->seek($opos);
 		  }
 		  else { 	// Unicode
-		  $opos = $this->_pos;
-		  $this->seek($string_data_offset + $x[$i]['offset'] );
+		  $opos = $this->reader->tell();
+		  $this->reader->seek($string_data_offset + $x[$i]['offset'] );
 		  $length = $x[$i]['length'] ;
 		  if ($length % 2 != 0)
 		  $length -= 1;
@@ -104,12 +102,12 @@ class TTFontFileAnalysis extends TTFontFile
 		  $length /= 2;
 		  $N = '';
 		  while ($length > 0) {
-		  $char = $this->read_ushort();
+		  $char = $this->reader->readUInt16();
 		  $N .= (chr($char));
 		  $length -= 1;
 		  }
-		  $this->_pos = $opos;
-		  $this->seek($opos);
+		  $this->reader->seek($opos);
+		  $this->reader->seek($opos);
 		  }
 		  $x[$i]['names'][$nameId] = $N;
 		  }
@@ -117,46 +115,44 @@ class TTFontFileAnalysis extends TTFontFile
 		 */
 
 		$name_offset = $this->seek_table("name");
-		$format = $this->read_ushort();
+		$format = $this->reader->readUInt16();
 		if ($format != 0 && $format != 1) { // mPDF 5.3.73
 			throw new \Mpdf\MpdfException("ERROR - NOT ADDED as Unknown name table format " . $format . " - " . $file);
 		}
-		$numRecords = $this->read_ushort();
-		$string_data_offset = $name_offset + $this->read_ushort();
+		$numRecords = $this->reader->readUInt16();
+		$string_data_offset = $name_offset + $this->reader->readUInt16();
 		$names = [1 => '', 2 => '', 3 => '', 4 => '', 6 => ''];
 		$K = array_keys($names);
 		$nameCount = count($names);
 		for ($i = 0; $i < $numRecords; $i++) {
-			$platformId = $this->read_ushort();
-			$encodingId = $this->read_ushort();
-			$languageId = $this->read_ushort();
-			$nameId = $this->read_ushort();
-			$length = $this->read_ushort();
-			$offset = $this->read_ushort();
+			$platformId = $this->reader->readUInt16();
+			$encodingId = $this->reader->readUInt16();
+			$languageId = $this->reader->readUInt16();
+			$nameId = $this->reader->readUInt16();
+			$length = $this->reader->readUInt16();
+			$offset = $this->reader->readUInt16();
 			if (!in_array($nameId, $K)) {
 				continue;
 			}
 			$N = '';
 			if ($platformId == 3 && $encodingId == 1 && $languageId == 0x409) { // Microsoft, Unicode, US English, PS Name
-				$opos = $this->_pos;
-				$this->seek($string_data_offset + $offset);
+				$opos = $this->reader->tell();
+				$this->reader->seek($string_data_offset + $offset);
 				if ($length % 2 != 0) {
 					$length += 1;
 				}
 				$length /= 2;
 				$N = '';
 				while ($length > 0) {
-					$char = $this->read_ushort();
+					$char = $this->reader->readUInt16();
 					$N .= (chr($char));
 					$length -= 1;
 				}
-				$this->_pos = $opos;
-				$this->seek($opos);
+				$this->reader->seek($opos);
 			} elseif ($platformId == 1 && $encodingId == 0 && $languageId == 0) { // Macintosh, Roman, English, PS Name
-				$opos = $this->_pos;
-				$N = $this->get_chunk($string_data_offset + $offset, $length);
-				$this->_pos = $opos;
-				$this->seek($opos);
+				$opos = $this->reader->tell();
+				$N = $this->reader->bytesAt($string_data_offset + $offset, $length);
+				$this->reader->seek($opos);
 			}
 			if ($N && $names[$nameId] == '') {
 				$names[$nameId] = $N;
@@ -194,24 +190,24 @@ class TTFontFileAnalysis extends TTFontFile
 		// head - Font header table
 		///////////////////////////////////
 		$this->seek_table("head");
-		$ver_maj = $this->read_ushort();
-		$ver_min = $this->read_ushort();
+		$ver_maj = $this->reader->readUInt16();
+		$ver_min = $this->reader->readUInt16();
 		if ($ver_maj != 1) {
 			throw new \Mpdf\MpdfException('ERROR - NOT ADDED as Unknown head table version ' . $ver_maj . '.' . $ver_min . " - " . $file);
 		}
-		$this->fontRevision = $this->read_ushort() . $this->read_ushort();
-		$this->skip(4);
-		$magic = $this->read_ulong();
+		$this->fontRevision = $this->reader->readUInt16() . $this->reader->readUInt16();
+		$this->reader->skip(4);
+		$magic = $this->reader->readUInt32();
 		if ($magic != 0x5F0F3CF5) {
 			throw new \Mpdf\MpdfException('ERROR - NOT ADDED as Invalid head table magic ' . $magic . " - " . $file);
 		}
-		$this->skip(2);
-		$this->unitsPerEm = $unitsPerEm = $this->read_ushort();
+		$this->reader->skip(2);
+		$this->unitsPerEm = $unitsPerEm = $this->reader->readUInt16();
 		$scale = 1000 / $unitsPerEm;
-		$this->skip(24);
-		$macStyle = $this->read_short();
-		$this->skip(4);
-		$indexLocFormat = $this->read_short();
+		$this->reader->skip(24);
+		$macStyle = $this->reader->readInt16();
+		$this->reader->skip(4);
+		$indexLocFormat = $this->reader->readInt16();
 
 		///////////////////////////////////
 		// OS/2 - OS/2 and Windows metrics table
@@ -221,27 +217,27 @@ class TTFontFileAnalysis extends TTFontFile
 		$fsSelection = '';
 		if (isset($this->tables["OS/2"])) {
 			$this->seek_table("OS/2");
-			$this->skip(30);
-			$sF = $this->read_short();
+			$this->reader->skip(30);
+			$sF = $this->reader->readInt16();
 			$sFamily = ($sF >> 8);
-			$this->_pos += 10;  //PANOSE = 10 byte length
-			$panose = fread($this->fh, 10);
+			// PANOSE, 10 bytes, per the OS/2 table
+			$panose = $this->reader->read(10);
 			$this->panose = [];
 			for ($p = 0; $p < strlen($panose); $p++) {
 				$this->panose[] = ord($panose[$p]);
 			}
-			$this->skip(20);
-			$fsSelection = $this->read_short();
+			$this->reader->skip(20);
+			$fsSelection = $this->reader->readInt16();
 		}
 
 		///////////////////////////////////
 		// post - PostScript table
 		///////////////////////////////////
 		$this->seek_table("post");
-		$this->skip(4);
-		$this->italicAngle = $this->read_short() + $this->read_ushort() / 65536.0;
-		$this->skip(4);
-		$isFixedPitch = $this->read_ulong();
+		$this->reader->skip(4);
+		$this->italicAngle = $this->reader->readInt16() + $this->reader->readUInt16() / 65536.0;
+		$this->reader->skip(4);
+		$isFixedPitch = $this->reader->readUInt32();
 
 
 
@@ -249,29 +245,29 @@ class TTFontFileAnalysis extends TTFontFile
 		// cmap - Character to glyph index mapping table
 		///////////////////////////////////
 		$cmap_offset = $this->seek_table("cmap");
-		$this->skip(2);
-		$cmapTableCount = $this->read_ushort();
+		$this->reader->skip(2);
+		$cmapTableCount = $this->reader->readUInt16();
 		$unicode_cmap_offset = 0;
 		for ($i = 0; $i < $cmapTableCount; $i++) {
-			$platformID = $this->read_ushort();
-			$encodingID = $this->read_ushort();
-			$offset = $this->read_ulong();
-			$save_pos = $this->_pos;
+			$platformID = $this->reader->readUInt16();
+			$encodingID = $this->reader->readUInt16();
+			$offset = $this->reader->readUInt32();
+			$save_pos = $this->reader->tell();
 			if (($platformID == 3 && $encodingID == 1) || $platformID == 0) { // Microsoft, Unicode
-				$format = $this->get_ushort($cmap_offset + $offset);
+				$format = $this->reader->uint16At($cmap_offset + $offset);
 				if ($format == 4) {
 					if (!$unicode_cmap_offset) {
 						$unicode_cmap_offset = $cmap_offset + $offset;
 					}
 				}
 			} elseif ((($platformID == 3 && $encodingID == 10) || $platformID == 0)) { // Microsoft, Unicode Format 12 table HKCS
-				$format = $this->get_ushort($cmap_offset + $offset);
+				$format = $this->reader->uint16At($cmap_offset + $offset);
 				if ($format == 12) {
 					$unicode_cmap_offset = $cmap_offset + $offset;
 					break;
 				}
 			}
-			$this->seek($save_pos);
+			$this->reader->seek($save_pos);
 		}
 
 		if (!$unicode_cmap_offset) {
@@ -289,15 +285,15 @@ class TTFontFileAnalysis extends TTFontFile
 		$unAGlyphs = '';
 		// Format 12 CMAP does characters above Unicode BMP i.e. some HKCS characters U+20000 and above
 		if ($format == 12) {
-			$this->seek($unicode_cmap_offset + 4);
-			$length = $this->read_ulong();
+			$this->reader->seek($unicode_cmap_offset + 4);
+			$length = $this->reader->readUInt32();
 			$limit = $unicode_cmap_offset + $length;
-			$this->skip(4);
-			$nGroups = $this->read_ulong();
+			$this->reader->skip(4);
+			$nGroups = $this->reader->readUInt32();
 			for ($i = 0; $i < $nGroups; $i++) {
-				$startCharCode = $this->read_ulong();
-				$endCharCode = $this->read_ulong();
-				$startGlyphCode = $this->read_ulong();
+				$startCharCode = $this->reader->readUInt32();
+				$endCharCode = $this->reader->readUInt32();
+				$startGlyphCode = $this->reader->readUInt32();
 				if (($endCharCode > 0x20000 && $endCharCode < 0x2A6DF) || ($endCharCode > 0x2F800 && $endCharCode < 0x2FA1F)) {
 					$sip = true;
 				}
@@ -331,30 +327,30 @@ class TTFontFileAnalysis extends TTFontFile
 				}
 			}
 		} else { // Format 4 CMap
-			$this->seek($unicode_cmap_offset + 2);
-			$length = $this->read_ushort();
+			$this->reader->seek($unicode_cmap_offset + 2);
+			$length = $this->reader->readUInt16();
 			$limit = $unicode_cmap_offset + $length;
-			$this->skip(2);
+			$this->reader->skip(2);
 
-			$segCount = $this->read_ushort() / 2;
-			$this->skip(6);
+			$segCount = $this->reader->readUInt16() / 2;
+			$this->reader->skip(6);
 			$endCount = [];
 			for ($i = 0; $i < $segCount; $i++) {
-				$endCount[] = $this->read_ushort();
+				$endCount[] = $this->reader->readUInt16();
 			}
-			$this->skip(2);
+			$this->reader->skip(2);
 			$startCount = [];
 			for ($i = 0; $i < $segCount; $i++) {
-				$startCount[] = $this->read_ushort();
+				$startCount[] = $this->reader->readUInt16();
 			}
 			$idDelta = [];
 			for ($i = 0; $i < $segCount; $i++) {
-				$idDelta[] = $this->read_short();
+				$idDelta[] = $this->reader->readInt16();
 			}
-			$idRangeOffset_start = $this->_pos;
+			$idRangeOffset_start = $this->reader->tell();
 			$idRangeOffset = [];
 			for ($i = 0; $i < $segCount; $i++) {
-				$idRangeOffset[] = $this->read_ushort();
+				$idRangeOffset[] = $this->reader->readUInt16();
 			}
 
 			for ($n = 0; $n < $segCount; $n++) {
@@ -385,7 +381,7 @@ class TTFontFileAnalysis extends TTFontFile
 							if ($offset >= $limit) {
 								$glyph = 0;
 							} else {
-								$glyph = $this->get_ushort($offset);
+								$glyph = $this->reader->uint16At($offset);
 								if ($glyph != 0) {
 									$glyph = ($glyph + $idDelta[$n]) & 0xFFFF;
 								}
@@ -448,7 +444,7 @@ class TTFontFileAnalysis extends TTFontFile
 			}
 		}
 
-		fclose($this->fh);
+		$this->reader->close();
 		return [$this->familyName, $bold, $italic, $ftype, $TTCfontID, $rtl, $indic, $cjk, $sip, $smp, $puaag, $pua, $unAGlyphs];
 	}
 }
