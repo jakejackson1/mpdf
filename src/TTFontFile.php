@@ -1260,32 +1260,19 @@ class TTFontFile
 			throw new \Mpdf\Exception\FontException(sprintf('Unable to set font "%s" to use OTL as it does not include OTL tables (or at least not a GDEF table).', $this->filename));
 		}
 
-		$GSUB_offset = 0;
-		$GPOS_offset = 0;
-		$GSUB_length = 0;
+		// The shaper reads GSUB and GPOS from here rather than from the font, so each is cached whole,
+		// one file per table. They used to share one file, GSUB first, which is the only reason a GPOS
+		// offset ever had to have the length of GSUB added to it.
+		foreach (['GSUB', 'GPOS'] as $tag) {
+			if (!isset($this->tables[$tag])) {
+				continue;
+			}
 
-		$s = '';
-
-		if (isset($this->tables['GSUB'])) {
-			$GSUB_offset = $this->seek_table('GSUB');
-			$GSUB_length = $this->tables['GSUB']['length'];
-			$s .= $this->reader->read($this->tables['GSUB']['length']);
-		}
-
-		if (isset($this->tables['GPOS'])) {
-			$GPOS_offset = $this->seek_table('GPOS');
-			$s .= $this->reader->read($this->tables['GPOS']['length']);
-		}
-
-		if ($s) {
-			$this->fontCache->write($this->fontkey . '.GSUBGPOStables.dat', $s);
+			$this->seek_table($tag);
+			$this->fontCache->write($this->fontkey . '.' . $tag . '.dat', $this->reader->read($this->tables[$tag]['length']));
 		}
 
 		$font = [
-			// Subtable offsets are stored relative to their own table, so where in the file the tables
-			// were is no longer anybody's business. GSUB_length still is: the two tables share one
-			// cache file, GSUB first.
-			'GSUB_length' => $GSUB_length,
 			'GlyphClassBases' => $this->GlyphClassBases,
 			'GlyphClassMarks' => $this->GlyphClassMarks,
 			'GlyphClassLigatures' => $this->GlyphClassLigatures,

@@ -252,7 +252,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_length": 446,
             "GlyphClassBases": " 003E2| 003E3",
             "GlyphClassMarks": " 00305| 0E000| 0E001| 0E002| 0E003| 0E004| 0E005| 0E006| 0E007| 0E008| 0E009| 0E00A",
             "GlyphClassLigatures": "",
@@ -265,6 +264,7 @@
                 "1": " "
             }
         },
+        "GPOS.dat": "212 bytes, sha256 63a74865540359a6b4b291114e51debcf47b6f9207ba39d053378d265a6ded60",
         "GPOSdata.json": [
             [
                 {
@@ -283,7 +283,7 @@
                 }
             ]
         ],
-        "GSUBGPOStables.dat": "658 bytes, sha256 a2fa7231b4eb52c98995b63232a941d0a69076f4901408b2243b3cb57c179267",
+        "GSUB.dat": "446 bytes, sha256 982a721efff13e479df0d34739bfe28125ca9e570fec1895038c015c4a572682",
         "GSUBdata.json": [
             [
                 {

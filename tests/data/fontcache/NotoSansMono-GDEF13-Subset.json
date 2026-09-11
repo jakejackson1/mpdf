@@ -524,7 +524,6 @@
     },
     "cache": {
         "GDEFdata.json": {
-            "GSUB_length": 1084,
             "GlyphClassBases": " 00041| 00045| 00049| 0004F| 00055| 00061| 00065| 00069| 0006D| 0006E| 0006F| 00075| 0E003| 0E005| 0E006| 0E007| 0E008| 0E009| 0E00A| 0E00B| 0E00C| 0E00D| 0E012| 0E013| 0E014| 0E015| 0E016| 0E017| 0E018| 0E019| 0E01A| 0E01B| 0E01C| 0E01D| 0E01E| 0E01F| 0E020| 0E021| 0E022| 0E023| 0E024| 0E025| 0E026| 0E027| 0E028| 0E029| 0E02A| 0E02B",
             "GlyphClassMarks": " 00300| 00307| 00308| 00309| 00315| 00316| 00317| 00318| 00319| 0031C| 00326| 00328| 00334| 00335| 00336| 00337| 00338| 00358| 01DE8| 01DE9| 01DEA| 01DEB| 01DED| 01DF0| 01DF2| 01DF3| 020F0| 0E02C| 0E02E| 0E02F| 0E030| 0E031",
             "GlyphClassLigatures": "",
@@ -539,6 +538,7 @@
             ],
             "MarkAttachmentType": []
         },
+        "GPOS.dat": "2718 bytes, sha256 4df80c2b63fdd6b8cc120443ff4fd457269357e689e6a45e5a1d7bd97c021090",
         "GPOSdata.json": [
             [
                 {
@@ -637,7 +637,7 @@
                 }
             ]
         ],
-        "GSUBGPOStables.dat": "3802 bytes, sha256 b37d8cc63fbbf70150a97ec8caddedbd76c47825f59041c1c4e4eabb2f30fde8",
+        "GSUB.dat": "1084 bytes, sha256 79ffe268c7b42f3ffa1c89ea2c6fa5e8b65f4dc6ecef5473ec15a173fd16c57d",
         "GSUBdata.json": [
             [
                 {
