@@ -24,7 +24,7 @@ class FixedPositionHtmlSnapshotTest extends Snapshot
 	 */
 	public function generatePdf()
 	{
-		$this->mpdf = new \Mpdf\Mpdf(['mode' => 'c']);
+		$this->mpdf = $this->createMpdf(['mode' => 'c']);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		/* Position with non-default font properties */

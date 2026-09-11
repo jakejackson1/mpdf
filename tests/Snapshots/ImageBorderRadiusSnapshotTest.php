@@ -102,20 +102,20 @@ class ImageBorderRadiusSnapshotTest extends Snapshot
 
 		<table class="grid ratios">
 			<tr>
-				<td><img src="img/tiger.webp" style="width: 30mm; border-radius: 50%"><p>1:1, border-radius: 50%</p></td>
+				<td><img src="img/tiger.jpg" style="width: 30mm; border-radius: 50%"><p>1:1, border-radius: 50%</p></td>
 				<td><img src="img/ratio-16x9.png" style="width: 48mm; border: 0.5mm solid #333; border-radius: 5mm"><p>16:9, bordered</p></td>
 				<td><img src="img/ratio-9x16.png" style="height: 32mm; border-radius: 50%"><p>9:16, border-radius: 50%</p></td>
 			</tr>
 			<tr>
 				<td><img src="img/bayeux2.jpg" style="width: 30mm; height: 30mm; border-radius: 50%"><p>7:2 forced square</p></td>
-				<td><img src="img/tiger.webp" style="width: 48mm; height: 27mm; border: 0.5mm solid #333; border-radius: 6mm"><p>1:1 forced 16:9, bordered</p></td>
+				<td><img src="img/tiger.jpg" style="width: 48mm; height: 27mm; border: 0.5mm solid #333; border-radius: 6mm"><p>1:1 forced 16:9, bordered</p></td>
 				<td><img src="img/ratio-16x9.png" width="20mm" height="34mm" style="border: 0.5mm solid #333; border-radius: 4mm 12mm"><p>16:9 forced portrait</p></td>
 			</tr>
 		</table>
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		$this->mpdf->WriteHTML($html);

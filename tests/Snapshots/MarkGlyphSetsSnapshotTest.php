@@ -30,7 +30,7 @@ class MarkGlyphSetsSnapshotTest extends Snapshot
 	 */
 	public function generatePdf()
 	{
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 			'fontDir' => [__DIR__ . '/../data/ttf'],
 			'fontdata' => [
 				'sinhalasubset' => [

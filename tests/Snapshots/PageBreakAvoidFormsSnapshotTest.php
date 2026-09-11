@@ -98,7 +98,7 @@ class PageBreakAvoidFormsSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->useActiveForms = true;
 		$this->mpdf->WriteHTML($html);
 	}

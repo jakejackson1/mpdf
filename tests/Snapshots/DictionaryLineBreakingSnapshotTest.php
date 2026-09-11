@@ -40,7 +40,7 @@ class DictionaryLineBreakingSnapshotTest extends Snapshot
 	 */
 	public function generatePdf()
 	{
-		$this->mpdf = new \Mpdf\Mpdf(['mode' => 'utf-8']);
+		$this->mpdf = $this->createMpdf(['mode' => 'utf-8']);
 
 		$this->mpdf->WriteHTML($this->style() . $this->samples('With the dictionaries in use'));
 

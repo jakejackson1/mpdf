@@ -69,7 +69,7 @@ class OverWriteSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new Mpdf(['mode' => 'c']);
+		$this->mpdf = $this->createMpdf(['mode' => 'c']);
 		$this->mpdf->compress = $this->sourceCompressed();
 		$this->mpdf->WriteHTML($html);
 

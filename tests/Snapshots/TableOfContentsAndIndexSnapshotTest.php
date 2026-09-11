@@ -125,7 +125,7 @@ mpdf-->
 <tocpagebreak paging="on" links="on" toc-odd-header-name="html_tocHTMLHeader" toc-even-header-name="html_tocHTMLHeaderEven" toc-odd-footer-name="html_tocHTMLFooter" toc-even-footer-name="html_tocHTMLFooterEven" toc-odd-header-value="on" toc-even-header-value="on" toc-odd-footer-value="on" toc-even-footer-value="on" toc-preHTML="&lt;h2&gt;Contents&lt;/h2&gt;" toc-bookmarkText="Content list" resetpagenum="1" pagenumstyle="A" odd-header-name="html_myHTMLHeader" odd-header-value="on" even-header-name="html_myHTMLHeaderEven" even-header-value="ON" odd-footer-name="html_myHTMLFooter" odd-footer-value="on" even-footer-name="html_myHTMLFooterEven" even-footer-value="on" outdent="2em" toc-pagenumstyle="i" />
 ';
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'mode' => 'c',
 				'margin_left' => 32,
 				'margin_right' => 25,
@@ -6008,7 +6008,7 @@ mpdf-->
 <pagebreak type="next-odd" />
 <h2>Index</h2>
 <columns column-count="2" column-gap="5" />
-<indexinsert usedivletters="on" links="on" collation="en_GB.utf8" collation-group="English_United_States" />
+<indexinsert usedivletters="on" links="on" collation-group="English_United_States" />
 ';
 
 		$this->mpdf->WriteHTML($html);

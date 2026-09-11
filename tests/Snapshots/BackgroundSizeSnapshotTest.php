@@ -87,7 +87,7 @@ class BackgroundSizeSnapshotTest extends Snapshot
 		$footer = '<div style="width: 30mm; height: 10mm; ' . $box . ' background-image: url(\'img/bayeux2.jpg\')"></div>'
 			. '<div style="width: 12mm; height: 15mm; ' . $box . ' background-image: url(\'img/bg.jpg\')"></div>';
 
-		$this->mpdf = new \Mpdf\Mpdf(['margin_bottom' => 36, 'margin_footer' => 6]);
+		$this->mpdf = $this->createMpdf(['margin_bottom' => 36, 'margin_footer' => 6]);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		$this->mpdf->SetHTMLFooter($footer);

@@ -119,7 +119,7 @@ class PageBreakAvoidStateSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->use_kwt = true;
 		$this->mpdf->showWatermarkText = true;
 		$this->mpdf->WriteHTML($html);

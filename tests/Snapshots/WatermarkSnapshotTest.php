@@ -60,7 +60,7 @@ class WatermarkSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 			'watermarkAngle' => 135,
 			'showWatermarkText' => true,
 			'showWatermarkImage' => true,
@@ -71,12 +71,12 @@ class WatermarkSnapshotTest extends Snapshot
 		$this->mpdf->WriteHTML($html);
 
 		$this->mpdf->AddPage();
-		$this->mpdf->SetWatermarkImage('img/tiger.webp', 1, [50, 50], [160,10]);
+		$this->mpdf->SetWatermarkImage('img/tiger.jpg', 1, [50, 50], [160,10]);
 		$this->mpdf->WriteHTML('<h2>Using a Watermark as a Header</h2>');
 		$this->mpdf->WriteHTML($html);
 
 		$this->mpdf->AddPage();
-		$this->mpdf->SetWatermarkImage('img/tiger.webp', 0.15, 'F');
+		$this->mpdf->SetWatermarkImage('img/tiger.jpg', 0.15, 'F');
 		$this->mpdf->WriteHTML('<h2>Using a Watermark Image as Background</h2>');
 		$this->mpdf->WriteHTML($html);
 	}

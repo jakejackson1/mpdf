@@ -392,7 +392,7 @@ class AutoFontSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'autoScriptToLang' => true,
 				'baseScript' => 1,
 				'autoVietnamese' => true,

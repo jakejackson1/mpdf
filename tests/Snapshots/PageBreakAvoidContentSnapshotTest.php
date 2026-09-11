@@ -101,7 +101,7 @@ class PageBreakAvoidContentSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}
