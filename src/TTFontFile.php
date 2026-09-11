@@ -5,6 +5,8 @@ namespace Mpdf;
 use Mpdf\Fonts\FileReader;
 use Mpdf\Fonts\FontCache;
 use Mpdf\Fonts\FontReader;
+use Mpdf\Fonts\Table\ClassDef;
+use Mpdf\Fonts\Table\Coverage;
 use Mpdf\Fonts\GlyphOperator;
 
 // NOTE*** If you change the defined constants below, be sure to delete all temporary font data files in /ttfontdata/
@@ -1285,8 +1287,8 @@ class TTFontFile
 	}
 
 	/**
-	 * ClassDefFormat1 or ClassDefFormat2, per Class Definition Table in the OpenType layout common
-	 * table formats.
+	 * A Class Definition table as a list of hex strings per class, for GDEF's glyph and mark
+	 * attachment classes and for GPOS pair positioning.
 	 *
 	 * @see https://learn.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table
 	 *
@@ -1299,39 +1301,23 @@ class TTFontFile
 			$this->reader->seek($offset);
 		}
 
-		// NB Any glyph not included in the range of covered GlyphIDs automatically belongs to Class 0. This is not returned by this function
-		$ClassFormat = $this->reader->readUInt16();
 		$GlyphByClass = [];
 
-		if ($ClassFormat == 1) {
-			$StartGlyph = $this->reader->readUInt16();
-			$GlyphCount = $this->reader->readUInt16();
-			for ($i = 0; $i < $GlyphCount; $i++) {
-				$gid = $StartGlyph + $i;
-				$class = $this->reader->readUInt16();
-				// Several fonts  (mainly dejavu.../Freeserif etc) have a MarkAttachClassDef Format 1, where StartGlyph is 0 and GlyphCount is 1
-				// This doesn't seem to do anything useful?
-				// Freeserif does not have $this->glyphToChar[0] allocated and would throw an error, so check if isset:
-				if (isset($this->glyphToChar[$gid][0])) {
-					$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$gid][0]);
-				}
-			}
-		} elseif ($ClassFormat == 2) {
-			$tableCount = $this->reader->readUInt16();
-			for ($i = 0; $i < $tableCount; $i++) {
-				$startGlyphID = $this->reader->readUInt16();
-				$endGlyphID = $this->reader->readUInt16();
-				$class = $this->reader->readUInt16();
-				for ($gid = $startGlyphID; $gid <= $endGlyphID; $gid++) {
-					if (isset($this->glyphToChar[$gid][0])) {
-						$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$gid][0]);
-					}
-				}
+		foreach (ClassDef::pairs($this->reader) as $pair) {
+			list($glyphID, $class) = $pair;
+
+			// Several fonts (dejavu..., FreeSerif) carry a MarkAttachClassDef Format 1 with startGlyphID
+			// 0 and glyphCount 1, which does not seem to mean anything useful, and FreeSerif has no
+			// glyphToChar[0] to go with it
+			if (isset($this->glyphToChar[$glyphID][0])) {
+				$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$glyphID][0]);
 			}
 		}
+
 		foreach ($GlyphByClass as $class => $glyphs) {
-			sort($GlyphByClass[$class], SORT_STRING); // SORT makes it easier to read in development ? order not important ???
+			sort($GlyphByClass[$class], SORT_STRING); // easier to read in development; order is not significant
 		}
+
 		ksort($GlyphByClass);
 
 		return $GlyphByClass;
@@ -3250,82 +3236,60 @@ class TTFontFile
 		return $str;
 	}
 
+	/**
+	 * A Coverage table, in whichever of three shapes the caller needs.
+	 *
+	 * @param bool $convert2hex Return the covered characters as hex strings
+	 * @param int  $mode        2 returns unicode => Coverage Index, which is what indexes a
+	 *                          subtable's parallel array of substitutions. Anything else, with
+	 *                          $convert2hex false, returns the glyph IDs themselves.
+	 */
 	function _getCoverage($convert2hex = true, $mode = 1)
 	{
-		$g = [];
-		$ctr = 0;
-		$CoverageFormat = $this->reader->readUInt16();
-		if ($CoverageFormat == 1) {
-			$CoverageGlyphCount = $this->reader->readUInt16();
-			for ($gid = 0; $gid < $CoverageGlyphCount; $gid++) {
-				$glyphID = $this->reader->readUInt16();
-				// A Coverage table may name a glyph no character reaches, and the position of every
-				// glyph after it in the table still has to line up with the rules that index it
-				$uni = isset($this->glyphToChar[$glyphID][0]) ? $this->glyphToChar[$glyphID][0] : 0;
-				if ($convert2hex) {
-					$g[] = unicode_hex($uni);
-				} elseif ($mode == 2) {
-					$g[$uni] = $ctr;
-					$ctr++;
-				} else {
-					$g[] = $glyphID;
-				}
-			}
+		$glyphs = Coverage::glyphs($this->reader);
+
+		if (!$convert2hex && $mode != 2) {
+			return $glyphs;
 		}
-		if ($CoverageFormat == 2) {
-			$RangeCount = $this->reader->readUInt16();
-			for ($r = 0; $r < $RangeCount; $r++) {
-				$start = $this->reader->readUInt16();
-				$end = $this->reader->readUInt16();
-				$StartCoverageIndex = $this->reader->readUInt16(); // n/a
-				for ($glyphID = $start; $glyphID <= $end; $glyphID++) {
-					$uni = isset($this->glyphToChar[$glyphID][0]) ? $this->glyphToChar[$glyphID][0] : 0;
-					if ($convert2hex) {
-						$g[] = unicode_hex($uni);
-					} elseif ($mode == 2) {
-						$uni = $g[$uni] = $ctr;
-						$ctr++;
-					} else {
-						$g[] = $glyphID;
-					}
-				}
+
+		$g = [];
+		foreach ($glyphs as $index => $glyphID) {
+			// A Coverage table may name a glyph no character reaches, and the position of every glyph
+			// after it in the table still has to line up with the rules that index it
+			$uni = isset($this->glyphToChar[$glyphID][0]) ? $this->glyphToChar[$glyphID][0] : 0;
+
+			if ($convert2hex) {
+				$g[] = unicode_hex($uni);
+			} else {
+				$g[$uni] = $index;
 			}
 		}
 
 		return $g;
 	}
 
+	/**
+	 * A Class Definition table as one "|"-separated hex string per class, which is the form the
+	 * cached GSUB data carries and the shaper's ignore strings are matched against.
+	 *
+	 * Unlike Otl::_getClasses this keeps class 0, and unlike Otl it drops glyphs no character
+	 * reaches rather than testing for them at match time.
+	 *
+	 * @return array class => "00041|00042|..."
+	 */
 	function _getClasses($offset)
 	{
 		$this->reader->seek($offset);
-		$ClassFormat = $this->reader->readUInt16();
 		$GlyphByClass = [];
-		if ($ClassFormat == 1) {
-			$StartGlyph = $this->reader->readUInt16();
-			$GlyphCount = $this->reader->readUInt16();
-			for ($i = 0; $i < $GlyphCount; $i++) {
-				$startGlyphID = $StartGlyph + $i;
-				$endGlyphID = $StartGlyph + $i;
-				$class = $this->reader->readUInt16();
-				for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-					if (isset($this->glyphToChar[$g][0])) {
-						$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$g][0]);
-					}
-				}
-			}
-		} elseif ($ClassFormat == 2) {
-			$tableCount = $this->reader->readUInt16();
-			for ($i = 0; $i < $tableCount; $i++) {
-				$startGlyphID = $this->reader->readUInt16();
-				$endGlyphID = $this->reader->readUInt16();
-				$class = $this->reader->readUInt16();
-				for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-					if (isset($this->glyphToChar[$g][0])) {
-						$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$g][0]);
-					}
-				}
+
+		foreach (ClassDef::pairs($this->reader) as $pair) {
+			list($glyphID, $class) = $pair;
+
+			if (isset($this->glyphToChar[$glyphID][0])) {
+				$GlyphByClass[$class][] = unicode_hex($this->glyphToChar[$glyphID][0]);
 			}
 		}
+
 		$gbc = [];
 		foreach ($GlyphByClass as $class => $garr) {
 			$gbc[$class] = implode('|', $garr);

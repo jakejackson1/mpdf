@@ -6,6 +6,8 @@ use Mpdf\Strict;
 
 use Mpdf\Css\TextVars;
 use Mpdf\Fonts\BlobReader;
+use Mpdf\Fonts\Table\ClassDef;
+use Mpdf\Fonts\Table\Coverage;
 use Mpdf\Fonts\FontCache;
 
 use Mpdf\Shaper\Arabic;
@@ -4327,41 +4329,31 @@ class Otl
 		return $matched;
 	}
 
+	/**
+	 * A Class Definition table as a list per class, for GPOS pair positioning, which needs a glyph's
+	 * position within its class rather than only its membership.
+	 *
+	 * Class 0 is kept here, unlike in _getClasses: a PairPos subtable counts it among its classes and
+	 * indexes its value records by class number.
+	 *
+	 * @return array class => list of unicodes, in the table's own order
+	 */
 	private function _getClassDefinitionTable($offset)
 	{
-		if (isset($this->LuDataCache[$this->otlCacheKey]['classDef'][$offset])) {
-			$GlyphByClass = $this->LuDataCache[$this->otlCacheKey]['classDef'][$offset];
-		} else {
+		if (!isset($this->LuDataCache[$this->otlCacheKey]['classDef'][$offset])) {
 			$this->reader->seek($offset);
-			$ClassFormat = $this->reader->readUInt16();
-			$GlyphClass = [];
 			$GlyphByClass = [];
-			if ($ClassFormat == 1) {
-				$StartGlyph = $this->reader->readUInt16();
-				$GlyphCount = $this->reader->readUInt16();
-				for ($i = 0; $i < $GlyphCount; $i++) {
-					$GlyphClass[$i]['startGlyphID'] = $StartGlyph + $i;
-					$GlyphClass[$i]['endGlyphID'] = $StartGlyph + $i;
-					$GlyphClass[$i]['class'] = $this->reader->readUInt16();
-					for ($g = $GlyphClass[$i]['startGlyphID']; $g <= $GlyphClass[$i]['endGlyphID']; $g++) {
-						$GlyphByClass[$GlyphClass[$i]['class']][] = $this->glyphToChar($g);
-					}
-				}
-			} elseif ($ClassFormat == 2) {
-				$tableCount = $this->reader->readUInt16();
-				for ($i = 0; $i < $tableCount; $i++) {
-					$GlyphClass[$i]['startGlyphID'] = $this->reader->readUInt16();
-					$GlyphClass[$i]['endGlyphID'] = $this->reader->readUInt16();
-					$GlyphClass[$i]['class'] = $this->reader->readUInt16();
-					for ($g = $GlyphClass[$i]['startGlyphID']; $g <= $GlyphClass[$i]['endGlyphID']; $g++) {
-						$GlyphByClass[$GlyphClass[$i]['class']][] = $this->glyphToChar($g);
-					}
-				}
+
+			foreach (ClassDef::pairs($this->reader) as $pair) {
+				list($glyphID, $class) = $pair;
+				$GlyphByClass[$class][] = $this->glyphToChar($glyphID);
 			}
+
 			ksort($GlyphByClass);
 			$this->LuDataCache[$this->otlCacheKey]['classDef'][$offset] = $GlyphByClass;
 		}
-		return $GlyphByClass;
+
+		return $this->LuDataCache[$this->otlCacheKey]['classDef'][$offset];
 	}
 
 	private function count_bits($n)
@@ -4724,118 +4716,72 @@ class Otl
 		return (str_pad(strtoupper(dechex($unicode_dec)), 5, '0', STR_PAD_LEFT));
 	}
 
+	/**
+	 * The glyph IDs a Coverage table covers, for a Single Substitution Format 1, which adds a delta
+	 * to a glyph ID rather than naming a replacement.
+	 *
+	 * Cached apart from _getCoverage below: the same table, projected differently.
+	 */
 	private function _getCoverageGID()
 	{
-		// Called from Lookup Type 1, Format 1 - returns glyphIDs rather than hexstrings
-		// Need to do this separately to cache separately
-		// Otherwise the same as fn below _getCoverage
 		$offset = $this->reader->tell();
-		if (isset($this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset])) {
-			$g = $this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset];
-		} else {
-			$g = [];
-			$CoverageFormat = $this->reader->readUInt16();
-			if ($CoverageFormat == 1) {
-				$CoverageGlyphCount = $this->reader->readUInt16();
-				for ($gid = 0; $gid < $CoverageGlyphCount; $gid++) {
-					$glyphID = $this->reader->readUInt16();
-					$g[] = $glyphID;
-				}
-			}
-			if ($CoverageFormat == 2) {
-				$RangeCount = $this->reader->readUInt16();
-				for ($r = 0; $r < $RangeCount; $r++) {
-					$start = $this->reader->readUInt16();
-					$end = $this->reader->readUInt16();
-					$StartCoverageIndex = $this->reader->readUInt16(); // n/a
-					for ($glyphID = $start; $glyphID <= $end; $glyphID++) {
-						$g[] = $glyphID;
-					}
-				}
-			}
-			$this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset] = $g;
+
+		if (!isset($this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset])) {
+			$this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset] = Coverage::glyphs($this->reader);
 		}
-		return $g;
+
+		return $this->LuDataCache[$this->otlCacheKey]['coverageGID'][$offset];
 	}
 
+	/**
+	 * The characters a Coverage table covers, as the hex strings the shaper matches against
+	 */
 	private function _getCoverage()
 	{
 		$offset = $this->reader->tell();
-		if (isset($this->LuDataCache[$this->otlCacheKey]['coverage'][$offset])) {
-			$g = $this->LuDataCache[$this->otlCacheKey]['coverage'][$offset];
-		} else {
+
+		if (!isset($this->LuDataCache[$this->otlCacheKey]['coverage'][$offset])) {
 			$g = [];
-			$CoverageFormat = $this->reader->readUInt16();
-			if ($CoverageFormat == 1) {
-				$CoverageGlyphCount = $this->reader->readUInt16();
-				for ($gid = 0; $gid < $CoverageGlyphCount; $gid++) {
-					$glyphID = $this->reader->readUInt16();
-					$g[] = $this->unicode_hex($this->glyphToChar($glyphID));
-				}
+			foreach (Coverage::glyphs($this->reader) as $glyphID) {
+				$g[] = $this->unicode_hex($this->glyphToChar($glyphID));
 			}
-			if ($CoverageFormat == 2) {
-				$RangeCount = $this->reader->readUInt16();
-				for ($r = 0; $r < $RangeCount; $r++) {
-					$start = $this->reader->readUInt16();
-					$end = $this->reader->readUInt16();
-					$StartCoverageIndex = $this->reader->readUInt16(); // n/a
-					for ($glyphID = $start; $glyphID <= $end; $glyphID++) {
-						$g[] = $this->unicode_hex($this->glyphToChar($glyphID));
-					}
-				}
-			}
+
 			$this->LuDataCache[$this->otlCacheKey]['coverage'][$offset] = $g;
 		}
-		return $g;
+
+		return $this->LuDataCache[$this->otlCacheKey]['coverage'][$offset];
 	}
 
+	/**
+	 * A Class Definition table as a set per class, for testing whether a character is in one.
+	 *
+	 * Class 0 is dropped. The spec makes it the class of every glyph the table does not mention, so a
+	 * font that assigns it explicitly is saying nothing - except FreeSerif under "blws", which defines
+	 * class 0 and appears to mean something by it. Whatever it means, mPDF has never acted on it.
+	 *
+	 * A glyph no character reaches is dropped too: there is no character for a rule to match.
+	 *
+	 * @return array class => map of unicode => 1
+	 */
 	private function _getClasses($offset)
 	{
-		if (isset($this->LuDataCache[$this->otlCacheKey]['classes'][$offset])) {
-			$GlyphByClass = $this->LuDataCache[$this->otlCacheKey]['classes'][$offset];
-		} else {
+		if (!isset($this->LuDataCache[$this->otlCacheKey]['classes'][$offset])) {
 			$this->reader->seek($offset);
-			$ClassFormat = $this->reader->readUInt16();
 			$GlyphByClass = [];
-			if ($ClassFormat == 1) {
-				$StartGlyph = $this->reader->readUInt16();
-				$GlyphCount = $this->reader->readUInt16();
-				for ($i = 0; $i < $GlyphCount; $i++) {
-					$startGlyphID = $StartGlyph + $i;
-					$endGlyphID = $StartGlyph + $i;
-					$class = $this->reader->readUInt16();
-					// Note: Font FreeSerif , tag "blws"
-					// $BacktrackClasses[0] is defined ? a mistake in the font ???
-					// Let's ignore for now
-					if ($class > 0) {
-						for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-							if ($this->glyphToChar($g)) {
-								$GlyphByClass[$class][$this->glyphToChar($g)] = 1;
-							}
-						}
-					}
-				}
-			} elseif ($ClassFormat == 2) {
-				$tableCount = $this->reader->readUInt16();
-				for ($i = 0; $i < $tableCount; $i++) {
-					$startGlyphID = $this->reader->readUInt16();
-					$endGlyphID = $this->reader->readUInt16();
-					$class = $this->reader->readUInt16();
-					// Note: Font FreeSerif , tag "blws"
-					// $BacktrackClasses[0] is defined ? a mistake in the font ???
-					// Let's ignore for now
-					if ($class > 0) {
-						for ($g = $startGlyphID; $g <= $endGlyphID; $g++) {
-							if ($this->glyphToChar($g)) {
-								$GlyphByClass[$class][$this->glyphToChar($g)] = 1;
-							}
-						}
-					}
+
+			foreach (ClassDef::pairs($this->reader) as $pair) {
+				list($glyphID, $class) = $pair;
+				$uni = $this->glyphToChar($glyphID);
+
+				if ($class > 0 && $uni) {
+					$GlyphByClass[$class][$uni] = 1;
 				}
 			}
+
 			$this->LuDataCache[$this->otlCacheKey]['classes'][$offset] = $GlyphByClass;
 		}
-		return $GlyphByClass;
+
+		return $this->LuDataCache[$this->otlCacheKey]['classes'][$offset];
 	}
 
 	private function _getOTLscriptTag($ScriptLang, $scripttag, $scriptblock, $shaper, $useOTL, $mode)
