@@ -316,13 +316,6 @@ class Otl
 				}
 			}
 
-			// This is just for the font_dump_OTL utility to set script and langsys override
-			// $mpdf->overrideOTLsettings does not exist, this is never called
-			/*if (isset($this->mpdf->overrideOTLsettings) && isset($this->mpdf->overrideOTLsettings[$this->fontkey])) {
-				$GSUBscriptTag = $GPOSscriptTag = $this->mpdf->overrideOTLsettings[$this->fontkey]['script'];
-				$GSUBlangsys = $GPOSlangsys = $this->mpdf->overrideOTLsettings[$this->fontkey]['lang'];
-			}*/
-
 			if (!$GSUBscriptTag && !$GSUBlangsys && !$GPOSscriptTag && !$GPOSlangsys) {
 				// Remove ZWJ and ZWNJ
 				for ($i = 0; $i < count($this->OTLdata); $i++) {
@@ -1328,7 +1321,8 @@ class Otl
 				$currGID = $this->OTLdata[$ptr]['uni'];
 				$shift = 1;
 				foreach ($this->GSUBLookups[$lu]['Subtables'] as $c => $subtable_offset) {
-					// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
+					// The Coverage read for this subtable is the one for input position 0, which is the only
+					// position a match can start at - see where TTFontFile reads it
 					if (isset($this->GSLuCoverage[$lu][$c][$currGID])) {
 						// Get rules from font GSUB subtable
 						$shift = $this->_applyGSUBsubtable($lu, $c, $ptr, $currGlyph, $currGID, $subtable_offset, $Type, $Flag, $MarkFilteringSet, $this->GSLuCoverage[$lu][$c], 0, $tag, 0, $tagInt);
@@ -1404,7 +1398,8 @@ class Otl
 					}
 
 					foreach ($this->GSUBLookups[$lu]['Subtables'] as $c => $subtable_offset) {
-						// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
+						// The Coverage read for this subtable is the one for input position 0, which is the only
+						// position a match can start at - see where TTFontFile reads it
 						if (isset($this->GSLuCoverage[$lu][$c][$currGID])) {
 							// Get rules from font GSUB subtable
 							$shift = $this->_applyGSUBsubtable($lu, $c, $ptr, $currGlyph, $currGID, $subtable_offset, $Type, $Flag, $MarkFilteringSet, $this->GSLuCoverage[$lu][$c], 0, $tag, 0, $tagInt);
@@ -1464,7 +1459,8 @@ class Otl
 					$currGID = $this->OTLdata[$ptr]['uni'];
 					$shift = 1;
 					foreach ($this->GSUBLookups[$lu]['Subtables'] as $c => $subtable_offset) {
-						// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
+						// The Coverage read for this subtable is the one for input position 0, which is the only
+						// position a match can start at - see where TTFontFile reads it
 						if (isset($this->GSLuCoverage[$lu][$c][$currGID])) {
 							// Get rules from font GSUB subtable
 							$shift = $this->_applyGSUBsubtable($lu, $c, $ptr, $currGlyph, $currGID, $subtable_offset, $Type, $Flag, $MarkFilteringSet, $this->GSLuCoverage[$lu][$c], 0, $usetag, 0, $tagInt);
@@ -1526,7 +1522,8 @@ class Otl
 					$currGID = $this->OTLdata[$ptr]['uni'];
 					$shift = 1;
 					foreach ($this->GSUBLookups[$lu]['Subtables'] as $c => $subtable_offset) {
-						// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
+						// The Coverage read for this subtable is the one for input position 0, which is the only
+						// position a match can start at - see where TTFontFile reads it
 						if (isset($this->GSLuCoverage[$lu][$c][$currGID])) {
 							if ($mask && !($this->OTLdata[$ptr]['mask'] & $mask)) { // only apply when mask indicates
 								continue;
@@ -2938,7 +2935,8 @@ class Otl
 				$currGID = $this->OTLdata[$ptr]['uni'];
 				$shift = 1;
 				foreach ($this->GPOSLookups[$lu]['Subtables'] as $c => $subtable_offset) {
-					// NB Coverage only looks at glyphs for position 1 (esp. 7.3 and 8.3)
+					// The Coverage read for this subtable is the one for input position 0, which is the only
+					// position a match can start at - see where TTFontFile reads it
 					if (isset($this->LuCoverage[$lu][$c][$currGID])) {
 						// Get rules from font GPOS subtable
 						if (isset($this->OTLdata[$ptr]['bidi_type'])) {  // No need to check bidi_type - just a check that it exists
@@ -4137,13 +4135,6 @@ class Otl
 	}
 
 	/**
-	 * Apply the lookups a matched GPOS context asks for, at the positions the match found.
-	 *
-	 * Every contextual and chaining format ends with the same array of PosLookupRecords, read from
-	 * the current position, each pairing an index into the matched input sequence with the lookup
-	 * to run at it.
-	 */
-	/**
 	 * Apply the nested lookups a matched context asks for, per SubstLookupRecord.
 	 *
 	 * Every contextual and chained-contextual substitution subtable ends the same way: having matched
@@ -4203,6 +4194,28 @@ class Otl
 		return $shift;
 	}
 
+	/**
+	 * Apply the lookups a matched GPOS context asks for, at the positions the match found.
+	 *
+	 * Every contextual and chaining format ends the same way: having matched a sequence of glyphs,
+	 * it names some number of lookups to run, each at a position within that sequence. The reader is
+	 * positioned at the records.
+	 *
+	 *     uint16   sequenceIndex       which glyph of the matched input to apply the lookup at
+	 *     uint16   lookupListIndex     which lookup to apply
+	 *
+	 * The counterpart for substitution is _applyGSUBlookupRecords, which documents why a record
+	 * pointing past the end of the input sequence is skipped rather than treated as an error.
+	 *
+	 * @see https://learn.microsoft.com/en-us/typography/opentype/spec/gpos#chained-sequence-context-positioning-format-3-coverage-based-glyph-contexts
+	 *
+	 * @param int   $PosCount        PosCount, the number of records to read
+	 * @param int   $InputGlyphCount The length of the matched input sequence
+	 * @param array $matched         Position in OTLdata of each glyph of the matched input sequence
+	 *
+	 * @return int Glyphs to advance by, from the last nested lookup that shifted anything; 0 if none
+	 *             did, which is also what a subtable naming no records returns
+	 */
 	private function _applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec)
 	{
 		$PosLookupRecord = [];

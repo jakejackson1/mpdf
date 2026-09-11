@@ -1502,7 +1502,12 @@ class TTFontFile
 					$this->reader->skip(2 * $BacktrackGlyphCount + 2); // backtrackCoverageOffsets + inputGlyphCount
 				}
 
-				// NB Coverage only looks at glyphs for position 1 (i.e. 5.3 and 6.3)	// NEEDS TO READ ALL ********************
+				// Reading position 0's Coverage is the whole of what the gate needs. The shaper offers a
+				// subtable the glyph it is standing on and asks whether a match could start there, and every
+				// format puts the Coverage of the first input position right here: straight after the format
+				// for types 1 to 4 and 8 and for formats 1 and 2 of types 5 and 6, and after the counts and
+				// backtrack offsets stepped over above for format 3. Otl::checkContextMatchMultiple starts
+				// its input loop at 1 for the same reason - position 0 is what got it called.
 				$Coverage = $subtable_offset + $this->reader->readUInt16();
 				$this->reader->seek($Coverage);
 				$glyphs = $this->_getCoverage(false, 2);
@@ -3472,8 +3477,12 @@ class TTFontFile
 					$BacktrackGlyphCount = $this->reader->readUInt16();
 					$this->reader->skip(2 * $BacktrackGlyphCount + 2);
 				}
-				// NB Coverage only looks at glyphs for position 1 (i.e. 7.3 and 8.3)	// NEEDS TO READ ALL ********************
-				// NB For e.g. Type 4, this may be the Coverage for the Mark
+				// Reading position 0's Coverage is the whole of what the gate needs. The shaper offers a
+				// subtable the glyph it is standing on and asks whether a match could start there, and every
+				// format puts the Coverage of the first position right here: straight after the format for
+				// types 1 to 6 and for formats 1 and 2 of types 7 and 8, and after the counts and backtrack
+				// offsets stepped over above for format 3. For types 4, 5 and 6 that Coverage is the mark's,
+				// which is the right gate - those lookups are applied standing on the mark.
 				$Coverage = $subtable_offset + $this->reader->readUInt16();
 				$this->reader->seek($Coverage);
 				$glyphs = $this->_getCoverage(false, 2);

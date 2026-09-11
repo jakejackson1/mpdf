@@ -1084,7 +1084,12 @@ class OtlDump extends TTFontFile
 							$this->reader->skip(2 * $BacktrackGlyphCount + 2);
 						}
 					}
-					// NB Coverage only looks at glyphs for position 1 (i.e. 5.3 and 6.3)	// NEEDS TO READ ALL ********************
+					// Reading position 0's Coverage is the whole of what the gate needs. The shaper offers a
+					// subtable the glyph it is standing on and asks whether a match could start there, and every
+					// format puts the Coverage of the first input position right here: straight after the format
+					// for types 1 to 4 and 8 and for formats 1 and 2 of types 5 and 6, and after the counts and
+					// backtrack offsets stepped over above for format 3. Otl::checkContextMatchMultiple starts
+					// its input loop at 1 for the same reason - position 0 is what got it called.
 					$Coverage = $GSLookup[$i]['Subtables'][$c] + $this->reader->readUInt16();
 					$this->reader->seek($Coverage);
 					$glyphs = $this->_getCoverage();
