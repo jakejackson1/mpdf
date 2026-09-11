@@ -11,12 +11,6 @@
 		</testsuite>
 	</testsuites>
 
-    <groups>
-        <exclude>
-            <group>snapshot</group>
-        </exclude>
-    </groups>
-
 	<coverage processUncoveredFiles="true">
 		<include>
 			<directory suffix=".php">src</directory>

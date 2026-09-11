@@ -51,12 +51,13 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 		$this->writer->object();
 		$this->mpdf->MetadataRoot = $this->mpdf->n;
 
-		$z = date('O'); // +0200
-		$offset = substr($z, 0, 3) . ':' . substr($z, 3, 2);
+		$CreationDate = $this->writer->date()->format('Y-m-d\TH:i:sP'); // 2006-03-10T10:47:26-05:00
 
-		$CreationDate = date('Y-m-d\TH:i:s') . $offset; // 2006-03-10T10:47:26-05:00 2006-06-19T09:05:17Z
-
-		$uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0x0fff) | 0x4000, random_int(0, 0x3fff) | 0x8000, random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff));
+		// A name-based (version 3) UUID of the document, so the same document carries the same identifier
+		$uuid = $this->hash();
+		$uuid[12] = '3';
+		$uuid[16] = dechex((hexdec($uuid[16]) & 0x3) | 0x8);
+		$uuid = preg_replace('/^(.{8})(.{4})(.{4})(.{4})/', '$1-$2-$3-$4-', $uuid);
 
 		$m = '<?xpacket begin="' . chr(239) . chr(187) . chr(191) . '" id="W5M0MpCehiHzreSzNTczkc9d"?>' . "\n"; // begin = FEFF BOM
 		$m .= ' <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="3.1-701">' . "\n";
@@ -174,9 +175,8 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/' . $key . ' ' . $this->writer->utf16BigEndianTextString($value));
 		}
 
-		$now = PdfDate::format(time());
-		$this->writer->write('/CreationDate ' . $this->writer->string('D:' . $now));
-		$this->writer->write('/ModDate ' . $this->writer->string('D:' . $now));
+		$this->writer->write('/CreationDate ' . $this->writer->dateString());
+		$this->writer->write('/ModDate ' . $this->writer->dateString());
 		if ($this->mpdf->PDFX) {
 			$this->writer->write('/Trapped/False');
 			$this->writer->write('/GTS_PDFXVersion(PDF/X-1a:2003)');
@@ -303,9 +303,10 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/Length ' . strlen($filestream));
 			$this->writer->write('/Filter /FlateDecode');
 			if (isset($file['path'])) {
+				// The file's own date, not the document's
 				$this->writer->write('/Params <</ModDate '.$this->writer->string('D:' . PdfDate::format(filemtime($file['path']))).' >>');
 			} else {
-				$this->writer->write('/Params <</ModDate '.$this->writer->string('D:' . PdfDate::format(time())).' >>');
+				$this->writer->write('/Params <</ModDate ' . $this->writer->dateString() . ' >>');
 			}
 
 			$this->writer->write('>>');
@@ -559,7 +560,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						// Removed as causing undesired effects in Chrome PDF viewer https://github.com/mpdf/mpdf/issues/283
 						// $this->writer->write(' /Contents ' . $this->writer->utf16BigEndianTextString($pl[4]);
 						$this->writer->write(' /NM ' . $this->writer->string(sprintf('%04u-%04u', $n, $key)), false);
-						$this->writer->write(' /M ' . $this->writer->string('D:' . date('YmdHis')), false);
+						$this->writer->write(' /M ' . $this->writer->dateString(), false);
 
 						// Use this (instead of /Border) to specify border around link
 						// $this->writer->write(' /BS <</W 1');	// Width on points; 0 = no line
@@ -696,8 +697,8 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 						$annot .= ' /Contents ' . $this->writer->utf16BigEndianTextString($pl['txt']);
 
 						$annot .= ' /NM ' . $this->writer->string(sprintf('%04u-%04u', $n, 2000 + $key));
-						$annot .= ' /M ' . $this->writer->string('D:' . date('YmdHis'));
-						$annot .= ' /CreationDate ' . $this->writer->string('D:' . date('YmdHis'));
+						$annot .= ' /M ' . $this->writer->dateString();
+						$annot .= ' /CreationDate ' . $this->writer->dateString();
 						$annot .= ' /Border [0 0 0]';
 
 						if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
@@ -804,7 +805,7 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 							}
 							$rect = sprintf('%.3F %.3F %.3F %.3F', $x, $y - $h, $x + $w, $y);
 							$annot .= '<</Type /Annot /Subtype /Popup /Rect [' . $rect . ']';
-							$annot .= ' /M ' . $this->writer->string('D:' . date('YmdHis'));
+							$annot .= ' /M ' . $this->writer->dateString();
 							if ($this->mpdf->PDFA || $this->mpdf->PDFX) {
 								$annot .= ' /F 28';
 							}
@@ -856,9 +857,18 @@ class MetadataWriter implements \Psr\Log\LoggerAwareInterface
 			$this->writer->write('/Encrypt ' . $this->mpdf->enc_obj_id . ' 0 R');
 			$this->writer->write('/ID [<' . $this->protection->getUniqid() . '> <' . $this->protection->getUniqid() . '>]');
 		} else {
-			$uniqid = md5(time() . $this->mpdf->buffer->getHash());
+			$uniqid = $this->hash();
 			$this->writer->write('/ID [<' . $uniqid . '> <' . $uniqid . '>]');
 		}
+	}
+
+	/**
+	 * A hash of the document so far and the moment it is dated: what the file ID and the XMP identifier are made
+	 * of, so they follow the content rather than the run
+	 */
+	private function hash()
+	{
+		return md5($this->writer->date()->getTimestamp() . $this->mpdf->buffer->getHash());
 	}
 
 	private function getVersionString()

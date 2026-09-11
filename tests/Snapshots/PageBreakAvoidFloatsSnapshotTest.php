@@ -69,7 +69,7 @@ class PageBreakAvoidFloatsSnapshotTest extends Snapshot
 		<?php } ?>
 
 		<div class="together">
-			<img class="left" src="img/tiger.webp" />
+			<img class="left" src="img/tiger.jpg" />
 			<img class="right" src="img/bayeux2.jpg" />
 			<?php for ($i = 0; $i < 10; $i++) { ?>
 				<p>Text between two floated pictures, line <?= $i + 1 ?>. The block moves whole to the next
@@ -120,7 +120,7 @@ class PageBreakAvoidFloatsSnapshotTest extends Snapshot
 		<?php } ?>
 
 		<div class="aside kept boxed">
-			<img src="img/tiger.webp" />
+			<img src="img/tiger.jpg" />
 			<p>A kept floated block with a border, a background and a picture, line 1.</p>
 			<p>Line 2.</p>
 			<p>Line 3.</p>
@@ -143,7 +143,7 @@ class PageBreakAvoidFloatsSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}

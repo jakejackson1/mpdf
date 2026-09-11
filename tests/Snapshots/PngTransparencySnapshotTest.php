@@ -22,6 +22,11 @@ class PngTransparencySnapshotTest extends Snapshot
 	 * @return   void
 	 * @internal Don't call any $this->mpdf->Output*() method
 	 */
+	protected function imagesGoThroughGd()
+	{
+		return true;
+	}
+
 	public function generatePdf()
 	{
 		ob_start();
@@ -70,7 +75,7 @@ class PngTransparencySnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		$this->mpdf->WriteHTML($html);

@@ -871,7 +871,7 @@ NOTE
 						),
 		);
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'margin_left' => 32,
 				'margin_right' => 25,
 				'margin_top' => 27,
@@ -898,7 +898,7 @@ NOTE
 <pagebreak type="next-odd" />
 <h2>Index</h2>
 <columns column-count="2" column-gap="5" />
-<indexinsert usedivletters="on" links="on" collation="ar_SA.utf8" collation-group="Arabic_Saudi_Arabia" />
+<indexinsert usedivletters="on" links="on" collation-group="Arabic_Saudi_Arabia" />
 ';
 
 		$this->mpdf->WriteHTML($html);

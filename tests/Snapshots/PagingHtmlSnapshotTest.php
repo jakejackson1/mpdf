@@ -91,7 +91,7 @@ class PagingHtmlSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(['mirrorMargins' => true]);
+		$this->mpdf = $this->createMpdf(['mirrorMargins' => true]);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}

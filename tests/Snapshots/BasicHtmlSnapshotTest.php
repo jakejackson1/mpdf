@@ -43,7 +43,7 @@ class BasicHtmlSnapshotTest extends Snapshot
 
 		<hr/>
 
-		<div><img src="img/tiger.webp" style="float:right; width:200px">DIV: Proin aliquet lorem id felis. Curabitur vel
+		<div><img src="img/tiger.jpg" style="float:right; width:200px">DIV: Proin aliquet lorem id felis. Curabitur vel
 			libero at mauris nonummy tincidunt. Donec imperdiet. Vestibulum sem sem, lacinia vel, molestie et, laoreet
 			eget, urna. Curabitur viverra faucibus pede. Morbi lobortis. Donec dapibus. Donec tempus. Ut arcu enim,
 			rhoncus ac, venenatis eu, porttitor mollis, dui. Sed vitae risus. In elementum sem placerat dui. Nam
@@ -266,7 +266,7 @@ ultricies at, rutrum sit amet, posuere nec, velit. Sed molestie mollis dui.</pre
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(['mode' => 'c']);
+		$this->mpdf = $this->createMpdf(['mode' => 'c']);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}

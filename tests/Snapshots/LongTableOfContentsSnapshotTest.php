@@ -60,7 +60,7 @@ class LongTableOfContentsSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf();
+		$this->mpdf = $this->createMpdf();
 		$this->mpdf->SetHTMLFooter('<div style="text-align: center;">Page {PAGENO}</div>');
 		$this->mpdf->WriteHTML($html);
 	}

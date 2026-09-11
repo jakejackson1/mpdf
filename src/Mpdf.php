@@ -837,6 +837,8 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	public $exposeVersion;
 
+	public $creationDate;
+
 	private $preambleWritten = false;
 
 	private $watermarkTextObject;
@@ -13256,7 +13258,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 			$this->Line($this->w - $this->page_box['outer_width_LR'], $cy, $this->w - $this->page_box['outer_width_LR'], $dy);
 
 			if ($this->printers_info) {
-				$hd = date('Y-m-d H:i') . '  Page ' . $this->page . ' of {nb}';
+				$hd = $this->writer->date()->format('Y-m-d H:i') . '  Page ' . $this->page . ' of {nb}';
 				$this->SetTColor($this->colorConverter->convert(0, $this->PDFAXwarnings));
 				$this->SetFont('arial', '', 7.5, true, true);
 				$this->x = $this->page_box['outer_width_LR'] + 1.5;
@@ -27249,7 +27251,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	// mPDF 5.7+
 	function date_callback($matches)
 	{
-		return date($matches[1]);
+		return $this->writer->date()->format($matches[1]);
 	}
 
 	/**

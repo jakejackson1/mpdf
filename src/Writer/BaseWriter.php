@@ -4,6 +4,7 @@ namespace Mpdf\Writer;
 
 use Mpdf\Strict;
 use Mpdf\Mpdf;
+use Mpdf\Utils\PdfDate;
 use Mpdf\Pdf\Protection;
 
 final class BaseWriter
@@ -15,6 +16,11 @@ final class BaseWriter
 	 * @var \Mpdf\Mpdf
 	 */
 	private $mpdf;
+
+	/**
+	 * @var \DateTimeInterface
+	 */
+	private $date;
 
 	/**
 	 * @var \Mpdf\Pdf\Protection
@@ -242,6 +248,28 @@ final class BaseWriter
 		} else {
 			$this->mpdf->pages[$this->mpdf->page] .= $s . ($ln ? "\n" : '');
 		}
+	}
+
+	/**
+	 * The moment the document is dated, settled the first time it is asked for so every date in it agrees
+	 *
+	 * @return \DateTimeInterface
+	 */
+	public function date()
+	{
+		if ($this->date === null) {
+			$this->date = PdfDate::documentDate($this->mpdf->creationDate);
+		}
+
+		return $this->date;
+	}
+
+	/**
+	 * That moment as a PDF date string, for the Info dictionary and each annotation
+	 */
+	public function dateString()
+	{
+		return $this->string('D:' . PdfDate::format($this->date()));
 	}
 
 }

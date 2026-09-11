@@ -239,7 +239,7 @@ class JustifySnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'margin_left' => 32,
 				'margin_right' => 25,
 				'margin_top' => 27,

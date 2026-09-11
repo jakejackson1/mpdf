@@ -98,7 +98,7 @@ class PositionedHtmlSnapshotTest extends Snapshot
 		</div>
 
 		<div class="gradient" style="float: right; width: 28%; margin-bottom: 0pt; ">
-			<img src="img/tiger.webp" style="float:right" width="70"/>This is text in a &lt;div&gt; element that is
+			<img src="img/tiger.jpg" style="float:right" width="70"/>This is text in a &lt;div&gt; element that is
 			set to float:right and width:28%. It also has an image with float:right inside. With this exception, you
 			cannot nest elements with the float property set inside one another.
 		</div>
@@ -136,7 +136,7 @@ class PositionedHtmlSnapshotTest extends Snapshot
 
 			<p>Nulla felis erat, imperdiet eu, ullamcorper non, nonummy quis, elit. Suspendisse potenti. Ut a eros at ligula vehicula pretium. Maecenas feugiat pede vel risus. Nulla et lectus. Fusce eleifend neque sit amet erat. Integer consectetuer nulla non orci. Morbi feugiat pulvinar dolor. Cras odio. Donec mattis, nisi id euismod auctor, neque metus pellentesque risus, at eleifend lacus sapien et risus. Phasellus metus. Phasellus feugiat, lectus ac aliquam molestie, leo lacus tincidunt turpis, vel aliquam quam odio et sapien. Mauris ante pede, auctor ac, suscipit quis, malesuada sed, nulla. Integer sit amet odio sit amet lectus luctus euismod. Donec et nulla. Sed quis orci. </p>
 
-			<div><img src="img/tiger.webp" style="float:right; width:150px">DIV: Proin aliquet lorem id felis. Curabitur vel libero at mauris nonummy tincidunt. Donec imperdiet. Vestibulum sem sem, lacinia vel, molestie et, laoreet eget, urna. Curabitur viverra faucibus pede. Morbi lobortis. Donec dapibus. Donec tempus. Ut arcu enim, rhoncus ac, venenatis eu, porttitor mollis, dui. Sed vitae risus. In elementum sem placerat dui. Nam tristique eros in nisl. Nulla cursus sapien non quam porta porttitor. Quisque dictum ipsum ornare tortor. Fusce ornare tempus enim. </div>
+			<div><img src="img/tiger.jpg" style="float:right; width:150px">DIV: Proin aliquet lorem id felis. Curabitur vel libero at mauris nonummy tincidunt. Donec imperdiet. Vestibulum sem sem, lacinia vel, molestie et, laoreet eget, urna. Curabitur viverra faucibus pede. Morbi lobortis. Donec dapibus. Donec tempus. Ut arcu enim, rhoncus ac, venenatis eu, porttitor mollis, dui. Sed vitae risus. In elementum sem placerat dui. Nam tristique eros in nisl. Nulla cursus sapien non quam porta porttitor. Quisque dictum ipsum ornare tortor. Fusce ornare tempus enim. </div>
 
 			<div><img src="img/bayeux2.jpg" style="opacity: 0.5; float: left;" />DIV: Proin aliquet lorem id felis. Curabitur vel libero at mauris nonummy tincidunt. Donec imperdiet. Vestibulum sem sem, lacinia vel, molestie et, laoreet eget, urna. Curabitur viverra faucibus pede. Morbi lobortis. Donec dapibus. Donec tempus. Ut arcu enim, rhoncus ac, venenatis eu, porttitor mollis, dui. Sed vitae risus. In elementum sem placerat dui. Nam tristique eros in nisl. Nulla cursus sapien non quam porta porttitor. Quisque dictum ipsum ornare tortor. Fusce ornare tempus enim. </div>
 
@@ -144,7 +144,7 @@ class PositionedHtmlSnapshotTest extends Snapshot
 
 			<address>Address: Vestibulum feugiat, orci at imperdiet tincidunt, mauris erat facilisis urna, sagittis ultricies dui nisl et lectus. Sed lacinia, lectus vitae dictum sodales, elit ipsum ultrices orci, non euismod arcu diam non metus.</address>
 
-			<div><a href="dummy123456">Hyperlink (&lt;a&gt;)</a></div>
+			<div><a href="https://example.com/dummy123456">Hyperlink (&lt;a&gt;)</a></div>
 			<div><a href="#top">Hyperlink (&lt;a&gt;)</a></div>
 			<div><a href="http://www.pallcare.info">Hyperlink (&lt;a&gt;)</a></div>
 
@@ -185,7 +185,7 @@ class PositionedHtmlSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(['mode' => 'c']);
+		$this->mpdf = $this->createMpdf(['mode' => 'c']);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}

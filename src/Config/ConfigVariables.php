@@ -526,6 +526,11 @@ class ConfigVariables
 			'curlUserAgent' => 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:108.0) Gecko/20100101 Firefox/108.0',
 
 			'exposeVersion' => true,
+
+			// Dates the document at this Unix timestamp, or DateTimeInterface, instead of now. The Info and XMP dates,
+			// each annotation's, {DATE} in a header, and the file ID that is made from them follow it, so the same content
+			// gives the same bytes. An encrypted document keeps the random ID its key is made from.
+			'creationDate' => null,
 		];
 	}
 

@@ -449,7 +449,7 @@ class BarcodeSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'mode' => 'c',
 				'margin_left' => 20,
 				'margin_right' => 15,

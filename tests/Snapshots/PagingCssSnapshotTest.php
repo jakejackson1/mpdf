@@ -774,7 +774,7 @@ class PagingCssSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf([
+		$this->mpdf = $this->createMpdf([
 				'mirrorMargins' => true,
 				'margin_left' => 5,
 				'margin_right' => 5,

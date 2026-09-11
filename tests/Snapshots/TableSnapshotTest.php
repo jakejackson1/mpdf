@@ -2326,7 +2326,7 @@ class TableSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(
+		$this->mpdf = $this->createMpdf(
 			[
 			'mode'          => 'c',
 			'margin_left'   => 32,

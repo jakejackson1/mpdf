@@ -58,7 +58,7 @@ class ExifOrientationGreyscaleSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(['useImageExifOrientation' => true]);
+		$this->mpdf = $this->createMpdf(['useImageExifOrientation' => true]);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		$this->mpdf->WriteHTML($html);

@@ -70,7 +70,7 @@ class PageBreakAvoidEarlyBreakSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf($this->config());
+		$this->mpdf = $this->createMpdf($this->config());
 		$this->mpdf->WriteHTML($html);
 	}
 }

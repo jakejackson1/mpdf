@@ -15,6 +15,11 @@ class ExifOrientationSnapshotTest extends Snapshot
 		return 'exif-orientation';
 	}
 
+	protected function imagesGoThroughGd()
+	{
+		return true;
+	}
+
 	/**
 	 * Generate a PDF document by initializing the Mpdf object on $this->mpdf and
 	 * loading it with content
@@ -76,7 +81,7 @@ class ExifOrientationSnapshotTest extends Snapshot
 		 * there is for the chroma subsampling any quality below 90 uses. The quality is raised here so the
 		 * snapshot shows which way up the samples are rather than what JPEG does to a colour boundary.
 		 */
-		$this->mpdf = new \Mpdf\Mpdf(['useImageExifOrientation' => true, 'imageJpegQuality' => 95]);
+		$this->mpdf = $this->createMpdf(['useImageExifOrientation' => true, 'imageJpegQuality' => 95]);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 
 		$this->mpdf->WriteHTML($html);

@@ -62,7 +62,7 @@ class LineHeightSnapshotTest extends Snapshot
 		<?php
 		$html = ob_get_clean();
 
-		$this->mpdf = new \Mpdf\Mpdf(['mode' => 'c']);
+		$this->mpdf = $this->createMpdf(['mode' => 'c']);
 		$this->mpdf->SetBasePath(__DIR__ . '/../data');
 		$this->mpdf->WriteHTML($html);
 	}
