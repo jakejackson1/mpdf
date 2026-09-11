@@ -882,29 +882,9 @@ parameters:
 			count: 1
 			path: src/Otl.php
 
-		-
-			message: '#^Variable \$LookupListIndex might not be defined\.$#'
-			identifier: variable.undefined
-			count: 4
-			path: src/Otl.php
 
-		-
-			message: '#^Variable \$PosLookupRecord might not be defined\.$#'
-			identifier: variable.undefined
-			count: 1
-			path: src/Otl.php
 
-		-
-			message: '#^Variable \$SequenceIndex might not be defined\.$#'
-			identifier: variable.undefined
-			count: 4
-			path: src/Otl.php
 
-		-
-			message: '#^Variable \$SubstLookupRecord might not be defined\.$#'
-			identifier: variable.undefined
-			count: 2
-			path: src/Otl.php
 
 		-
 			message: '#^Variable \$Value might not be defined\.$#'
@@ -948,11 +928,6 @@ parameters:
 			count: 1
 			path: src/Bidi.php
 
-		-
-			message: '#^Variable \$shift might not be defined\.$#'
-			identifier: variable.undefined
-			count: 6
-			path: src/Otl.php
 
 		-
 			message: '#^Variable \$useGSUBtags might not be defined\.$#'

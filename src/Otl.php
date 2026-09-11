@@ -1925,39 +1925,9 @@ class Otl
 							if ($this->debugOTL) {
 								$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
 							}
-							for ($p = 0; $p < $SubstCount; $p++) { // EACH LOOKUP
-								$SequenceIndex[$p] = $this->reader->readUInt16();
-								$LookupListIndex[$p] = $this->reader->readUInt16();
-							}
+							$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-							for ($p = 0; $p < $SubstCount; $p++) {
-								// Apply  $LookupListIndex  at   $SequenceIndex
-								if ($SequenceIndex[$p] >= $InputGlyphCount) {
-									continue;
-								}
-								$lu = $LookupListIndex[$p];
-								$luType = $this->GSUBLookups[$lu]['Type'];
-								$luFlag = $this->GSUBLookups[$lu]['Flag'];
-								$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
-
-								$luptr = $matched[$SequenceIndex[$p]];
-								$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-								$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-								foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-									$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-									if ($shift) {
-										break;
-									}
-								}
-							}
-
-							if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-								return $shift;
-							} /* OTL_FIX_3 */
-							else {
-								return $InputGlyphCount; // should be + matched ignores in Input Sequence
-							}
+							return $shift;
 						}
 					}
 				}
@@ -2034,39 +2004,9 @@ class Otl
 								if ($this->debugOTL) {
 									$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
 								}
-								for ($p = 0; $p < $SubstCount; $p++) { // EACH LOOKUP
-									$SequenceIndex[$p] = $this->reader->readUInt16();
-									$LookupListIndex[$p] = $this->reader->readUInt16();
-								}
+								$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-								for ($p = 0; $p < $SubstCount; $p++) {
-									// Apply  $LookupListIndex  at   $SequenceIndex
-									if ($SequenceIndex[$p] >= $InputGlyphCount) {
-										continue;
-									}
-									$lu = $LookupListIndex[$p];
-									$luType = $this->GSUBLookups[$lu]['Type'];
-									$luFlag = $this->GSUBLookups[$lu]['Flag'];
-									$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
-
-									$luptr = $matched[$SequenceIndex[$p]];
-									$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-									$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-									foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-										$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-										if ($shift) {
-											break;
-										}
-									}
-								}
-
-								if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-									return $shift;
-								} /* OTL_FIX_3 */
-								else {
-									return $InputGlyphCount; // should be + matched ignores in Input Sequence
-								}
+								return $shift;
 							}
 						}
 					}
@@ -2103,38 +2043,9 @@ class Otl
 
 					$this->reader->seek($save_pos); // Return to just after the Coverage table offsets
 					$SubstLookupRecord = [];
-					for ($p = 0; $p < $SubstCount; $p++) {
-						// SubstLookupRecord
-						$SubstLookupRecord[$p]['SequenceIndex'] = $this->reader->readUInt16();
-						$SubstLookupRecord[$p]['LookupListIndex'] = $this->reader->readUInt16();
-					}
-					for ($p = 0; $p < $SubstCount; $p++) {
-						// Apply  $SubstLookupRecord[$p]['LookupListIndex']  at   $SubstLookupRecord[$p]['SequenceIndex']
-						if ($SubstLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
-							continue;
-						}
-						$lu = $SubstLookupRecord[$p]['LookupListIndex'];
-						$luType = $this->GSUBLookups[$lu]['Type'];
-						$luFlag = $this->GSUBLookups[$lu]['Flag'];
-						$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
+					$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-						$luptr = $matched[$SubstLookupRecord[$p]['SequenceIndex']];
-						$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-						$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-						foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-							$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-							if ($shift) {
-								break;
-							}
-						}
-					}
-					if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-						return (isset($shift) ? $shift : 0);
-					} /* OTL_FIX_3 */
-					else {
-						return $InputGlyphCount; // should be + matched ignores in Input Sequence
-					}
+					return $shift;
 				}
 
 				return 0;
@@ -2190,38 +2101,9 @@ class Otl
 							$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
 						}
 						$SubstCount = $this->reader->readUInt16();
-						for ($p = 0; $p < $SubstCount; $p++) {
-							// SubstLookupRecord
-							$SubstLookupRecord[$p]['SequenceIndex'] = $this->reader->readUInt16();
-							$SubstLookupRecord[$p]['LookupListIndex'] = $this->reader->readUInt16();
-						}
-						for ($p = 0; $p < $SubstCount; $p++) {
-							// Apply  $SubstLookupRecord[$p]['LookupListIndex']  at   $SubstLookupRecord[$p]['SequenceIndex']
-							if ($SubstLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
-								continue;
-							}
-							$lu = $SubstLookupRecord[$p]['LookupListIndex'];
-							$luType = $this->GSUBLookups[$lu]['Type'];
-							$luFlag = $this->GSUBLookups[$lu]['Flag'];
-							$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
+						$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-							$luptr = $matched[$SubstLookupRecord[$p]['SequenceIndex']];
-							$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-							$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-							foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-								$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-								if ($shift) {
-									break;
-								}
-							}
-						}
-						if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-							return $shift;
-						} /* OTL_FIX_3 */
-						else {
-							return $InputGlyphCount; // should be + matched ignores in Input Sequence
-						}
+						return $shift;
 					}
 				}
 				return 0;
@@ -2360,39 +2242,9 @@ class Otl
 									$this->_dumpproc('GSUB', $lookupID, $subtable, $Type, $SubstFormat, $ptr, $currGlyph, $level);
 								}
 								$SubstCount = $this->reader->readUInt16();
-								for ($p = 0; $p < $SubstCount; $p++) { // EACH LOOKUP
-									$SequenceIndex[$p] = $this->reader->readUInt16();
-									$LookupListIndex[$p] = $this->reader->readUInt16();
-								}
+								$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-								for ($p = 0; $p < $SubstCount; $p++) {
-									// Apply  $LookupListIndex  at   $SequenceIndex
-									if ($SequenceIndex[$p] >= $InputGlyphCount) {
-										continue;
-									}
-									$lu = $LookupListIndex[$p];
-									$luType = $this->GSUBLookups[$lu]['Type'];
-									$luFlag = $this->GSUBLookups[$lu]['Flag'];
-									$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
-
-									$luptr = $matched[$SequenceIndex[$p]];
-									$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-									$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-									foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-										$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-										if ($shift) {
-											break;
-										}
-									}
-								}
-
-								if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-									return $shift;
-								} /* OTL_FIX_3 */
-								else {
-									return $InputGlyphCount; // should be + matched ignores in Input Sequence
-								}
+								return $shift;
 							}
 						}
 					}
@@ -2445,38 +2297,9 @@ class Otl
 					}
 
 					$this->reader->seek($save_pos); // Return to just after PosCount
-					for ($p = 0; $p < $SubstCount; $p++) {
-						// SubstLookupRecord
-						$SubstLookupRecord[$p]['SequenceIndex'] = $this->reader->readUInt16();
-						$SubstLookupRecord[$p]['LookupListIndex'] = $this->reader->readUInt16();
-					}
-					for ($p = 0; $p < $SubstCount; $p++) {
-						// Apply  $SubstLookupRecord[$p]['LookupListIndex']  at   $SubstLookupRecord[$p]['SequenceIndex']
-						if ($SubstLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
-							continue;
-						}
-						$lu = $SubstLookupRecord[$p]['LookupListIndex'];
-						$luType = $this->GSUBLookups[$lu]['Type'];
-						$luFlag = $this->GSUBLookups[$lu]['Flag'];
-						$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
+					$shift = $this->_applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt);
 
-						$luptr = $matched[$SubstLookupRecord[$p]['SequenceIndex']];
-						$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-						$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-						foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-							$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
-							if ($shift) {
-								break;
-							}
-						}
-					}
-					if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-						return (isset($shift) ? $shift : 0);
-					} /* OTL_FIX_3 */
-					else {
-						return $InputGlyphCount; // should be + matched ignores in Input Sequence
-					}
+					return $shift;
 				}
 
 				return 0;
@@ -3523,24 +3346,12 @@ class Otl
 
 				// However IF Mark2 (first in logical order, i.e. being attached to) is not associated with a base, carry on
 				// This happens in Indic when the Mark being attached to e.g. [Halant Ma lig] -> MatraU,  [U+0B4D + U+B2E as E0F5]-> U+0B41 become E135
-				if (!defined("OMIT_OTL_FIX_1") || OMIT_OTL_FIX_1 != 1) {
-					/* OTL_FIX_1 */
-					if (isset($this->assocMarks[$matchedpos]) && ($prevLig != $thisLig || $prevComp != $thisComp )) {
-						return 0;
-					}
-				} else {
-					/* Original code */
-					if ($prevLig != $thisLig || $prevComp != $thisComp) {
-						return 0;
-					}
+				if (isset($this->assocMarks[$matchedpos]) && ($prevLig != $thisLig || $prevComp != $thisComp)) {
+					return 0;
 				}
 
-
-				if (!defined("OMIT_OTL_FIX_2") || OMIT_OTL_FIX_2 != 1) {
-					/* OTL_FIX_2 */
-					if (!isset($this->OTLdata[$matchedpos]['GPOSinfo']['BaseWidth']) || !$this->OTLdata[$matchedpos]['GPOSinfo']['BaseWidth']) {
-						$this->OTLdata[$ptr]['GPOSinfo']['BaseWidth'] = $Mark2Width;
-					}
+				if (!isset($this->OTLdata[$matchedpos]['GPOSinfo']['BaseWidth']) || !$this->OTLdata[$matchedpos]['GPOSinfo']['BaseWidth']) {
+					$this->OTLdata[$ptr]['GPOSinfo']['BaseWidth'] = $Mark2Width;
 				}
 
 				// ZZZ99Q - Test Case font-family: garuda &#xe19;&#xe49;&#xe33;
@@ -3608,12 +3419,7 @@ class Otl
 							$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 						}
 
-						if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-							return $shift;
-						} /* OTL_FIX_3 */
-						else {
-							return $InputGlyphCount; // should be + matched ignores in Input Sequence
-						}
+						return $shift;
 					}
 				}
 
@@ -3686,42 +3492,12 @@ class Otl
 
 							$matched = $this->checkContextMatchMultipleUni($inputGlyphs, $backtrackGlyphs, $lookaheadGlyphs, $ignore, $ptr, $class0excl);
 							if ($matched) {
-								for ($p = 0; $p < $PosCount; $p++) { // EACH LOOKUP
-									$SequenceIndex[$p] = $this->reader->readUInt16();
-									$LookupListIndex[$p] = $this->reader->readUInt16();
+								$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+								if ($this->debugOTL && $shift) {
+									$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 								}
 
-								for ($p = 0; $p < $PosCount; $p++) {
-									// Apply  $LookupListIndex  at   $SequenceIndex
-									if ($SequenceIndex[$p] >= $InputGlyphCount) {
-										continue;
-									}
-									$lu = $LookupListIndex[$p];
-									$luType = $this->GPOSLookups[$lu]['Type'];
-									$luFlag = $this->GPOSLookups[$lu]['Flag'];
-									$luMarkFilteringSet = $this->GPOSLookups[$lu]['MarkFilteringSet'];
-
-									$luptr = $matched[$SequenceIndex[$p]];
-									$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-									$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-									foreach ($this->GPOSLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-										$shift = $this->_applyGPOSsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->LuCoverage[$lu][$luc], $tag, 1, $is_old_spec);
-										if ($this->debugOTL && $shift) {
-											$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
-										}
-										if ($shift) {
-											break;
-										}
-									}
-								}
-
-								if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-									return $shift;
-								} /* OTL_FIX_3 */
-								else {
-									return $InputGlyphCount; // should be + matched ignores in Input Sequence
-								}
+								return $shift;
 							}
 						}
 					}
@@ -3757,12 +3533,7 @@ class Otl
 						$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 					}
 
-					if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-						return $shift;
-					} /* OTL_FIX_3 */
-					else {
-						return $InputGlyphCount; // should be + matched ignores in Input Sequence
-					}
+					return $shift;
 				}
 
 				return 0;
@@ -3828,12 +3599,7 @@ class Otl
 							$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 						}
 
-						if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-							return $shift;
-						} /* OTL_FIX_3 */
-						else {
-							return $InputGlyphCount; // should be + matched ignores in Input Sequence
-						}
+						return $shift;
 					}
 				}
 
@@ -3963,42 +3729,12 @@ class Otl
 								$PosCount = $this->reader->readUInt16();
 								$SequenceIndex = [];
 								$LookupListIndex = [];
-								for ($p = 0; $p < $PosCount; $p++) { // EACH LOOKUP
-									$SequenceIndex[$p] = $this->reader->readUInt16();
-									$LookupListIndex[$p] = $this->reader->readUInt16();
+								$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+								if ($this->debugOTL && $shift) {
+									$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 								}
 
-								for ($p = 0; $p < $PosCount; $p++) {
-									// Apply  $LookupListIndex  at   $SequenceIndex
-									if ($SequenceIndex[$p] >= $InputGlyphCount) {
-										continue;
-									}
-									$lu = $LookupListIndex[$p];
-									$luType = $this->GPOSLookups[$lu]['Type'];
-									$luFlag = $this->GPOSLookups[$lu]['Flag'];
-									$luMarkFilteringSet = $this->GPOSLookups[$lu]['MarkFilteringSet'];
-
-									$luptr = $matched[$SequenceIndex[$p]];
-									$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-									$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-									foreach ($this->GPOSLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-										$shift = $this->_applyGPOSsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->LuCoverage[$lu][$luc], $tag, 1, $is_old_spec);
-										if ($this->debugOTL && $shift) {
-											$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
-										}
-										if ($shift) {
-											break;
-										}
-									}
-								}
-
-								if (!defined("OMIT_OTL_FIX_3") || OMIT_OTL_FIX_3 != 1) {
-									return $shift;
-								} /* OTL_FIX_3 */
-								else {
-									return $InputGlyphCount; // should be + matched ignores in Input Sequence
-								}
+								return $shift;
 							}
 						}
 					}
@@ -4045,38 +3781,9 @@ class Otl
 				$matched = $this->checkContextMatchMultiple($CoverageInputGlyphs, $CoverageBacktrackGlyphs, $CoverageLookaheadGlyphs, $ignore, $ptr);
 				if ($matched) {
 					$this->reader->seek($save_pos); // Return to just after PosCount
-					for ($p = 0; $p < $PosCount; $p++) {
-						// PosLookupRecord
-						$PosLookupRecord[$p]['SequenceIndex'] = $this->reader->readUInt16();
-						$PosLookupRecord[$p]['LookupListIndex'] = $this->reader->readUInt16();
-					}
-					for ($p = 0; $p < $PosCount; $p++) {
-						// Apply  $PosLookupRecord[$p]['LookupListIndex']  at   $PosLookupRecord[$p]['SequenceIndex']
-						if ($PosLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
-							continue;
-						}
-						$lu = $PosLookupRecord[$p]['LookupListIndex'];
-						$luType = $this->GPOSLookups[$lu]['Type'];
-						$luFlag = $this->GPOSLookups[$lu]['Flag'];
-						if (isset($this->GPOSLookups[$lu]['MarkFilteringSet'])) {
-							$luMarkFilteringSet = $this->GPOSLookups[$lu]['MarkFilteringSet'];
-						} else {
-							$luMarkFilteringSet = '';
-						}
-
-						$luptr = $matched[$PosLookupRecord[$p]['SequenceIndex']];
-						$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
-						$lucurrGID = $this->OTLdata[$luptr]['uni'];
-
-						foreach ($this->GPOSLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
-							$shift = $this->_applyGPOSsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->LuCoverage[$lu][$luc], $tag, 1, $is_old_spec);
-							if ($this->debugOTL && $shift) {
-								$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
-							}
-							if ($shift) {
-								break;
-							}
-						}
+					$shift = $this->_applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec);
+					if ($this->debugOTL && $shift) {
+						$this->_dumpproc('GPOS', $lookupID, $subtable, $Type, $PosFormat, $ptr, $currGlyph, $level);
 					}
 				}
 			} else {
@@ -4094,6 +3801,66 @@ class Otl
 	 * the current position, each pairing an index into the matched input sequence with the lookup
 	 * to run at it.
 	 */
+	/**
+	 * Apply the nested lookups a matched context asks for, per SubstLookupRecord.
+	 *
+	 * Every contextual and chained-contextual substitution subtable ends the same way: having matched
+	 * a sequence of glyphs, it names some number of other lookups to run, each at a position within
+	 * that sequence. The reader is positioned at the records.
+	 *
+	 *     uint16   sequenceIndex       which glyph of the matched input to apply the lookup at
+	 *     uint16   lookupListIndex     which lookup to apply
+	 *
+	 * A record pointing past the end of the input sequence is skipped rather than treated as an
+	 * error; the spec says the index is into the input sequence, and a font that names a longer one
+	 * than it matched is describing a position that does not exist.
+	 *
+	 * The counterpart for positioning is _applyGPOSlookupRecords. The two are the same shape and
+	 * differ only in which lookup list they index and which applier they call.
+	 *
+	 * @see https://learn.microsoft.com/en-us/typography/opentype/spec/chapter2#sequence-context-format-1-simple-glyph-contexts
+	 *
+	 * @param int   $SubstCount      SubstCount, the number of records to read
+	 * @param int   $InputGlyphCount The length of the matched input sequence
+	 * @param array $matched         Position in OTLdata of each glyph of the matched input sequence
+	 *
+	 * @return int Glyphs to advance by, from the last nested lookup that shifted anything; 0 if none
+	 *             did, which is also what a subtable naming no records returns
+	 */
+	private function _applyGSUBlookupRecords($SubstCount, $InputGlyphCount, $matched, $currentTag, $is_old_spec, $tagInt)
+	{
+		$SubstLookupRecord = [];
+		for ($p = 0; $p < $SubstCount; $p++) {
+			$SubstLookupRecord[$p]['SequenceIndex'] = $this->reader->readUInt16();
+			$SubstLookupRecord[$p]['LookupListIndex'] = $this->reader->readUInt16();
+		}
+
+		$shift = 0;
+		for ($p = 0; $p < $SubstCount; $p++) {
+			if ($SubstLookupRecord[$p]['SequenceIndex'] >= $InputGlyphCount) {
+				continue;
+			}
+
+			$lu = $SubstLookupRecord[$p]['LookupListIndex'];
+			$luType = $this->GSUBLookups[$lu]['Type'];
+			$luFlag = $this->GSUBLookups[$lu]['Flag'];
+			$luMarkFilteringSet = $this->GSUBLookups[$lu]['MarkFilteringSet'];
+
+			$luptr = $matched[$SubstLookupRecord[$p]['SequenceIndex']];
+			$lucurrGlyph = $this->OTLdata[$luptr]['hex'];
+			$lucurrGID = $this->OTLdata[$luptr]['uni'];
+
+			foreach ($this->GSUBLookups[$lu]['Subtables'] as $luc => $lusubtable_offset) {
+				$shift = $this->_applyGSUBsubtable($lu, $luc, $luptr, $lucurrGlyph, $lucurrGID, $lusubtable_offset, $luType, $luFlag, $luMarkFilteringSet, $this->GSLuCoverage[$lu][$luc], 1, $currentTag, $is_old_spec, $tagInt);
+				if ($shift) {
+					break;
+				}
+			}
+		}
+
+		return $shift;
+	}
+
 	private function _applyGPOSlookupRecords($PosCount, $InputGlyphCount, $matched, $tag, $is_old_spec)
 	{
 		$PosLookupRecord = [];
