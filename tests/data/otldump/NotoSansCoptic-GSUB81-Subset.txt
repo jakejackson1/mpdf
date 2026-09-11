@@ -1,0 +1,29 @@
+<h1>GDEF table</h1>
+<h2>Glyph classes</h2>
+<h3>Glyph class 1</h3>
+<h5>Base glyph (single character, spacing glyph)</h5>
+<div class="glyphs">&#x003E2; &#x003E3; </div>
+<h3>Glyph class 3</h3>
+<h5>Mark glyph (non-spacing combining glyph)</h5>
+<div class="glyphs">&#x25cc;&#x00305; &#x25cc;&#x0E000; &#x25cc;&#x0E001; &#x25cc;&#x0E002; &#x25cc;&#x0E003; &#x25cc;&#x0E004; &#x25cc;&#x0E005; &#x25cc;&#x0E006; &#x25cc;&#x0E007; &#x25cc;&#x0E008; &#x25cc;&#x0E009; &#x25cc;&#x0E00A; </div>
+<h1>Mark Attachment Types</h1>
+<h3>Mark Attachment Type: 1</h3>
+<div class="glyphs">&#x25cc;&#x00305; &#x25cc;&#x0E000; &#x25cc;&#x0E001; &#x25cc;&#x0E002; &#x25cc;&#x0E003; &#x25cc;&#x0E004; &#x25cc;&#x0E005; &#x25cc;&#x0E006; &#x25cc;&#x0E007; &#x25cc;&#x0E008; &#x25cc;&#x0E009; &#x25cc;&#x0E00A; </div>
+<h1>Mark Glyph Sets</h1>
+<h3>Mark Glyph Set class: 0</h3>
+<div class="glyphs">&#x25cc;&#x00305; </div>
+<h3>Mark Glyph Set class: 1</h3>
+<div class="glyphs">&#x25cc;&#x00305; &#x25cc;&#x0E000; &#x25cc;&#x0E001; &#x25cc;&#x0E002; &#x25cc;&#x0E003; &#x25cc;&#x0E004; </div>
+<h1>GSUB Tables</h1>
+<h3>GSUB Scripts &amp; Languages</h3>
+<div class="glyphs">
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>copt</h5><div><a href="font_dump_OTL.php?script=copt&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: aalt ccmp </div>
+</div>
+<h1>GPOS Tables</h1>
+<h3>GPOS Scripts &amp; Languages</h3>
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: mark </div><h5>copt</h5><div><a href="font_dump_OTL.php?script=copt&lang=DFLT">DFLT</a></b>: mark </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: mark </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: mark </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: mark </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: mark </div>
+</div>
+
+=== diagnostics raised while reading this font ===
+   5x Cannot use int as array @ OtlDump.php:880
+   3x Cannot use int as array @ OtlDump.php:881

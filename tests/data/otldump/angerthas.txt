@@ -1,0 +1,1 @@
+Mpdf\Exception\FontException: Font file tests/Mpdf/Fonts/../../data/ttf/angerthas.ttf cannot be embedded due to copyright restrictions.

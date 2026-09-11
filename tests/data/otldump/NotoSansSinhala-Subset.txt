@@ -1,0 +1,26 @@
+<h1>GDEF table</h1>
+<h2>Glyph classes</h2>
+<h3>Glyph class 1</h3>
+<h5>Base glyph (single character, spacing glyph)</h5>
+<div class="glyphs">&#x00D9A; &#x00DBB; &#x00DBD; &#x00DC1; &#x00DC3; &#x00DC4; &#x0E00E; &#x0E00F; &#x0E010; </div>
+<h3>Glyph class 3</h3>
+<h5>Mark glyph (non-spacing combining glyph)</h5>
+<div class="glyphs">&#x25cc;&#x00DCA; &#x25cc;&#x00DD2; &#x25cc;&#x0E000; &#x25cc;&#x0E001; &#x25cc;&#x0E002; &#x25cc;&#x0E003; &#x25cc;&#x00DD3; &#x25cc;&#x0E004; &#x25cc;&#x0E005; &#x25cc;&#x0E006; &#x25cc;&#x0E007; &#x25cc;&#x0E008; &#x25cc;&#x0E009; &#x25cc;&#x0E00A; &#x25cc;&#x0E00B; </div>
+<h1>Mark Glyph Sets</h1>
+<h3>Mark Glyph Set class: 0</h3>
+<div class="glyphs">&#x25cc;&#x00DCA; &#x25cc;&#x00DD2; &#x25cc;&#x00DD3; </div>
+<h3>Mark Glyph Set class: 1</h3>
+<div class="glyphs">&#x25cc;&#x0E00A; </div>
+<h1>GSUB Tables</h1>
+<h3>GSUB Scripts &amp; Languages</h3>
+<div class="glyphs">
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div><h5>sinh</h5><div><a href="font_dump_OTL.php?script=sinh&lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div>
+</div>
+<h1>GPOS Tables</h1>
+<h3>GPOS Scripts &amp; Languages</h3>
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: dist abvm </div><h5>sinh</h5><div><a href="font_dump_OTL.php?script=sinh&lang=DFLT">DFLT</a></b>: dist abvm </div>
+</div>
+
+=== diagnostics raised while reading this font ===
+   5x Cannot use int as array @ OtlDump.php:880
+   3x Cannot use int as array @ OtlDump.php:881

@@ -1,0 +1,32 @@
+<h1>GDEF table</h1>
+<h2>Glyph classes</h2>
+<h3>Glyph class 1</h3>
+<h5>Base glyph (single character, spacing glyph)</h5>
+<div class="glyphs">&#x00000; &#x00020; &#x1168A; &#x116AE; &#x0E000; &#x0E001; &#x0E002; </div>
+<h3>Glyph class 3</h3>
+<h5>Mark glyph (non-spacing combining glyph)</h5>
+<div class="glyphs">&#x25cc;&#x116AB; </div>
+<h1>Mark Attachment Types</h1>
+<h3>Mark Attachment Type: 1</h3>
+<div class="glyphs">&#x25cc;&#x116AB; </div>
+<h1>Mark Glyph Sets</h1>
+<h3>Mark Glyph Set class: 0</h3>
+<div class="glyphs">&#x25cc;&#x116AB; </div>
+<h3>Mark Glyph Set class: 1</h3>
+<div class="glyphs">&#x25cc;&#x116AB; </div>
+<h1>GSUB Tables</h1>
+<h3>GSUB Scripts &amp; Languages</h3>
+<div class="glyphs">
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: abvs </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: abvs </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: abvs </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: abvs </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: abvs </div><h5>takr</h5><div><a href="font_dump_OTL.php?script=takr&lang=DFLT">DFLT</a></b>: abvs </div>
+</div>
+<h1>GPOS Tables</h1>
+<h3>GPOS Scripts &amp; Languages</h3>
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: kern abvm </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: kern abvm </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: kern abvm </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: kern abvm </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: kern abvm </div><h5>takr</h5><div><a href="font_dump_OTL.php?script=takr&lang=DFLT">DFLT</a></b>: kern abvm </div>
+</div>
+
+=== diagnostics raised while reading this font ===
+   5x Cannot use int as array @ OtlDump.php:880
+   3x Cannot use int as array @ OtlDump.php:881
+   1x Trying to access array offset on null @ OtlDump.php:1154
+   1x Undefined array key 0 @ OtlDump.php:1154
+   1x dechex(): Passing null to parameter #1 ($num) of type int is deprecated @ TTFontFile.php:33

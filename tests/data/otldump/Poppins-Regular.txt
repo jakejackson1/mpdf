@@ -1,0 +1,18 @@
+<h1>GDEF table</h1>
+<h2>Glyph classes</h2>
+<h3>Glyph class 3</h3>
+<h5>Mark glyph (non-spacing combining glyph)</h5>
+<div class="glyphs">&#x25cc;&#x00941; &#x25cc;&#x00942; &#x25cc;&#x00943; &#x25cc;&#x00944; &#x25cc;&#x00962; &#x25cc;&#x00963; &#x25cc;&#x00947; &#x25cc;&#x00948; &#x25cc;&#x00945; &#x25cc;&#x00902; &#x25cc;&#x00901; &#x25cc;&#x0094D; &#x25cc;&#x0E02B; &#x25cc;&#x0E1F5; &#x25cc;&#x0E1F6; &#x25cc;&#x0E1F7; &#x25cc;&#x0E1F8; &#x25cc;&#x0E200; &#x25cc;&#x0E201; &#x25cc;&#x0E202; &#x25cc;&#x0E203; &#x25cc;&#x0E204; &#x25cc;&#x0E205; &#x25cc;&#x0E20C; </div>
+<h1>GSUB Tables</h1>
+<h3>GSUB Scripts &amp; Languages</h3>
+<div class="glyphs">
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>deva</h5><div><a href="font_dump_OTL.php?script=deva&lang=DFLT">DFLT</a></b>: nukt akhn rphf blwf half vatu pres abvs blws psts haln ss01 ss02 ss03 ss04 </div>
+</div>
+<h1>GPOS Tables</h1>
+<h3>GPOS Scripts &amp; Languages</h3>
+<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>deva</h5><div><a href="font_dump_OTL.php?script=deva&lang=DFLT">DFLT</a></b>: abvm blwm </div>
+</div>
+
+=== diagnostics raised while reading this font ===
+   5x Cannot use int as array @ OtlDump.php:880
+   3x Cannot use int as array @ OtlDump.php:881

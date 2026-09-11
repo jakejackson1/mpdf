@@ -82,6 +82,7 @@
 		"test": "@php vendor/bin/phpunit",
 		"snapshot:update": "@php utils/snapshot_update.php",
 		"fontcache:update": "@php utils/fontcache_update.php",
+		"otldump:update": "@php utils/otldump_update.php",
 		"coverage": "@php vendor/bin/phpunit --coverage-text"
 	},
 	"config": {
