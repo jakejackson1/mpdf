@@ -14,11 +14,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div><h5>sinh</h5><div><a href="font_dump_OTL.php?script=sinh&lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div><h5>sinh</h5><div><a href="font_dump_otl.php?script=sinh&amp;lang=DFLT">DFLT</a></b>: rphf vatu blws abvs </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: dist abvm </div><h5>sinh</h5><div><a href="font_dump_OTL.php?script=sinh&lang=DFLT">DFLT</a></b>: dist abvm </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: dist abvm </div><h5>sinh</h5><div><a href="font_dump_otl.php?script=sinh&amp;lang=DFLT">DFLT</a></b>: dist abvm </div>
 </div>
 
 === detail: script sinh language DFLT ===

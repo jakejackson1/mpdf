@@ -9,11 +9,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>musc</h5><div><a href="font_dump_OTL.php?script=musc&lang=DFLT">DFLT</a></b>: aalt ccmp </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>cyrl</h5><div><a href="font_dump_otl.php?script=cyrl&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>dev2</h5><div><a href="font_dump_otl.php?script=dev2&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>grek</h5><div><a href="font_dump_otl.php?script=grek&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>latn</h5><div><a href="font_dump_otl.php?script=latn&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div><h5>musc</h5><div><a href="font_dump_otl.php?script=musc&amp;lang=DFLT">DFLT</a></b>: aalt ccmp </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: curs </div><h5>cyrl</h5><div><a href="font_dump_OTL.php?script=cyrl&lang=DFLT">DFLT</a></b>: curs </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: curs </div><h5>grek</h5><div><a href="font_dump_OTL.php?script=grek&lang=DFLT">DFLT</a></b>: curs </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: curs </div><h5>musc</h5><div><a href="font_dump_OTL.php?script=musc&lang=DFLT">DFLT</a></b>: curs </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: curs </div><h5>cyrl</h5><div><a href="font_dump_otl.php?script=cyrl&amp;lang=DFLT">DFLT</a></b>: curs </div><h5>dev2</h5><div><a href="font_dump_otl.php?script=dev2&amp;lang=DFLT">DFLT</a></b>: curs </div><h5>grek</h5><div><a href="font_dump_otl.php?script=grek&amp;lang=DFLT">DFLT</a></b>: curs </div><h5>latn</h5><div><a href="font_dump_otl.php?script=latn&amp;lang=DFLT">DFLT</a></b>: curs </div><h5>musc</h5><div><a href="font_dump_otl.php?script=musc&amp;lang=DFLT">DFLT</a></b>: curs </div>
 </div>
 
 === detail: script musc language DFLT ===

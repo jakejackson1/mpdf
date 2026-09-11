@@ -81,3 +81,7 @@ div.rule {
 div.level2 {
 	margin-left: 5em;
 }
+div.notoffered {
+	color: #AA6600;
+	font-size: 0.85rem;
+}

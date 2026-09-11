@@ -9,11 +9,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: ccmp </div><h5>saur</h5><div><a href="font_dump_OTL.php?script=saur&lang=DFLT">DFLT</a></b>: ccmp </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: ccmp </div><h5>saur</h5><div><a href="font_dump_otl.php?script=saur&amp;lang=DFLT">DFLT</a></b>: ccmp </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: abvm </div><h5>saur</h5><div><a href="font_dump_OTL.php?script=saur&lang=DFLT">DFLT</a></b>: abvm </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: abvm </div><h5>saur</h5><div><a href="font_dump_otl.php?script=saur&amp;lang=DFLT">DFLT</a></b>: abvm </div>
 </div>
 
 === detail: script saur language DFLT ===

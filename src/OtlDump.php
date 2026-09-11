@@ -133,6 +133,26 @@ class OtlDump extends TTFontFile
 
 	private $language;
 
+	/**
+	 * What the summary report's links should carry to reach a detail report of the same font.
+	 *
+	 * The summary lists every script and language system a font offers and links each to its own
+	 * detail report. Only the caller knows how it named the font it handed over, so it says here,
+	 * and the link gets the script and language appended.
+	 *
+	 * @var array query terms, e.g. ['family' => 'freeserif', 'style' => '']
+	 */
+	public $detailReportQuery = [];
+
+	/**
+	 * What each of GSUB and GPOS had to say when it did not carry the script or language system asked
+	 * for. Two entries means neither table did, which is a mistake in the tag rather than a font that
+	 * only positions or only substitutes.
+	 *
+	 * @var string[]
+	 */
+	private $notOffered = [];
+
 	var $glyphToChar;
 
 	var $fontRevision;
@@ -177,6 +197,7 @@ class OtlDump extends TTFontFile
 		$this->mode = $mode;
 		$this->script = $script;
 		$this->language = $language;
+		$this->notOffered = [];
 		$this->useOTL = $useOTL; // mPDF 5.7.1
 		$this->fontkey = $fontkey; // mPDF 5.7.1
 		$this->filename = $file;
@@ -642,6 +663,7 @@ class OtlDump extends TTFontFile
 			$this->_getGDEFtables();
 			list($this->GSUBScriptLang, $this->GSUBFeatures, $this->GSUBLookups, $this->rtlPUAstr, $this->rtlPUAarr) = $this->_getGSUBtables();
 			list($this->GPOSScriptLang, $this->GPOSFeatures, $this->GPOSLookups) = $this->_getGPOStables();
+			$this->failIfNeitherTableOffers();
 			$this->glyphIDtoUni = str_pad('', 256 * 256 * 3, "\x00");
 			foreach ($glyphToChar as $gid => $arr) {
 				if (isset($glyphToChar[$gid][0])) {
@@ -979,7 +1001,7 @@ class OtlDump extends TTFontFile
 					foreach ($gsub as $st => $g) {
 						$html .= '<h5>' . $st . '</h5>';
 						foreach ($g as $l => $t) {
-							$html .= '<div><a href="font_dump_OTL.php?script=' . $st . '&lang=' . $l . '">' . $l . '</a></b>: ';
+							$html .= '<div><a href="' . $this->detailLink($st, $l) . '">' . $l . '</a></b>: ';
 							foreach ($t as $tag => $o) {
 								$html .= $tag . ' ';
 							}
@@ -2759,7 +2781,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 					foreach ($gpos as $st => $g) {
 						$html .= '<h5>' . $st . '</h5>';
 						foreach ($g as $l => $t) {
-							$html .= '<div><a href="font_dump_OTL.php?script=' . $st . '&lang=' . $l . '">' . $l . '</a></b>: ';
+							$html .= '<div><a href="' . $this->detailLink($st, $l) . '">' . $l . '</a></b>: ';
 							foreach ($t as $tag => $o) {
 								$html .= $tag . ' ';
 							}
@@ -3565,6 +3587,24 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	}
 
 	/**
+	 * A link from the summary report to the detail report of one script and language system.
+	 *
+	 * These named font_dump_OTL.php, a spelling the file has never had, so following one 404s on any
+	 * case-sensitive server; and they carried the script and language alone, losing the font the
+	 * summary was of, so the detail report came back for whatever font the tool defaults to.
+	 *
+	 * @return string An href, with its ampersands escaped for HTML
+	 */
+	private function detailLink($script, $language)
+	{
+		$query = $this->detailReportQuery;
+		$query['script'] = trim($script);
+		$query['lang'] = trim($language);
+
+		return 'font_dump_otl.php?' . htmlspecialchars(http_build_query($query), ENT_QUOTES);
+	}
+
+	/**
 	 * The glyphs one class of a ClassDef holds, as the "|" separated string the report prints.
 	 *
 	 * Class 0 is every glyph the ClassDef does not mention, so a ClassDef never lists it and
@@ -3588,15 +3628,20 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	/**
 	 * The features one script and language system offers in GSUB or GPOS.
 	 *
-	 * Asking for a script the font does not carry used to read straight through a missing key and
-	 * die a few lines later on a null, with no hint that the script tag was the problem.
+	 * A table with nothing for the script, or nothing for that language system within it, is
+	 * reported and skipped rather than fatal. Fonts routinely substitute for a script without
+	 * positioning it, or list a language system in one table only - 96 of the 245 script and
+	 * language systems in the shipped fonts are in one table and not the other - and the half the
+	 * reader asked for is in the other table. Only a script or language system that neither table
+	 * carries is a mistake in the tag, and failIfNeitherTableOffers raises that once both have been
+	 * asked. Before either, a missing script read straight through to a null a few lines later.
 	 *
-	 * @return array feature tag => list of lookup list indexes
+	 * @return array feature tag => list of lookup list indexes, empty if this table offers none
 	 */
 	private function langSys($features, $table)
 	{
 		if (!isset($features[$this->script])) {
-			throw new \Mpdf\MpdfException(sprintf(
+			return $this->noteNotOffered(sprintf(
 				'This font\'s %s table offers no script "%s". It has: %s',
 				$table,
 				trim($this->script),
@@ -3605,7 +3650,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		}
 
 		if (!isset($features[$this->script][$this->language])) {
-			throw new \Mpdf\MpdfException(sprintf(
+			return $this->noteNotOffered(sprintf(
 				'This font\'s %s script "%s" offers no language system "%s". It has: %s',
 				$table,
 				trim($this->script),
@@ -3615,6 +3660,30 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		}
 
 		return $features[$this->script][$this->language];
+	}
+
+	/**
+	 * Record, and show in the report, that one table has nothing for the script and language asked.
+	 *
+	 * @return array Always empty, so that the caller reports no lookups for this table
+	 */
+	private function noteNotOffered($message)
+	{
+		$this->notOffered[] = $message;
+		$this->mpdf->WriteHTML('<div class="notoffered">' . $message . '</div>');
+
+		return [];
+	}
+
+	/**
+	 * Fail when neither GSUB nor GPOS carries the script and language system detail mode was asked
+	 * for, naming what each table does carry. Called once both have been asked.
+	 */
+	private function failIfNeitherTableOffers()
+	{
+		if ($this->mode === 'detail' && count($this->notOffered) === 2) {
+			throw new \Mpdf\MpdfException(implode("\n", $this->notOffered));
+		}
 	}
 
 	/**

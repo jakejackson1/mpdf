@@ -87,6 +87,10 @@ $mpdf->debugfonts = false;
 
 $dump = new OtlDump($mpdf, new FontCache(new Cache($mpdf->tempDir . '/ttfontdata')), 'win');
 
+// The summary links every script and language system it lists to its own detail report, and only
+// this script knows which terms name the font
+$dump->detailReportQuery = ['family' => $family, 'style' => $style];
+
 try {
 	$dump->getMetrics(
 		$font['ttffile'],

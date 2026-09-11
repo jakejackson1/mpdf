@@ -6,11 +6,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>deva</h5><div><a href="font_dump_OTL.php?script=deva&lang=DFLT">DFLT</a></b>: nukt akhn rphf blwf half vatu pres abvs blws psts haln ss01 ss02 ss03 ss04 </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>dev2</h5><div><a href="font_dump_otl.php?script=dev2&amp;lang=DFLT">DFLT</a></b>: nukt akhn rphf rkrf blwf half pres abvs blws psts haln ss01 ss02 ss03 ss04 </div><h5>deva</h5><div><a href="font_dump_otl.php?script=deva&amp;lang=DFLT">DFLT</a></b>: nukt akhn rphf blwf half vatu pres abvs blws psts haln ss01 ss02 ss03 ss04 </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>dev2</h5><div><a href="font_dump_OTL.php?script=dev2&lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>deva</h5><div><a href="font_dump_OTL.php?script=deva&lang=DFLT">DFLT</a></b>: abvm blwm </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>dev2</h5><div><a href="font_dump_otl.php?script=dev2&amp;lang=DFLT">DFLT</a></b>: abvm blwm </div><h5>deva</h5><div><a href="font_dump_otl.php?script=deva&amp;lang=DFLT">DFLT</a></b>: abvm blwm </div>
 </div>
 
 === detail: script deva language DFLT ===

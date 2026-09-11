@@ -9,11 +9,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>gur2</h5><div><a href="font_dump_OTL.php?script=gur2&lang=DFLT">DFLT</a></b>: abvs </div><h5>guru</h5><div><a href="font_dump_OTL.php?script=guru&lang=DFLT">DFLT</a></b>: abvs </div>
+<h5>gur2</h5><div><a href="font_dump_otl.php?script=gur2&amp;lang=DFLT">DFLT</a></b>: abvs </div><h5>guru</h5><div><a href="font_dump_otl.php?script=guru&amp;lang=DFLT">DFLT</a></b>: abvs </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>gur2</h5><div><a href="font_dump_OTL.php?script=gur2&lang=DFLT">DFLT</a></b>: dist </div><h5>guru</h5><div><a href="font_dump_OTL.php?script=guru&lang=DFLT">DFLT</a></b>: dist </div>
+<h5>gur2</h5><div><a href="font_dump_otl.php?script=gur2&amp;lang=DFLT">DFLT</a></b>: dist </div><h5>guru</h5><div><a href="font_dump_otl.php?script=guru&amp;lang=DFLT">DFLT</a></b>: dist </div>
 </div>
 
 === detail: script guru language DFLT ===

@@ -12,11 +12,11 @@
 <h1>GSUB Tables</h1>
 <h3>GSUB Scripts &amp; Languages</h3>
 <div class="glyphs">
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: aalt salt zero tnum </div><h5>mlm2</h5><div><a href="font_dump_OTL.php?script=mlm2&lang=DFLT">DFLT</a></b>: aalt akhn blwf pstf pref pres blws psts salt zero tnum </div><h5>mlym</h5><div><a href="font_dump_OTL.php?script=mlym&lang=DFLT">DFLT</a></b>: aalt haln blwf pstf pres blws psts salt zero tnum </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: aalt salt zero tnum </div><h5>mlm2</h5><div><a href="font_dump_otl.php?script=mlm2&amp;lang=DFLT">DFLT</a></b>: aalt akhn blwf pstf pref pres blws psts salt zero tnum </div><h5>mlym</h5><div><a href="font_dump_otl.php?script=mlym&amp;lang=DFLT">DFLT</a></b>: aalt haln blwf pstf pres blws psts salt zero tnum </div>
 </div>
 <h1>GPOS Tables</h1>
 <h3>GPOS Scripts &amp; Languages</h3>
-<h5>DFLT</h5><div><a href="font_dump_OTL.php?script=DFLT&lang=DFLT">DFLT</a></b>: abvm kern </div><h5>latn</h5><div><a href="font_dump_OTL.php?script=latn&lang=DFLT">DFLT</a></b>: kern </div><h5>mlm2</h5><div><a href="font_dump_OTL.php?script=mlm2&lang=DFLT">DFLT</a></b>: abvm kern </div><h5>mlym</h5><div><a href="font_dump_OTL.php?script=mlym&lang=DFLT">DFLT</a></b>: kern </div>
+<h5>DFLT</h5><div><a href="font_dump_otl.php?script=DFLT&amp;lang=DFLT">DFLT</a></b>: abvm kern </div><h5>latn</h5><div><a href="font_dump_otl.php?script=latn&amp;lang=DFLT">DFLT</a></b>: kern </div><h5>mlm2</h5><div><a href="font_dump_otl.php?script=mlm2&amp;lang=DFLT">DFLT</a></b>: abvm kern </div><h5>mlym</h5><div><a href="font_dump_otl.php?script=mlym&amp;lang=DFLT">DFLT</a></b>: kern </div>
 </div>
 
 === detail: script mlym language DFLT ===
