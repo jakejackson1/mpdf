@@ -922,7 +922,7 @@ parameters:
 			message: '#^Variable \$cctr might not be defined\.$#'
 			identifier: variable.undefined
 			count: 3
-			path: src/Otl.php
+			path: src/Bidi.php
 
 		-
 			message: '#^Variable \$ic might not be defined\.$#'
@@ -946,7 +946,7 @@ parameters:
 			message: '#^Variable \$next_level might not be defined\.$#'
 			identifier: variable.undefined
 			count: 1
-			path: src/Otl.php
+			path: src/Bidi.php
 
 		-
 			message: '#^Variable \$shift might not be defined\.$#'
