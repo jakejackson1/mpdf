@@ -532,6 +532,9 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 
 	var $lastoptionaltag; // Save current block item which HTML specifies optionsl endtag
 	var $pageoutput;
+
+	/** @var array The setters' record of the page, as it stood at each "q" still open */
+	private $graphicsStateStack = [];
 	var $charset_in;
 	var $blk;
 	var $blklvl;
@@ -7494,7 +7497,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// mPDF 5.7.3 TRANSFORMS / BACKGROUND COLOR
 				// Transform also affects image background
 				if ($tr2) {
-					$this->writer->write('q ' . $tr2 . ' ');
+					$this->saveGraphicsState($tr2);
 				}
 				$box = isset($objattr['border_radius']) ? $this->roundedBox->imageBox($objattr, $k) : null;
 				if (isset($objattr['bgcolor']) && $objattr['bgcolor']) {
@@ -7508,7 +7511,7 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 					$this->SetFColor($this->colorConverter->convert(255, $this->PDFAXwarnings));
 				}
 				if ($tr2) {
-					$this->writer->write('Q');
+					$this->restoreGraphicsState();
 				}
 
 				/* -- BACKGROUNDS -- */
@@ -7552,13 +7555,13 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 				// mPDF 5.7.3 TRANSFORMS
 				// Transform also affects image borders
 				if ($tr2) {
-					$this->writer->write('q ' . $tr2 . ' ');
+					$this->saveGraphicsState($tr2);
 				}
 				if ((isset($objattr['border_top']) && $objattr['border_top'] > 0) || (isset($objattr['border_left']) && $objattr['border_left'] > 0) || (isset($objattr['border_right']) && $objattr['border_right'] > 0) || (isset($objattr['border_bottom']) && $objattr['border_bottom'] > 0)) {
 					$this->PaintImgBorder($objattr, $is_table, $box);
 				}
 				if ($tr2) {
-					$this->writer->write('Q');
+					$this->restoreGraphicsState();
 				}
 
 				if (isset($objattr['visibility']) && $objattr['visibility'] != 'visible' && $objattr['visibility']) {
@@ -26664,22 +26667,59 @@ class Mpdf implements \Psr\Log\LoggerAwareInterface
 	}
 	/* -- END BARCODES -- */
 
+	/**
+	 * Writes a "q", saving with it what the setters know the page currently holds
+	 *
+	 * SetLineWidth(), SetDColor() and the rest only write an operator when its value differs from the one
+	 * they last wrote. A "q" saves the graphics state and the matching "Q" puts it back, undoing whatever
+	 * the operators between them set, so what they remember has to go back with it - otherwise they stay
+	 * quiet about a value the restore has just undone, and the next thing drawn takes the wrong one.
+	 *
+	 * What the page holds is put back; what the document asked for is not. $this->LineWidth and the colour
+	 * properties keep whatever the wrapper set them to, so the next setter call compares its value against
+	 * the page as restored, and writes the operator again.
+	 *
+	 * $operators goes on the same line as the "q", for a wrapper that opens with a matrix or a clip.
+	 */
+	function saveGraphicsState($operators = '')
+	{
+		$this->graphicsStateStack[] = isset($this->pageoutput[$this->page]) ? $this->pageoutput[$this->page] : [];
+		$this->writer->write($operators === '' ? 'q' : 'q ' . $operators . ' ');
+	}
+
+	/**
+	 * Writes the "Q" that closes the wrapper, and puts that back with it. An unmatched "Q" has restored a
+	 * state nothing recorded, so the setters are told to write everything again rather than trust what
+	 * they remember.
+	 */
+	function restoreGraphicsState()
+	{
+		$this->writer->write('Q');
+		$this->pageoutput[$this->page] = $this->graphicsStateStack ? array_pop($this->graphicsStateStack) : [];
+	}
+
+	/**
+	 * A returned "q" is held by its caller and written later, out of the order these were called in, so
+	 * there is no point in the document at which to save the page against it. Only the written form keeps
+	 * the setters' record, so what a returned pair leaves behind is its caller's to deal with - as
+	 * printkwtbuffer() does, by clearing the record outright once it has placed the wrapper.
+	 */
 	function StartTransform($returnstring = false)
 	{
 		if ($returnstring) {
 			return('q');
-		} else {
-			$this->writer->write('q');
 		}
+
+		$this->saveGraphicsState();
 	}
 
 	function StopTransform($returnstring = false)
 	{
 		if ($returnstring) {
 			return('Q');
-		} else {
-			$this->writer->write('Q');
 		}
+
+		$this->restoreGraphicsState();
 	}
 
 	function transformScale($s_x, $s_y, $x = '', $y = '', $returnstring = false)
