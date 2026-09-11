@@ -1432,6 +1432,10 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 
 									for ($gl = 0; $gl < $Lookup[$i]['Subtable'][$c]['AlternateSets'][$g]['GlyphCount']; $gl++) {
 										$gid = $Lookup[$i]['Subtable'][$c]['AlternateSets'][$g]['SubstituteGlyphID'][$gl];
+										// A glyph the cmap does not reach has no character to report it by
+										if (!isset($this->glyphToChar[$gid][0])) {
+											continue;
+										}
 										$substitute[] = unicode_hex($this->glyphToChar[$gid][0]);
 									}
 
@@ -1465,6 +1469,9 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 												$replace[] = $rpl;
 											}
 											$gid = $Lookup[$i]['Subtable'][$c]['LigSet'][$s]['Ligature'][$g]['LigGlyph'];
+											if (!isset($this->glyphToChar[$gid][0])) {
+												continue;
+											}
 											$substitute[] = unicode_hex($this->glyphToChar[$gid][0]);
 											$Lookup[$i]['Subtable'][$c]['subs'][] = ['Replace' => $replace, 'substitute' => $substitute, 'CompCount' => $Lookup[$i]['Subtable'][$c]['LigSet'][$s]['Ligature'][$g]['CompCount']];
 										}
@@ -1980,13 +1987,13 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 
 													$inputGlyphs = [];
 
-													$inputGlyphs[0] = $Lookup[$i]['Subtable'][$c]['InputClasses'][$inputClass];
+													$inputGlyphs[0] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['InputClasses'], $inputClass);
 
 													if ($rule['InputGlyphCount'] > 1) {
 														//  NB starts at 1
 														for ($gcl = 1; $gcl < $rule['InputGlyphCount']; $gcl++) {
 															$classindex = $rule['Input'][$gcl];
-															$inputGlyphs[$gcl] = $Lookup[$i]['Subtable'][$c]['InputClasses'][$classindex];
+															$inputGlyphs[$gcl] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['InputClasses'], $classindex);
 														}
 													}
 
@@ -2216,23 +2223,26 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 
 														$inputGlyphs = [];
 
-														$inputGlyphs[0] = $Lookup[$i]['Subtable'][$c]['InputClasses'][$inputClass];
+														$inputGlyphs[0] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['InputClasses'], $inputClass);
 														if ($rule['InputGlyphCount'] > 1) {
 															//  NB starts at 1
 															for ($gcl = 1; $gcl < $rule['InputGlyphCount']; $gcl++) {
 																$classindex = $rule['Input'][$gcl];
-																$inputGlyphs[$gcl] = $Lookup[$i]['Subtable'][$c]['InputClasses'][$classindex];
+																$inputGlyphs[$gcl] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['InputClasses'], $classindex);
 															}
 														}
-														// Class 0 contains all the glyphs NOT in the other classes
+														// Class 0 contains all the glyphs NOT in the other classes - of its own ClassDef. A chained
+														// context has three of them, so telling the reader a backtrack position is anything but the
+														// input classes named the wrong set. The shaper keeps them apart as $bclass0excl and $lclass0excl.
 														$class0excl = implode('|', $Lookup[$i]['Subtable'][$c]['InputClasses']);
-
+														$bclass0excl = implode('|', $Lookup[$i]['Subtable'][$c]['BacktrackClasses']);
+														$lclass0excl = implode('|', $Lookup[$i]['Subtable'][$c]['LookaheadClasses']);
 														$nInput = $rule['InputGlyphCount'];
 
 														if ($rule['BacktrackGlyphCount']) {
 															for ($gcl = 0; $gcl < $rule['BacktrackGlyphCount']; $gcl++) {
 																$classindex = $rule['Backtrack'][$gcl];
-																$backtrackGlyphs[$gcl] = $Lookup[$i]['Subtable'][$c]['BacktrackClasses'][$classindex];
+																$backtrackGlyphs[$gcl] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['BacktrackClasses'], $classindex);
 															}
 														} else {
 															$backtrackGlyphs = [];
@@ -2241,7 +2251,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														if ($rule['LookaheadGlyphCount']) {
 															for ($gcl = 0; $gcl < $rule['LookaheadGlyphCount']; $gcl++) {
 																$classindex = $rule['Lookahead'][$gcl];
-																$lookaheadGlyphs[$gcl] = $Lookup[$i]['Subtable'][$c]['LookaheadClasses'][$classindex];
+																$lookaheadGlyphs[$gcl] = $this->classGlyphs($Lookup[$i]['Subtable'][$c]['LookaheadClasses'], $classindex);
 															}
 														} else {
 															$lookaheadGlyphs = [];
@@ -2253,8 +2263,8 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														$html .= '<div class="context">CONTEXT: ';
 														for ($ff = count($backtrackGlyphs) - 1; $ff >= 0; $ff--) {
 															if (!$backtrackGlyphs[$ff]) {
-																$html .= '<div>Backtrack #' . $ff . ': <span class="unchanged">&nbsp;[NOT ' . $this->formatEntityStr($class0excl) . ']&nbsp;</span></div>';
-																$exampleB[] = '[NOT ' . $this->formatEntityFirst($class0excl) . ']';
+																$html .= '<div>Backtrack #' . $ff . ': <span class="unchanged">&nbsp;[NOT ' . $this->formatEntityStr($bclass0excl) . ']&nbsp;</span></div>';
+																$exampleB[] = '[NOT ' . $this->formatEntityFirst($bclass0excl) . ']';
 															} else {
 																$html .= '<div>Backtrack #' . $ff . ': <span class="unicode">' . $this->formatUniStr($backtrackGlyphs[$ff]) . '</span></div>';
 																$exampleB[] = $this->formatEntityFirst($backtrackGlyphs[$ff]);
@@ -2271,8 +2281,8 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 														}
 														for ($ff = 0; $ff < count($lookaheadGlyphs); $ff++) {
 															if (!$lookaheadGlyphs[$ff]) {
-																$html .= '<div>Lookahead #' . $ff . ': <span class="unchanged">&nbsp;[NOT ' . $this->formatEntityStr($class0excl) . ']&nbsp;</span></div>';
-																$exampleL[] = '[NOT ' . $this->formatEntityFirst($class0excl) . ']';
+																$html .= '<div>Lookahead #' . $ff . ': <span class="unchanged">&nbsp;[NOT ' . $this->formatEntityStr($lclass0excl) . ']&nbsp;</span></div>';
+																$exampleL[] = '[NOT ' . $this->formatEntityFirst($lclass0excl) . ']';
 															} else {
 																$html .= '<div>Lookahead #' . $ff . ': <span class="unicode">' . $this->formatUniStr($lookaheadGlyphs[$ff]) . '</span></div>';
 																$exampleL[] = $this->formatEntityFirst($lookaheadGlyphs[$ff]);
@@ -3552,6 +3562,27 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		}
 
 		return $c;
+	}
+
+	/**
+	 * The glyphs one class of a ClassDef holds, as the "|" separated string the report prints.
+	 *
+	 * Class 0 is every glyph the ClassDef does not mention, so a ClassDef never lists it and
+	 * _getClasses never returns a key for it. A rule may still name it, and the report already
+	 * renders an empty class as "[NOT <the other classes>]" - so that is what an unlisted class
+	 * returns. Reading the key straight raised a warning per rule and then rendered the same thing
+	 * from null.
+	 *
+	 * @see https://learn.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table
+	 *
+	 * @param array $classes class => glyphs, as _getClasses returns it
+	 * @param int   $class   the class a rule names
+	 *
+	 * @return string
+	 */
+	private function classGlyphs($classes, $class)
+	{
+		return isset($classes[$class]) ? $classes[$class] : '';
 	}
 
 	/**
