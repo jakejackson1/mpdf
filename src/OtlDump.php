@@ -182,7 +182,6 @@ class OtlDump extends TTFontFile
 		$this->filename = $file;
 		$this->reader = new FileReader($file);
 
-
 		$this->charWidths = '';
 		$this->glyphPos = [];
 		$this->charToGlyph = [];
@@ -224,28 +223,6 @@ class OtlDump extends TTFontFile
 		$this->extractInfo($debug, $BMPonly, $useOTL);
 		$this->reader->close();
 	}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 	/////////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -887,12 +864,7 @@ class OtlDump extends TTFontFile
 		} else {
 			$this->mpdf->WriteHTML('<div>GDEF table not defined</div>');
 		}
-
-//echo $this->GlyphClassMarks ; exit;
-//print_r($GlyphClass); exit;
-//print_r($GlyphByClass); exit;
 	}
-
 
 	function _getGSUBtables()
 	{
@@ -933,7 +905,6 @@ class OtlDump extends TTFontFile
 				}
 				$ffeats[$t] = $ls;
 			}
-//print_r($ffeats); exit;
 			// Get FeatureIndexList
 			// LangSys Table - from first listed langsys
 			foreach ($ffeats as $st => $scripts) {
@@ -953,7 +924,6 @@ class OtlDump extends TTFontFile
 					$ffeats[$st][$t] = $FeatureIndex;
 				}
 			}
-//print_r($ffeats); exit;
 			// Feauture List => LookupListIndex es
 			$this->reader->seek($FeatureList_offset);
 			$FeatureCount = $this->reader->readUInt16();
@@ -1000,8 +970,6 @@ class OtlDump extends TTFontFile
 					$GSUBScriptLang[$st] .= $t . ' ';
 				}
 			}
-
-//print_r($gsub); exit;
 
 			if ($this->mode == 'summary') {
 				$this->mpdf->WriteHTML('<h3>GSUB Scripts &amp; Languages</h3>');
@@ -1067,7 +1035,6 @@ class OtlDump extends TTFontFile
 				}
 			}
 
-//print_r($GSLookup); exit;
 			//=====================================================================================
 			// Process Whole LookupList - Get LuCoverage = Lookup coverage just for first glyph
 			$this->GSLuCoverage = [];
@@ -1155,7 +1122,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 				}
 			}
 
-//print_r($Lookup); exit;
 			//=====================================================================================
 			// Process (1) Whole LookupList
 			for ($i = 0; $i < $LookupCount; $i++) {
@@ -1403,7 +1369,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 					}
 				}
 			}
-//print_r($Lookup); exit;
 			//=====================================================================================
 			// Process (2) Whole LookupList
 			// Get Coverage tables and prepare preg_replace
@@ -1474,10 +1439,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 									//$substitute[] = unicode_hex($this->glyphToChar[$gid][0]);
 
 									$Lookup[$i]['Subtable'][$c]['subs'][] = ['Replace' => $replace, 'substitute' => $substitute];
-								}
-								if ($i == 166) {
-									print_r($Lookup[$i]['Subtable']);
-									exit;
 								}
 							} // LookupType 4: Ligature Substitution Subtable n => 1
 							else {
@@ -1773,10 +1734,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 			}
 			ksort($lul); // Order the Lookups in the order they are in the GUSB table, regardless of Feature order
 			$this->_getGSUBarray($Lookup, $lul, $st);
-//print_r($lul); exit;
 		}
-
-//print_r($Lookup); exit;
 
 		// The report says nothing about the RTL Private Use Area mapping the parser builds for Arabic
 		// and Syriac joining, so there is nothing to hand back for it. These were undefined variables.
@@ -2145,7 +2103,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 										}
 									}
 
-//print_r($Lookup[$i]);
 								} // LookupType 6: Chaining Contextual Substitution Subtable
 								else {
 									if ($Lookup[$i]['Type'] == 6) {
@@ -2375,7 +2332,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 													}
 												}
 
-//print_r($Lookup[$i]['Subtable'][$c]); exit;
 											} // Format 3: Coverage-based Chaining Context Glyph Substitution  p259
 											else {
 												if ($SubstFormat == 3) {
@@ -2492,7 +2448,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		} else {
 			return $html;
 		}
-//print_r($Lookup); exit;
 	}
 
 	//=====================================================================================
@@ -2579,7 +2534,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	  "REPL"
 
 	  ¦\${1}\${2} ¦\${3}\${4} ¦REPL¦\${5+} \${6+}¦\${7+} \${8+}¦
-
 
 	  INPUT nInput = 5
 	  ============================================================
@@ -2674,7 +2628,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		return $str;
 	}
 
-
 	//////////////////////////////////////////////////////////////////////////////////
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -2743,7 +2696,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 					$ffeats[$st][$t] = $FeatureIndex;
 				}
 			}
-//print_r($ffeats); exit;
 			// Feauture List => LookupListIndex es
 			$this->reader->seek($FeatureList_offset);
 			$FeatureCount = $this->reader->readUInt16();
@@ -2770,7 +2722,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 					}
 				}
 			}
-//print_r($ffeats); exit;
 			//=====================================================================================
 			$gpos = [];
 			$GPOSScriptLang = [];
@@ -2869,8 +2820,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 			}
 			ksort($lul); // Order the Lookups in the order they are in the GUSB table, regardless of Feature order
 			$this->_getGPOSarray($Lookup, $lul, $st);
-
-//print_r($lul); exit;
 
 			return [$GPOSScriptLang, $gpos, $Lookup];
 		} // end if GPOS
@@ -3589,7 +3538,6 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 		} else {
 			return $html;
 		}
-//print_r($Lookup); exit;
 	}
 
 	//=====================================================================================
@@ -3721,11 +3669,7 @@ $MarkAttachmentType = ' . var_export($this->MarkAttachmentType, true) . ';
 	//////////////////////////////////////////////////////////////////////////////////
 	// Recursively get composite glyphs
 
-
 	//////////////////////////////////////////////////////////////////////////////////
-
-
-
 
 	// CMAP Format 4
 
